@@ -17,3 +17,6 @@ flutter_scout_app/pubspec.lock
 # Secrets (if you use .env)
 .env
 *.env
+
+# RLHF Memory (local only, contains feedback data)
+.claude/memory/
