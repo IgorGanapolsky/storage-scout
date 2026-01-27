@@ -23,8 +23,8 @@ class _StorageScoutEntryState extends State<StorageScoutEntry> {
   final _formKey = GlobalKey<FormState>();
 
   // --- CONFIGURATION ---
-  // TODO: Replace ghToken with your actual Personal Access Token
-  static const String ghToken = 'YOUR_GITHUB_TOKEN';
+  // Token loaded via --dart-define=GITHUB_TOKEN=xxx at build time
+  static const String ghToken = String.fromEnvironment('GITHUB_TOKEN');
   static const String ghUser = 'IgorGanapolsky';
   static const String ghRepo = 'storage-scout';
   static const String ntfyTopic = 'igor_storage_alerts';
