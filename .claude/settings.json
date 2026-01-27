@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [".claude/hooks/session-start.sh"],
+    "UserPromptSubmit": [".claude/hooks/user-prompt-submit.sh"]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(flutter:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)"
+    ]
+  }
+}
