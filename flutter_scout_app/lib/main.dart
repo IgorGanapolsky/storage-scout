@@ -148,7 +148,7 @@ class _StorageScoutEntryState extends State<StorageScoutEntry> {
         title: const Text('Storage Scout'),
         backgroundColor: Colors.black,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Form(
           key: _formKey,
@@ -307,7 +307,7 @@ class _StorageScoutEntryState extends State<StorageScoutEntry> {
                 ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 20),
 
               // SYNC BUTTON
               SizedBox(
