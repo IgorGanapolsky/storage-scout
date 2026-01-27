@@ -1,0 +1,47 @@
+name: Autonomous Storage Scout
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx agent-browser install --with-deps
+
+      - name: Run autonomous scout
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scraper/autonomous-scout.js
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-screenshots
+          path: '*.png'
+          retention-days: 7
+
+      - name: Commit price data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add storage_spreads.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Auto-scout: $(date +%Y-%m-%d)"
+          git push || true
