@@ -23,11 +23,11 @@ class _StorageScoutEntryState extends State<StorageScoutEntry> {
   final _formKey = GlobalKey<FormState>();
 
   // --- CONFIGURATION ---
-  // TODO: Replace with your actual secrets from a .env file or secure storage
+  // TODO: Replace ghToken with your actual Personal Access Token
   static const String ghToken = 'YOUR_GITHUB_TOKEN';
-  static const String ghUser = 'YOUR_USERNAME';
-  static const String ghRepo = 'YOUR_REPO_NAME';
-  static const String ntfyTopic = 'coral_springs_storage_alerts';
+  static const String ghUser = 'IgorGanapolsky';
+  static const String ghRepo = 'storage-scout';
+  static const String ntfyTopic = 'igor_storage_alerts';
 
   // --- STATE VARIABLES ---
   String facilityName = '';
