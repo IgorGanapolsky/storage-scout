@@ -46,8 +46,32 @@ Capture and learn from human feedback (thumbs up/down) to improve future respons
 ## Files
 - `capture-feedback.js` - Records feedback with context
 - `auto-lesson-creator.js` - Generates lessons from mistakes
+- `semantic-memory.py` - LanceDB vector search + BM25 hybrid
 - `user-prompt-submit.sh` - Hook for automatic detection
 - `session-start.sh` - Injects lessons at session start
+
+## LanceDB Semantic Memory
+
+### Setup
+```bash
+pip install -r .claude/scripts/feedback/requirements.txt
+python .claude/scripts/feedback/semantic-memory.py --index
+```
+
+### Features
+- **Hybrid Search**: BM25 (30%) + Vector similarity (70%)
+- **LRU Cache**: Fast repeated queries
+- **Similarity Threshold**: Only returns relevant results (>0.7)
+- **Query Metrics**: Tracks latency and hit rates
+
+### Commands
+```bash
+python .claude/scripts/feedback/semantic-memory.py --index    # Build index
+python .claude/scripts/feedback/semantic-memory.py --query "spread calculation"
+python .claude/scripts/feedback/semantic-memory.py --context  # Session context
+python .claude/scripts/feedback/semantic-memory.py --status   # Index status
+python .claude/scripts/feedback/semantic-memory.py --metrics  # Query metrics
+```
 
 ## Usage
 
@@ -77,7 +101,28 @@ User Feedback → capture-feedback.js → feedback-log.jsonl
                         ↓
               lessons-learned.md
                         ↓
-              session-start.sh (inject at start)
+              semantic-memory.py --index (LanceDB)
+                        ↓
+              session-start.sh → semantic-memory.py --context
+                        ↓
+              Claude gets relevant lessons via hybrid search
                         ↓
               Claude avoids repeating mistakes
+```
+
+## Architecture (2026 Best Practices)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  HYBRID SEARCH ENGINE                                   │
+│  ┌────────────────┐  ┌────────────────┐                │
+│  │ BM25 (Keywords)│ + │ Vector (Semantic)│ = Fusion    │
+│  └────────────────┘  └────────────────┘                │
+└─────────────────────────────────────────────────────────┘
+                         │
+              ┌──────────┴──────────┐
+              │  LanceDB Storage    │
+              │  + Similarity Filter │
+              │  + LRU Cache        │
+              └─────────────────────┘
 ```
