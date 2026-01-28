@@ -1,3 +1,20 @@
+---
+name: youtube-review
+description: Extract actionable business insights from YouTube videos and transcripts
+version: 1.0.0
+author: Storage Scout
+tags:
+  - video-analysis
+  - business-insights
+  - content-review
+  - competitive-intelligence
+triggers:
+  - youtube.com
+  - youtu.be
+  - video transcript
+  - how do we leverage this
+---
+
 # YouTube Video Review Skill
 
 ## Purpose
@@ -123,9 +140,3 @@ Analysis can be exported to:
 - Cannot directly fetch YouTube content (use transcripts)
 - Cannot verify video claims (user should fact-check)
 - Analysis quality depends on transcript quality
-
-## Tags
-- `video-analysis`
-- `business-insights`
-- `content-review`
-- `competitive-intelligence`
