@@ -1,0 +1,13 @@
+# Stealth Storage Scout Dependencies
+# 2026 Best Practices for bypassing anti-bot systems
+
+# Primary: Patchright (undetected Playwright fork)
+# https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python
+patchright>=0.5.0
+
+# Fallback: Standard Playwright with stealth plugin
+playwright>=1.40.0
+playwright-stealth>=1.0.6
+
+# Utilities
+aiohttp>=3.9.0
