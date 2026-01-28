@@ -243,24 +243,36 @@ Features:
 
 ---
 
-## 6. Action Items
+## 6. Action Items - ZERO UPFRONT COST MODEL
 
-### Today
-- [ ] Check Home Depot clearance section online
+### The New Approach: Just-In-Time Inventory
+
+**OLD WAY (requires money upfront):**
+1. Buy tool → List it → Wait for customers
+
+**NEW WAY (zero investment until sale):**
+1. Agent finds deal → Auto-lists virtual inventory
+2. Customer books → You get profit alert
+3. ONLY THEN buy the tool → Fulfill rental
+4. First rental pays for tool + profit
+
+### Today (Cost: $0)
+- [x] GitHub Agent scans HD clearance every 4 hours
+- [x] Virtual listings auto-created from deals
 - [ ] Sign up for 2Quip and RentMyTool (free)
-- [ ] List existing tools you already own
+- [ ] Enable ntfy.sh notifications
 
-### This Week
-- [ ] Buy first clearance tool ($80-100)
-- [ ] Create listings with AI-generated descriptions
-- [ ] Set up Telegram bot for price alerts
-- [ ] Deploy price monitoring on GitHub Actions
+### When First Booking Comes In
+- [ ] Receive alert: "BUY NOW - $31 profit guaranteed"
+- [ ] Drive to Home Depot, buy the tool
+- [ ] Fulfill the rental, collect payment
+- [ ] Tool is now FREE inventory for future rentals
 
-### This Month
-- [ ] Scale to 3-5 rental tools
-- [ ] Launch digital product storefront
-- [ ] Acquire first 10 alert subscribers
-- [ ] Automate 80% of operations
+### This Month (Still $0 until first booking)
+- [ ] Let agent run autonomously
+- [ ] Digital products generating (fully automated)
+- [ ] Price alerts building subscriber base
+- [ ] First booking → First purchase → First profit
 
 ---
 
