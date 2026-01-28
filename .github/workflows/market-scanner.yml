@@ -1,0 +1,86 @@
+name: Market Scanner
+
+on:
+  schedule:
+    # Run daily at 6 AM EST (11:00 UTC)
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    inputs:
+      zip_codes:
+        description: 'Zip codes to scan (comma-separated)'
+        required: false
+        default: '33071,33076'
+      notify:
+        description: 'Send ntfy.sh notifications'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Market Scanner
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          ZIP_CODES="${{ github.event.inputs.zip_codes || '33071,33076' }}"
+          NOTIFY_FLAG="${{ github.event.inputs.notify == 'true' && '--notify' || '' }}"
+
+          # Convert comma-separated to space-separated
+          ZIP_ARGS=$(echo $ZIP_CODES | tr ',' ' ')
+
+          python scripts/market_scanner.py \
+            --zip $ZIP_ARGS \
+            $NOTIFY_FLAG \
+            --output-csv storage_spreads.csv \
+            --output-json scan_results.json
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results-${{ github.run_id }}
+          path: |
+            storage_spreads.csv
+            scan_results.json
+
+      - name: Commit updated CSV
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Market Scanner Bot"
+
+          if git diff --quiet storage_spreads.csv; then
+            echo "No new data to commit"
+          else
+            git add storage_spreads.csv
+            git commit -m "Market scan: $(date +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Create issue for high-priority deals
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if there are high-priority deals in the JSON
+          HIGH_PRIORITY=$(python -c "
+          import json
+          with open('scan_results.json') as f:
+              data = json.load(f)
+          print(data.get('high_priority_count', 0))
+          " 2>/dev/null || echo "0")
+
+          if [ "$HIGH_PRIORITY" -gt 0 ]; then
+            gh issue create \
+              --title "🔥 $HIGH_PRIORITY high-priority storage deals found ($(date +%Y-%m-%d))" \
+              --body "Market scanner found $HIGH_PRIORITY deals with spread ≥ \$120/month. Check scan_results.json artifact for details." \
+              --label "high-priority,automation"
+          fi
