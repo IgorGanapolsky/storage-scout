@@ -1,3 +1,21 @@
+---
+name: rlhf-feedback
+description: Capture and learn from human feedback (thumbs up/down) to improve future responses
+version: 1.0.0
+author: Storage Scout
+tags:
+  - feedback
+  - learning
+  - memory
+  - rlhf
+triggers:
+  - thumbs up
+  - thumbs down
+  - good job
+  - wrong
+  - mistake
+---
+
 # RLHF Feedback Skill
 
 ## Purpose
