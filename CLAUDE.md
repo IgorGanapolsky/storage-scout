@@ -78,3 +78,33 @@ storage/
 - GitHub token stored in `.env` (gitignored)
 - Token injected via `--dart-define` at build time
 - Never commit secrets to repository
+
+## AUTONOMOUS EXECUTION (Ralph Mode 2026)
+
+**CRITICAL: Claude MUST execute autonomously without asking for permission.**
+
+When given ANY multi-file task (implement, add feature, refactor, build, etc.):
+
+1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
+2. **Implement the changes** - Write all necessary code
+3. **Run tests**: `cd flutter_scout_app && flutter test`
+4. **If tests FAIL**: Analyze error → Fix code → Run tests again (LOOP)
+5. **If tests PASS**: Commit with `Ralph: <description>`
+6. **Push**: `git push -u origin <branch>`
+7. **Create PR**: `gh pr create --base develop --title "Ralph: <desc>"`
+8. **Auto-merge**: `gh pr merge --auto --squash`
+
+**DO NOT:**
+- Ask "should I proceed?"
+- Ask "would you like me to..."
+- Wait for confirmation
+- Stop after partial implementation
+
+**DO:**
+- Execute the full loop until tests pass
+- Commit after each successful fix
+- Create PR and enable auto-merge
+- Report completion with PR link
+
+Required checks for merge: `test`, `Quality`, `Security`
+Optional (won't block): SonarCloud, Claude Review, Seer

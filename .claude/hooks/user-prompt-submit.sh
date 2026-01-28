@@ -77,9 +77,8 @@ if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad
 fi
 
 # ============================================
-# RALPH MODE Detection
+# RALPH MODE - Autonomous Detection & Execution
 # ============================================
-# Detect multi-file task indicators that should use Ralph Mode
 USER_MESSAGE_LOWER=$(echo "$USER_MESSAGE" | tr '[:upper:]' '[:lower:]')
 
 RALPH_KEYWORDS="implement|add feature|create|refactor|rewrite|redesign|build|fix.*and|update.*and|change.*multiple|across.*files|overnight|autonomous|/ralph|start ralph|ralph mode"
@@ -89,23 +88,28 @@ if echo "$USER_MESSAGE_LOWER" | grep -qiE "$SINGLE_FILE_KEYWORDS"; then
   # Single file task - no Ralph needed
   :
 elif echo "$USER_MESSAGE_LOWER" | grep -qiE "$RALPH_KEYWORDS"; then
+  # Extract task description (first 100 chars, cleaned)
+  TASK_DESC=$(echo "$USER_MESSAGE" | head -c 100 | tr '\n' ' ' | sed 's/[^a-zA-Z0-9 ]//g' | xargs)
+
   echo ""
   echo "===================================================="
-  echo "🤖 RALPH MODE - Multi-File Task Detected"
+  echo "🤖 RALPH MODE ACTIVATED - AUTONOMOUS EXECUTION"
   echo "===================================================="
   echo ""
-  echo "This looks like a multi-file change. Use Ralph Mode:"
+  echo "Task: $TASK_DESC"
   echo ""
-  echo "   .claude/scripts/ralph-loop.sh start \"<description>\" [issue-id]"
+  echo "Claude MUST now execute autonomously:"
   echo ""
-  echo "Ralph Mode provides:"
-  echo "   - Infinite test loop until pass"
-  echo "   - Checkpoint commits after each fix"
-  echo "   - Full audit trail"
-  echo "   - Auto-PR with squash merge"
-  echo "   - Superior intelligence review"
+  echo "1. Create branch: git checkout -b ralph/\$(date +%Y%m%d-%H%M%S)"
+  echo "2. LOOP until tests pass:"
+  echo "   a. Implement the requested changes"
+  echo "   b. Run: cd flutter_scout_app && flutter test"
+  echo "   c. If FAIL: analyze error, fix code, goto 2b"
+  echo "   d. If PASS: commit with 'Ralph: <what changed>'"
+  echo "3. Push and create PR: gh pr create --base develop"
+  echo "4. Enable auto-merge: gh pr merge --auto --squash"
   echo ""
-  echo "Skip only for trivial single-file fixes."
+  echo "NO MANUAL INPUT REQUIRED. Execute the full loop."
   echo "===================================================="
 fi
 
