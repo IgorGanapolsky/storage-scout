@@ -76,5 +76,38 @@ if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad
   fi
 fi
 
+# ============================================
+# RALPH MODE Detection
+# ============================================
+# Detect multi-file task indicators that should use Ralph Mode
+USER_MESSAGE_LOWER=$(echo "$USER_MESSAGE" | tr '[:upper:]' '[:lower:]')
+
+RALPH_KEYWORDS="implement|add feature|create|refactor|rewrite|redesign|build|fix.*and|update.*and|change.*multiple|across.*files|overnight|autonomous|/ralph|start ralph|ralph mode"
+SINGLE_FILE_KEYWORDS="fix typo|fix this line|change this|update this file|in this file only|single file|one file"
+
+if echo "$USER_MESSAGE_LOWER" | grep -qiE "$SINGLE_FILE_KEYWORDS"; then
+  # Single file task - no Ralph needed
+  :
+elif echo "$USER_MESSAGE_LOWER" | grep -qiE "$RALPH_KEYWORDS"; then
+  echo ""
+  echo "===================================================="
+  echo "🤖 RALPH MODE - Multi-File Task Detected"
+  echo "===================================================="
+  echo ""
+  echo "This looks like a multi-file change. Use Ralph Mode:"
+  echo ""
+  echo "   .claude/scripts/ralph-loop.sh start \"<description>\" [issue-id]"
+  echo ""
+  echo "Ralph Mode provides:"
+  echo "   - Infinite test loop until pass"
+  echo "   - Checkpoint commits after each fix"
+  echo "   - Full audit trail"
+  echo "   - Auto-PR with squash merge"
+  echo "   - Superior intelligence review"
+  echo ""
+  echo "Skip only for trivial single-file fixes."
+  echo "===================================================="
+fi
+
 # Pass through to Claude (don't block the prompt)
 exit 0
