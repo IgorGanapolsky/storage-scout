@@ -602,6 +602,101 @@ def show_metrics():
     print("=" * 50)
 
 
+def add_feedback(feedback_type: str, context: str, model_key: str = DEFAULT_MODEL) -> bool:
+    """Add RLHF feedback directly to LanceDB and re-index"""
+    import uuid
+
+    # Read feedback text from stdin
+    feedback_text = sys.stdin.read().strip()
+    if not feedback_text:
+        print("Error: No feedback text provided via stdin")
+        return False
+
+    feedback_id = f"fb_{uuid.uuid4().hex[:8]}"
+    timestamp = datetime.now().isoformat()
+    reward = 1 if feedback_type == "positive" else -1
+
+    # Create the feedback entry
+    entry = {
+        "id": feedback_id,
+        "timestamp": timestamp,
+        "feedback": feedback_type,
+        "reward": reward,
+        "context": context[:500] if context else "",
+        "content": feedback_text[:1000],
+        "tags": extract_tags(context + " " + feedback_text),
+        "actionType": "user_feedback",
+    }
+
+    # Append to JSON log (for backup/compatibility)
+    FEEDBACK_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(FEEDBACK_LOG, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
+
+    # Add directly to LanceDB
+    try:
+        db = get_lance_db()
+        model = get_embedding_model(model_key)
+
+        # Create full_text for embedding
+        full_text = f"Feedback: {feedback_type}\nContext: {context}\nContent: {feedback_text}"
+        embedding = model.encode([full_text])[0].tolist()
+
+        lance_entry = {
+            "id": feedback_id,
+            "type": "feedback",
+            "feedback_type": feedback_type,
+            "reward": reward,
+            "context": context[:200] if context else "",
+            "tags": ",".join(entry["tags"]),
+            "full_text": full_text,
+            "timestamp": timestamp,
+            "vector": embedding,
+        }
+
+        if table_exists(db, FEEDBACK_TABLE):
+            table = db.open_table(FEEDBACK_TABLE)
+            table.add([lance_entry])
+        else:
+            db.create_table(FEEDBACK_TABLE, [lance_entry])
+
+        print(f"Added {feedback_type} feedback: {feedback_id}")
+        _metrics.log("feedback", {
+            "id": feedback_id,
+            "type": feedback_type,
+            "reward": reward,
+        })
+        return True
+
+    except Exception as e:
+        print(f"LanceDB error (feedback still saved to JSON): {e}")
+        return False
+
+
+def extract_tags(text: str) -> List[str]:
+    """Extract relevant tags from text"""
+    tags = []
+    text_lower = text.lower()
+
+    # Domain tags
+    if any(w in text_lower for w in ["spread", "price", "arbitrage", "storage"]):
+        tags.append("spread-calculation")
+    if any(w in text_lower for w in ["github", "commit", "pr", "push", "merge"]):
+        tags.append("git-operations")
+    if any(w in text_lower for w in ["test", "tdd", "spec", "coverage"]):
+        tags.append("testing")
+    if any(w in text_lower for w in ["flutter", "dart", "widget", "app"]):
+        tags.append("flutter")
+    if any(w in text_lower for w in ["csv", "data", "scrape", "scout"]):
+        tags.append("data")
+    if any(w in text_lower for w in ["token", "secret", "env", "security"]):
+        tags.append("security")
+    if any(w in text_lower for w in ["workflow", "action", "ci", "deploy"]):
+        tags.append("ci-cd")
+
+    return tags if tags else ["general"]
+
+
 def main():
     import argparse
 
@@ -611,12 +706,21 @@ def main():
     parser.add_argument("--context", action="store_true", help="Get session context")
     parser.add_argument("--status", action="store_true", help="Show index status")
     parser.add_argument("--metrics", action="store_true", help="Show query metrics")
+    parser.add_argument("--add-feedback", action="store_true", help="Add RLHF feedback (reads from stdin)")
+    parser.add_argument("--feedback-type", type=str, choices=["positive", "negative"], help="Feedback type")
+    parser.add_argument("--feedback-context", type=str, default="", help="Context for feedback")
     parser.add_argument("--model", type=str, choices=list(EMBEDDING_MODELS.keys()), default=DEFAULT_MODEL)
     parser.add_argument("-n", "--results", type=int, default=5, help="Number of results")
 
     args = parser.parse_args()
 
-    if args.index:
+    if args.add_feedback:
+        if not args.feedback_type:
+            print("Error: --feedback-type required with --add-feedback")
+            sys.exit(1)
+        success = add_feedback(args.feedback_type, args.feedback_context, args.model)
+        sys.exit(0 if success else 1)
+    elif args.index:
         index_all(args.model)
     elif args.query:
         results = hybrid_search(args.query, n_results=args.results)
@@ -639,6 +743,8 @@ def main():
         print("   2. python semantic-memory.py --index")
         print("   3. python semantic-memory.py --query 'spread calculation'")
         print("   4. python semantic-memory.py --context")
+        print("\nRLHF Feedback:")
+        print("   echo 'lesson text' | python semantic-memory.py --add-feedback --feedback-type positive --feedback-context 'context'")
 
 
 if __name__ == "__main__":

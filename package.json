@@ -1,0 +1,28 @@
+{
+  "name": "storage",
+  "version": "1.0.0",
+  "description": "A Flutter app for manually tracking storage arbitrage opportunities in the Coral Springs, FL market.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IgorGanapolsky/storage-scout.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/IgorGanapolsky/storage-scout/issues"
+  },
+  "homepage": "https://github.com/IgorGanapolsky/storage-scout#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "agent-browser": "^0.8.4"
+  }
+}

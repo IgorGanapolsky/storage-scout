@@ -1,7 +1,19 @@
 {
   "hooks": {
-    "SessionStart": [".claude/hooks/session-start.sh"],
-    "UserPromptSubmit": [".claude/hooks/user-prompt-submit.sh"]
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": ".claude/hooks/session-start.sh"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": ".claude/hooks/user-prompt-submit.sh",
+        "async": true,
+        "timeout": 30
+      }
+    ]
   },
   "permissions": {
     "allow": [
