@@ -52,4 +52,14 @@ if [ -f "$FEEDBACK_SUMMARY" ]; then
   fi
 fi
 
+# === Ralph State Recovery ===
+# Show what Ralph was working on last session
+RALPH_STATE="$SCRIPT_DIR/../RALPH_STATE.md"
+if [ -f "$RALPH_STATE" ]; then
+  LAST_STATUS=$(grep "^\*\*" "$RALPH_STATE" | head -1 | sed 's/\*//g' | xargs)
+  if [ -n "$LAST_STATUS" ]; then
+    echo "🤖 Ralph State: $LAST_STATUS"
+  fi
+fi
+
 exit 0

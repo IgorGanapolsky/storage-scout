@@ -79,6 +79,19 @@ storage/
 - Token injected via `--dart-define` at build time
 - Never commit secrets to repository
 
+## SESSION CONTINUITY
+
+**On every session start, Claude MUST:**
+
+1. Read `.claude/RALPH_STATE.md` to see what was being worked on
+2. Check `gh pr list --state open` for pending PRs
+3. Resume incomplete work WITHOUT asking the user
+
+If user says "continue" or "continue where you left off":
+- Read RALPH_STATE.md immediately
+- Resume the active work or pending tasks
+- Never say "I don't have context" - the context IS in the state file
+
 ## AUTONOMOUS EXECUTION (Ralph Mode 2026)
 
 **CRITICAL: Claude MUST execute autonomously without asking for permission.**
@@ -108,3 +121,7 @@ When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
 Required checks for merge: `test`, `Quality`, `Security`
 Optional (won't block): SonarCloud, Claude Review, Seer
+
+**After completing any task:**
+- Update `.claude/RALPH_STATE.md` with current status
+- This ensures the next session knows where to continue
