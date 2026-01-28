@@ -25,7 +25,6 @@ Usage:
   python semantic-memory.py --metrics            # Show query metrics
 """
 
-import os
 import sys
 import json
 import re
@@ -180,9 +179,10 @@ def get_embedding_model(model_key: str = DEFAULT_MODEL):
         from sentence_transformers import SentenceTransformer
         model_name = EMBEDDING_MODELS.get(model_key, EMBEDDING_MODELS["fast"])
 
+        import os as _os
         cache_dir = MEMORY_DIR / "model_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(cache_dir))
+        _os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(cache_dir))
 
         return SentenceTransformer(model_name)
     except ImportError:
