@@ -51,20 +51,14 @@ void main() {
     });
 
     test('120 is exactly high priority threshold', () {
+      // (x * 4) - 150 = 120 => x = 67.5
       final calc = SpreadCalculator(
-        neighborRate: 70.5,
-        commercialPrice: 150.0,
-        hasInsuranceWaiver: true,
-      );
-      // (70.5 × 4) - 150 = 282 - 150 = 132 -- actually not 120
-      // Let's find exact: (x * 4) - 150 = 120 => x = 67.5
-      final exactThreshold = SpreadCalculator(
         neighborRate: 67.5,
         commercialPrice: 150.0,
         hasInsuranceWaiver: true,
       );
-      expect(exactThreshold.spread, equals(120.0));
-      expect(exactThreshold.isHighPriority, isTrue);
+      expect(calc.spread, equals(120.0));
+      expect(calc.isHighPriority, isTrue);
     });
 
     test('119.99 is not high priority', () {
