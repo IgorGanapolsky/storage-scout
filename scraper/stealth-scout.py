@@ -2,19 +2,18 @@
 """
 Stealth Storage Price Scout - 2026 Edition
 
-Uses Patchright (undetected Playwright) to bypass Cloudflare and anti-bot systems.
-Scrapes Public Storage, Extra Space, CubeSmart for 10x20 prices in Coral Springs FL.
+Uses Patchright (undetected Playwright) to scrape SpareFoot aggregator for
+10x20 storage unit prices in Coral Springs FL.
+
+SpareFoot is used as the primary source because:
+1. It aggregates prices from multiple facilities
+2. Has less aggressive anti-bot protection than individual facility sites
+3. Shows real-time pricing with discounts
 
 Based on 2026 best practices:
 - Patchright for undetected browser automation
-- Residential proxy support
 - Human-like behavior simulation
 - Smart retry with exponential backoff
-
-Sources:
-- https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python
-- https://www.zenrows.com/blog/playwright-stealth
-- https://scrapfly.io/blog/posts/how-to-bypass-cloudflare-anti-scraping
 """
 
 import asyncio
@@ -39,23 +38,8 @@ CONFIG = {
     "ntfy_topic": "igor_storage_alerts",
 }
 
-FACILITIES = [
-    {
-        "name": "Public Storage",
-        "search_url": "https://www.publicstorage.com/self-storage-fl-coral-springs.html",
-        "price_patterns": [r'\$(\d+(?:\.\d{2})?)\s*(?:/mo|per month|monthly)', r'data-price="(\d+(?:\.\d{2})?)"'],
-    },
-    {
-        "name": "Extra Space Storage",
-        "search_url": "https://www.extraspace.com/storage/facilities/us/florida/coral_springs/",
-        "price_patterns": [r'\$(\d+(?:\.\d{2})?)', r'price["\']?\s*:\s*["\']?(\d+(?:\.\d{2})?)'],
-    },
-    {
-        "name": "CubeSmart",
-        "search_url": "https://www.cubesmart.com/florida-self-storage/coral-springs-self-storage.html",
-        "price_patterns": [r'\$(\d+(?:\.\d{2})?)', r'(\d+(?:\.\d{2})?)\s*(?:/mo|per month)'],
-    },
-]
+# SpareFoot is our primary source - aggregates all major facilities
+SPAREFOOT_URL = "https://www.sparefoot.com/search?location=coral+springs+fl&size=10x20"
 
 
 async def human_delay(min_ms: int = 500, max_ms: int = 2000):
@@ -75,35 +59,34 @@ async def human_scroll(page):
         scroll_amount = random.randint(-100, viewport_height // 2)
 
 
-async def extract_prices(content: str, patterns: List[str], min_price: float = 100, max_price: float = 500) -> List[float]:
-    """Extract prices from page content using multiple patterns"""
-    prices = []
-    for pattern in patterns:
-        matches = re.findall(pattern, content, re.IGNORECASE)
-        for match in matches:
-            try:
-                price = float(match)
-                # Filter to reasonable 10x20 price range
-                if min_price <= price <= max_price:
-                    prices.append(price)
-            except ValueError:
-                continue
-    return list(set(prices))  # Deduplicate
+async def human_mouse_movement(page):
+    """Simulate natural mouse movements across the page"""
+    viewport = page.viewport_size
+    if not viewport:
+        return
+
+    for _ in range(random.randint(3, 5)):
+        x = random.randint(100, viewport['width'] - 100)
+        y = random.randint(100, viewport['height'] - 100)
+        await page.mouse.move(x, y, steps=random.randint(10, 25))
+        await human_delay(100, 300)
 
 
-async def scrape_facility_patchright(facility: Dict) -> Optional[Dict]:
-    """Scrape a facility using Patchright (undetected Playwright)"""
+async def scrape_sparefoot() -> List[Dict]:
+    """Scrape SpareFoot for 10x20 unit prices in Coral Springs"""
     try:
         from patchright.async_api import async_playwright
     except ImportError:
-        print("  Patchright not installed. Trying standard playwright...")
-        return await scrape_facility_playwright(facility)
+        print("  Patchright not installed. Install with: pip install patchright")
+        return []
 
-    print(f"\n  Scraping {facility['name']} with Patchright...")
+    print(f"\n  Scraping SpareFoot for 10x20 units...")
+    print(f"  URL: {SPAREFOOT_URL}")
+
+    results = []
 
     try:
         async with async_playwright() as p:
-            # Launch with anti-detection settings
             browser = await p.chromium.launch(
                 headless=True,
                 args=[
@@ -117,103 +100,95 @@ async def scrape_facility_patchright(facility: Dict) -> Optional[Dict]:
 
             context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 locale="en-US",
                 timezone_id="America/New_York",
+                geolocation={"latitude": 26.2712, "longitude": -80.2706},
+                permissions=["geolocation"],
             )
 
             page = await context.new_page()
 
-            # Navigate with human-like timing
-            await page.goto(facility["search_url"], wait_until="domcontentloaded", timeout=30000)
-            await human_delay(2000, 4000)
+            print("    Navigating to SpareFoot...")
+            await page.goto(SPAREFOOT_URL, wait_until="networkidle", timeout=45000)
+            await human_delay(3000, 5000)
 
-            # Scroll like a human would
+            # Simulate human behavior
+            await human_mouse_movement(page)
             await human_scroll(page)
-            await human_delay(1000, 2000)
+            await human_delay(2000, 3000)
 
-            # Get page content
-            content = await page.content()
+            # Scroll more to load all listings
+            for _ in range(3):
+                await page.evaluate("window.scrollBy(0, 600)")
+                await human_delay(1000, 1500)
+
+            # Extract facility data
+            print("    Extracting prices...")
+            facilities = await page.evaluate("""
+                () => {
+                    const results = [];
+                    const cards = document.querySelectorAll('[class*="facility"], [class*="listing"], article');
+
+                    cards.forEach(card => {
+                        const text = card.innerText;
+                        // Find facility name
+                        const nameMatch = text.match(/(Extra Space|Public Storage|CubeSmart|Life Storage|U-Haul)[^\\n]*/i);
+                        // Check if in Coral Springs
+                        const isCoralSprings = /coral springs/i.test(text);
+                        // Find all prices
+                        const prices = text.match(/\\$\\d+(?:\\.\\d{2})?/g);
+                        // Check for 10x20 mention
+                        const has10x20 = /10.?x.?20|10\\s*'?\\s*x\\s*20/i.test(text);
+
+                        if (prices && prices.length > 0 && isCoralSprings) {
+                            results.push({
+                                facility: nameMatch ? nameMatch[0].substring(0, 60) : 'Unknown',
+                                prices: prices.slice(0, 5),
+                                has10x20
+                            });
+                        }
+                    });
+
+                    // Deduplicate by facility name
+                    const seen = new Set();
+                    return results.filter(r => {
+                        if (seen.has(r.facility)) return false;
+                        seen.add(r.facility);
+                        return true;
+                    });
+                }
+            """)
 
             # Take screenshot for debugging
-            screenshot_path = f"/tmp/{facility['name'].replace(' ', '_')}_screenshot.png"
-            await page.screenshot(path=screenshot_path)
+            screenshot_path = "/tmp/sparefoot_10x20_screenshot.png"
+            await page.screenshot(path=screenshot_path, full_page=True)
             print(f"    Screenshot saved: {screenshot_path}")
 
             await browser.close()
 
-            # Extract prices
-            prices = await extract_prices(content, facility["price_patterns"])
+            # Process results
+            for f in facilities:
+                # Parse lowest price (remove $ and convert to float)
+                prices = [float(p.replace('$', '').replace(',', '')) for p in f['prices']]
+                lowest = min(prices) if prices else 0
 
-            if prices:
-                lowest = min(prices)
-                print(f"    Found {len(prices)} prices, lowest: ${lowest}")
-                return {
-                    "facility": facility["name"],
-                    "price": lowest,
-                    "all_prices": sorted(prices),
-                    "timestamp": datetime.now().isoformat(),
-                    "method": "patchright",
-                }
-            else:
-                print(f"    No prices found in content")
-                # Try to find any dollar amounts for debugging
-                all_dollars = re.findall(r'\$(\d+(?:\.\d{2})?)', content)
-                if all_dollars:
-                    print(f"    All $ amounts found: {all_dollars[:10]}...")
-                return None
+                if lowest > 0:
+                    results.append({
+                        "facility": f['facility'],
+                        "price": lowest,
+                        "all_prices": sorted(prices),
+                        "timestamp": datetime.now().isoformat(),
+                        "method": "sparefoot",
+                        "has_10x20": f['has10x20'],
+                    })
+
+            print(f"    Found {len(results)} Coral Springs facilities")
+            return results
 
     except Exception as e:
         print(f"    Error: {e}")
-        return None
-
-
-async def scrape_facility_playwright(facility: Dict) -> Optional[Dict]:
-    """Fallback: Scrape using standard Playwright with stealth"""
-    try:
-        from playwright.async_api import async_playwright
-        from playwright_stealth import stealth_async
-    except ImportError:
-        print("  Playwright not available")
-        return None
-
-    print(f"\n  Scraping {facility['name']} with Playwright Stealth...")
-
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            )
-
-            page = await context.new_page()
-            await stealth_async(page)
-
-            await page.goto(facility["search_url"], wait_until="domcontentloaded", timeout=30000)
-            await human_delay(3000, 5000)
-            await human_scroll(page)
-
-            content = await page.content()
-            await browser.close()
-
-            prices = await extract_prices(content, facility["price_patterns"])
-
-            if prices:
-                lowest = min(prices)
-                print(f"    Found {len(prices)} prices, lowest: ${lowest}")
-                return {
-                    "facility": facility["name"],
-                    "price": lowest,
-                    "all_prices": sorted(prices),
-                    "timestamp": datetime.now().isoformat(),
-                    "method": "playwright-stealth",
-                }
-            return None
-
-    except Exception as e:
-        print(f"    Error: {e}")
-        return None
+        return []
 
 
 def calculate_spread(commercial_price: float, p2p_rate: float = CONFIG["p2p_default_rate"]) -> Dict:
@@ -287,30 +262,12 @@ async def main():
     print("=" * 60)
     print(f"Target: {CONFIG['target_city']}, {CONFIG['target_state']}")
     print(f"Zip codes: {', '.join(CONFIG['zip_codes'])}")
+    print(f"Unit size: {CONFIG['unit_size']}")
     print(f"High priority threshold: ${CONFIG['high_priority_threshold']}/mo spread")
     print("=" * 60)
 
-    results = []
-
-    for facility in FACILITIES:
-        result = await scrape_facility_patchright(facility)
-        if result:
-            results.append(result)
-
-            # Calculate and display spread
-            calc = calculate_spread(result["price"])
-            priority = "HIGH PRIORITY" if calc["high_priority"] else ""
-            print(f"    Spread: ${calc['spread']:.2f}/mo {priority}")
-
-            # Send alert for high priority deals
-            if calc["high_priority"]:
-                await send_ntfy_alert(
-                    f"HIGH PRIORITY: {result['facility']} - ${result['price']}/mo = ${calc['spread']:.0f} spread!",
-                    priority="high"
-                )
-
-        # Delay between facilities
-        await human_delay(3000, 6000)
+    # Scrape SpareFoot for all facilities
+    results = await scrape_sparefoot()
 
     # Summary
     print("\n" + "=" * 60)
@@ -318,14 +275,33 @@ async def main():
     print("=" * 60)
 
     if results:
+        # Sort by price (lowest first)
+        results.sort(key=lambda x: x['price'])
+
         for r in results:
             calc = calculate_spread(r["price"])
             status = "HIGH" if calc["high_priority"] else ("OK" if calc["profitable"] else "SKIP")
             print(f"[{status}] {r['facility']}: ${r['price']}/mo -> ${calc['spread']:.0f} spread")
 
+            # Send alert for high priority deals
+            if calc["high_priority"]:
+                await send_ntfy_alert(
+                    f"HIGH PRIORITY: {r['facility']} - ${r['price']}/mo = ${calc['spread']:.0f} spread!",
+                    priority="high"
+                )
+
         await save_results(results)
+
+        # Show best deal
+        best = results[0]
+        best_calc = calculate_spread(best["price"])
+        print(f"\n{'='*60}")
+        print(f"BEST DEAL: {best['facility']}")
+        print(f"  Price: ${best['price']}/mo")
+        print(f"  Spread: ${best_calc['spread']:.0f}/mo")
+        print(f"  High Priority: {'YES' if best_calc['high_priority'] else 'NO'}")
     else:
-        print("No prices found. Try running locally with headed browser for debugging.")
+        print("No prices found. Check screenshot at /tmp/sparefoot_10x20_screenshot.png")
 
     print("\nDone!")
 
