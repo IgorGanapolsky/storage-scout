@@ -17,14 +17,11 @@ Based on 2026 best practices:
 """
 
 import asyncio
-import json
 import random
-import os
-import sys
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List
-import re
+from typing import Dict, List
 
 # Configuration
 CONFIG = {
