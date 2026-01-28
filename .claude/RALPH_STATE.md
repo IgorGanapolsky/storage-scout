@@ -3,27 +3,30 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-01-28T15:01:00Z
+2026-01-28T15:33:00Z
 
 ## Current Status
-✅ **IDLE** - All tasks complete, ready for new work
+✅ **IDLE** - Business toolkit created, awaiting user action
 
 ## Recently Completed
-- ✅ PR #27 merged: Storage arbitrage research with Direct Host model
-- ✅ PR #32 merged: Hooks schema update to new matcher format
+- ✅ PR #33 merged: Session continuity with state tracking
+- ✅ PR #32 merged: Hooks schema update
+- ✅ PR #27 merged: Storage arbitrage research
+- ✅ Created business toolkit (GETTING_STARTED.md, partner-tracker.csv, scouting-checklist.md)
 
 ## Active Work
-None - awaiting new tasks
+None - awaiting user to execute business tasks
 
-## Pending Tasks
-1. [ ] Create Neighbor.com host account (from research_findings.md)
-2. [ ] Scout Oakland Park for partner homeowners
-3. [ ] Contact 10 homeowners with revenue-share proposal
+## Pending Tasks (User Must Do)
+1. [ ] **Create Neighbor.com host account** → https://neighbor.com/host
+2. [ ] **Scout Oakland Park** → Use `business/scouting-checklist.md`
+3. [ ] **Contact homeowners** → Use templates in `business/GETTING_STARTED.md`
+4. [ ] **Track partners** → Use `business/partner-tracker.csv`
 
 ## Blocked Items
-None
+- All business tasks require human action (account creation, physical scouting, outreach)
 
 ## Notes for Next Session
-- All required CI checks: `test`, `Quality`, `Security`
-- Auto-merge is enabled for Ralph PRs
-- GitHub auth: use `IgorGanapolsky` account (switch with `gh auth switch`)
+- Business toolkit is in `business/` directory
+- Revenue target: 12 partners = $900/mo = $30/day
+- Required CI checks: `test`, `Quality`, `Security`
