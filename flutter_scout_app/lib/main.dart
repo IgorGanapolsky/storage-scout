@@ -70,7 +70,7 @@ class _ScoutScreenState extends State<ScoutScreen> {
   String facilityName = '';
   String zipCode = '33071';
   double price10x20 = 0.0;
-  double neighborRate = 65.0;
+  double neighborRate = 45.0;  // Validated Neighbor.com avg 5x5 rate (2026-01-28)
   bool hasInsuranceWaiver = false;
   bool isSyncing = false;
 
@@ -234,7 +234,7 @@ class _ScoutScreenState extends State<ScoutScreen> {
                 initialValue: neighborRate.toString(),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 style: const TextStyle(color: Colors.white),
-                onChanged: (val) => setState(() => neighborRate = double.tryParse(val) ?? 65.0),
+                onChanged: (val) => setState(() => neighborRate = double.tryParse(val) ?? 45.0),
               ),
               const SizedBox(height: 20),
 
@@ -545,7 +545,7 @@ class ListingGeneratorScreen extends StatefulWidget {
 class _ListingGeneratorScreenState extends State<ListingGeneratorScreen> {
   String unitSize = '5x5';
   String zipCode = '33071';
-  double monthlyRate = 65;
+  double monthlyRate = 45;  // Validated Neighbor.com avg rate
   bool hasClimateControl = false;
   bool has24hrAccess = true;
 
@@ -607,7 +607,7 @@ Message me to schedule a viewing.
               decoration: const InputDecoration(labelText: 'Monthly Rate (\$)'),
               keyboardType: TextInputType.number,
               style: const TextStyle(color: Colors.white),
-              onChanged: (v) => setState(() => monthlyRate = double.tryParse(v) ?? 65),
+              onChanged: (v) => setState(() => monthlyRate = double.tryParse(v) ?? 45),
             ),
             const SizedBox(height: 15),
 
