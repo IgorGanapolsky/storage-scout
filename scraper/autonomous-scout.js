@@ -111,7 +111,7 @@ async function syncToGitHub(results) {
   console.log('\n📤 Syncing to GitHub...');
 
   const date = new Date().toISOString().split('T')[0];
-  const csvRows = results
+  const newRows = results
     .filter(r => r !== null)
     .map(r => {
       const spread = calculateSpread(r.price);
@@ -119,15 +119,67 @@ async function syncToGitHub(results) {
     })
     .join('\n');
 
-  if (!csvRows) {
+  if (!newRows) {
     console.log('No data to sync');
     return;
   }
 
-  // This would use the GitHub API to append to storage_spreads.csv
-  // For now, just log what would be synced
-  console.log('Would sync:');
-  console.log(csvRows);
+  const filePath = 'storage_spreads.csv';
+  const apiUrl = `https://api.github.com/repos/${CONFIG.ghUser}/${CONFIG.ghRepo}/contents/${filePath}`;
+
+  try {
+    // Get current file content and SHA
+    const getResponse = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${CONFIG.ghToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    });
+
+    let existingContent = '';
+    let sha = null;
+
+    if (getResponse.ok) {
+      const data = await getResponse.json();
+      existingContent = Buffer.from(data.content, 'base64').toString('utf8');
+      sha = data.sha;
+    } else if (getResponse.status === 404) {
+      // File doesn't exist, create with header
+      existingContent = 'date,zip,facility,commercial_price,p2p_revenue,spread,high_priority,source\n';
+    } else {
+      throw new Error(`GitHub API error: ${getResponse.status}`);
+    }
+
+    // Append new rows
+    const updatedContent = existingContent.trimEnd() + '\n' + newRows + '\n';
+
+    // Update file
+    const putBody = {
+      message: `Auto-scout: ${date} - ${results.filter(r => r).length} facilities`,
+      content: Buffer.from(updatedContent).toString('base64'),
+      branch: 'main',
+    };
+    if (sha) putBody.sha = sha;
+
+    const putResponse = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${CONFIG.ghToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(putBody),
+    });
+
+    if (putResponse.ok) {
+      console.log(`✓ Synced ${results.filter(r => r).length} entries to GitHub`);
+    } else {
+      const errorData = await putResponse.json();
+      throw new Error(`GitHub PUT failed: ${errorData.message}`);
+    }
+  } catch (error) {
+    console.error('GitHub sync failed:', error.message);
+  }
 }
 
 async function sendAlerts(results) {
