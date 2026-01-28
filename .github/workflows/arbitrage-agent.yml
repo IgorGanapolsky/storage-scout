@@ -1,0 +1,162 @@
+name: Arbitrage Agent
+
+# This workflow runs as an autonomous agent
+# Monitors deals, creates virtual listings, and alerts on opportunities
+
+on:
+  schedule:
+    # Run every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'scan'
+        type: choice
+        options:
+          - scan           # Scan for clearance deals
+          - list           # Create virtual listings from deals
+          - check_requests # Check for booking requests
+          - report         # Generate profit report
+
+jobs:
+  arbitrage-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install patchright requests
+          patchright install chromium
+
+      - name: Run Arbitrage Agent
+        id: agent
+        working-directory: tools_rental
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ACTION: ${{ github.event.inputs.action || 'scan' }}
+        run: |
+          python << 'EOF'
+          import os
+          import json
+          import sys
+          sys.path.insert(0, '.')
+
+          action = os.environ.get('ACTION', 'scan')
+
+          if action == 'scan':
+              print("🔍 Scanning for clearance deals...")
+              # Import and run scraper
+              try:
+                  import asyncio
+                  from clearance_scraper import check_and_alert
+                  asyncio.run(check_and_alert())
+              except Exception as e:
+                  print(f"Scraper error: {e}")
+
+          elif action == 'list':
+              print("📦 Creating virtual listings from deals...")
+              from jit_arbitrage import JITArbitrageEngine, create_virtual_inventory_from_clearance
+              from pathlib import Path
+
+              deals_file = Path("clearance_deals.json")
+              if deals_file.exists():
+                  with open(deals_file) as f:
+                      deals = json.load(f)
+                  listings = create_virtual_inventory_from_clearance(deals)
+                  print(f"Created {len(listings)} virtual listings")
+              else:
+                  print("No deals file found. Run 'scan' first.")
+
+          elif action == 'check_requests':
+              print("📱 Checking for booking requests...")
+              from jit_arbitrage import JITArbitrageEngine
+              engine = JITArbitrageEngine()
+              pending = engine.get_pending_requests()
+              print(f"Found {len(pending)} pending requests")
+              for req in pending:
+                  print(f"  - {req.id}: ${req.profit_if_fulfilled} profit")
+
+          elif action == 'report':
+              print("📊 Generating report...")
+              from jit_arbitrage import JITArbitrageEngine
+              engine = JITArbitrageEngine()
+              opps = engine.get_profitable_opportunities()
+              print(f"\nProfitable Opportunities: {len(opps)}")
+              for opp in opps[:5]:
+                  print(f"  {opp['name']}: ${opp['first_rental_profit']} profit on first rental")
+
+          print("\n✅ Agent task complete")
+          EOF
+
+      - name: Commit data files
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Arbitrage Agent"
+          git add tools_rental/data/*.json 2>/dev/null || true
+          git add tools_rental/clearance_deals.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Agent: Update arbitrage data $(date +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Create issue for high-value opportunities
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'tools_rental/data/virtual_listings.json';
+
+            if (!fs.existsSync(path)) return;
+
+            const listings = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const profitable = listings.filter(l =>
+              l.status === 'virtual' &&
+              (l.rental_daily * 3 - l.source_price) > 20
+            );
+
+            if (profitable.length === 0) return;
+
+            const body = profitable.map(l => {
+              const profit = (l.rental_daily * 3 - l.source_price).toFixed(0);
+              return `- **${l.name}**: $${l.source_price} → $${profit} profit on 3-day rental`;
+            }).join('\n');
+
+            // Check if similar issue exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'arbitrage-opportunity'
+            });
+
+            if (issues.data.length > 0) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: `## Current Opportunities\n\n${body}\n\n*Updated: ${new Date().toISOString()}*`
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🔧 Tool Arbitrage Opportunities',
+                body: `## Current Opportunities\n\n${body}\n\n*Run \`workflow_dispatch\` with action=list to create virtual listings*`,
+                labels: ['arbitrage-opportunity', 'automated']
+              });
+            }
