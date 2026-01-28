@@ -18,6 +18,7 @@ Based on 2026 best practices:
 
 import asyncio
 import random
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -28,7 +29,7 @@ CONFIG = {
     "target_city": "Coral Springs",
     "target_state": "FL",
     "unit_size": "10x20",
-    "p2p_default_rate": 45.0,  # Neighbor.com avg 5x5 rate (validated 2026-01-28)
+    "p2p_default_rate": 65.0,  # Neighbor.com avg 5x5 rate
     "insurance_cost": 12.0,
     "high_priority_threshold": 120.0,
     "ntfy_topic": "igor_storage_alerts",
