@@ -75,7 +75,7 @@
       const lines = text.trim().split('\n');
       if (lines.length < 2) return [];
 
-      const headers = lines[0].split(',');
+      // Skip header row, parse data rows
       return lines.slice(1).map(line => {
         const values = line.split(',');
         return {
