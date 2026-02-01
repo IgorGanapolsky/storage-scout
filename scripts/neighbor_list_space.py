@@ -4,9 +4,13 @@ Neighbor.com Space Listing - Email Login
 """
 
 import asyncio
+import os
 
-EMAIL = "iganapolsky@gmail.com"
-PASSWORD = "Rockland26&*"
+EMAIL = os.environ.get("NEIGHBOR_EMAIL", "")
+PASSWORD = os.environ.get("NEIGHBOR_PASSWORD", "")
+
+if not EMAIL or not PASSWORD:
+    raise ValueError("Set NEIGHBOR_EMAIL and NEIGHBOR_PASSWORD environment variables")
 
 async def list_space_on_neighbor():
     from patchright.async_api import async_playwright
