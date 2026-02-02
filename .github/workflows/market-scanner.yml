@@ -2,8 +2,9 @@ name: Market Scanner
 
 on:
   schedule:
-    # Run daily at 6 AM EST (11:00 UTC)
-    - cron: '0 11 * * *'
+    # Run every 6 hours - FREE tier allows 2000 min/month
+    # Each run ~2 min = 8 runs/day × 30 days × 2 min = 480 min/month (well under limit)
+    - cron: '0 5,11,17,23 * * *'  # 12am, 6am, 12pm, 6pm EST
   workflow_dispatch:
     inputs:
       zip_codes:

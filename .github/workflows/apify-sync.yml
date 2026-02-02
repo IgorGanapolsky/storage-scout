@@ -1,0 +1,54 @@
+name: Apify Data Sync
+
+on:
+  schedule:
+    # Run at 9:30 AM ET (30 min after Apify scrape)
+    - cron: '30 14 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download latest Apify dataset
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          # Get the latest run from our scheduled task
+          TASK_ID="OlXdFEIDSJcb45exN"
+
+          # Get latest successful run
+          LATEST_RUN=$(curl -s "https://api.apify.com/v2/actor-tasks/$TASK_ID/runs?token=$APIFY_TOKEN&status=SUCCEEDED&limit=1" | jq -r '.data.items[0]')
+
+          if [ "$LATEST_RUN" = "null" ]; then
+            echo "No successful runs found"
+            exit 0
+          fi
+
+          DATASET_ID=$(echo $LATEST_RUN | jq -r '.defaultDatasetId')
+          RUN_DATE=$(echo $LATEST_RUN | jq -r '.startedAt' | cut -d'T' -f1)
+
+          echo "Downloading dataset $DATASET_ID from run on $RUN_DATE"
+
+          # Download dataset as JSON
+          mkdir -p data/scraped
+          curl -s "https://api.apify.com/v2/datasets/$DATASET_ID/items?token=$APIFY_TOKEN&format=json" \
+            > "data/scraped/google_${RUN_DATE}.json"
+
+          echo "Downloaded to data/scraped/google_${RUN_DATE}.json"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/scraped/
+
+          if git diff --staged --quiet; then
+            echo "No new data to commit"
+          else
+            git commit -m "chore: sync Apify scrape data $(date +%Y-%m-%d)"
+            git push
+          fi

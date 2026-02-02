@@ -1,0 +1,77 @@
+name: Deal Alerts
+
+# Instant notification when storage_spreads.csv is updated with good deals
+# Triggers on push to CSV file
+
+on:
+  push:
+    paths:
+      - 'storage_spreads.csv'
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for high-value deals
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          python << 'EOF'
+          import csv
+          import os
+          import requests
+
+          NTFY_TOPIC = os.environ.get('NTFY_TOPIC', 'storage-scout-alerts')
+          HIGH_SPREAD_THRESHOLD = 120  # $120/month minimum
+
+          def send_alert(title, message, priority="high"):
+              try:
+                  requests.post(
+                      f"https://ntfy.sh/{NTFY_TOPIC}",
+                      data=message.encode('utf-8'),
+                      headers={
+                          "Title": title,
+                          "Priority": priority,
+                          "Tags": "moneybag,fire"
+                      }
+                  )
+                  print(f"🔔 Alert sent: {title}")
+              except Exception as e:
+                  print(f"Alert failed: {e}")
+
+          # Read CSV and find high-spread deals
+          high_deals = []
+          try:
+              with open('storage_spreads.csv', 'r') as f:
+                  reader = csv.DictReader(f)
+                  for row in reader:
+                      spread = float(row.get('spread', 0))
+                      if spread >= HIGH_SPREAD_THRESHOLD:
+                          high_deals.append({
+                              'facility': row.get('facility', 'Unknown'),
+                              'spread': spread,
+                              'zip': row.get('zip_code', '')
+                          })
+          except FileNotFoundError:
+              print("No CSV file found")
+          except Exception as e:
+              print(f"Error reading CSV: {e}")
+
+          if high_deals:
+              # Sort by spread, highest first
+              high_deals.sort(key=lambda x: x['spread'], reverse=True)
+              best = high_deals[0]
+
+              title = f"🔥 {len(high_deals)} High-Spread Deals Found!"
+              message = f"Best: {best['facility']} - ${best['spread']}/mo spread\n"
+              message += f"Zip: {best['zip']}\n"
+              message += f"Total deals ≥${HIGH_SPREAD_THRESHOLD}: {len(high_deals)}"
+
+              send_alert(title, message)
+          else:
+              print("No high-spread deals in current data")
+
+          EOF
