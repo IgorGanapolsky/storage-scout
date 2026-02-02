@@ -6,9 +6,8 @@ Generates professional rental listings for peer-to-peer platforms.
 Uses templates optimized for conversion.
 """
 
-from datetime import datetime
 from typing import Dict, List, Optional
-from config import MARKET_RATES, LOCATION, PLATFORMS
+from config import MARKET_RATES, LOCATION
 
 
 def generate_listing(

@@ -21,19 +21,18 @@ Endpoints:
 """
 
 import os
-from datetime import datetime, timedelta
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional
 
 try:
     from fastapi import FastAPI, HTTPException, Query
-    from fastapi.responses import JSONResponse
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
 except ImportError:
     print("FastAPI not installed. Run: pip install fastapi uvicorn")
     exit(1)
 
-from agent_commerce import AgentCommerceCatalog, PricingAgent, BookingAgent
+from agent_commerce import AgentCommerceCatalog
 from config import LOCATION
 
 # Initialize FastAPI

@@ -11,7 +11,6 @@ Requires: You to be logged into Facebook in your browser.
 """
 
 import json
-import time
 from pathlib import Path
 
 # Load tools inventory
