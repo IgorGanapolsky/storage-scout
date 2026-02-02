@@ -1,0 +1,97 @@
+name: CodeQL Auto-Fix
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6am UTC
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: read
+
+jobs:
+  check-and-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Check CodeQL alerts
+        id: check-alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ALERTS=$(gh api repos/${{ github.repository }}/code-scanning/alerts \
+            --jq '[.[] | select(.state == "open")] | length' 2>/dev/null || echo "0")
+          echo "alert_count=$ALERTS" >> $GITHUB_OUTPUT
+          echo "Found $ALERTS open CodeQL alerts"
+
+      - name: Fix unused imports with ruff
+        if: steps.check-alerts.outputs.alert_count != '0'
+        run: |
+          # Fix unused imports automatically
+          ruff check --select F401 --fix . || true
+
+          # Fix other auto-fixable issues
+          ruff check --fix . || true
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check-changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'fix: Auto-fix CodeQL alerts (unused imports)'
+          title: 'fix: Auto-fix CodeQL alerts'
+          body: |
+            ## Automated CodeQL Fix
+
+            This PR was automatically created by the CodeQL Auto-Fix workflow.
+
+            ### Changes
+            - Removed unused imports detected by ruff/CodeQL
+            - Applied auto-fixable code quality improvements
+
+            ### Triggered by
+            - Workflow: `codeql-autofix.yml`
+            - Schedule: Daily at 6am UTC
+
+            ---
+            *This is an automated PR. Review before merging.*
+          branch: auto/codeql-fix
+          base: develop
+          delete-branch: true
+          labels: |
+            automated
+            security
+            codeql
+
+      - name: Enable auto-merge
+        if: steps.check-changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait for PR to be created
+          sleep 5
+          PR_NUMBER=$(gh pr list --head auto/codeql-fix --json number --jq '.[0].number')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr merge $PR_NUMBER --auto --squash || true
+          fi
