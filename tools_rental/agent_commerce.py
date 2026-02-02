@@ -27,10 +27,10 @@ References:
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 
-from config import INVENTORY, PLATFORMS, MARKET_RATES, LOCATION
+from config import INVENTORY, MARKET_RATES, LOCATION
 
 
 # Schema.org types for structured data

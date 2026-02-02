@@ -13,7 +13,6 @@ Flow:
 """
 
 import json
-import re
 import urllib.request
 import urllib.parse
 from dataclasses import dataclass

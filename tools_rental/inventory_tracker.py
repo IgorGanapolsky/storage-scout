@@ -8,12 +8,12 @@ Syncs data to GitHub CSV for dashboard visualization.
 
 import json
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 
-from config import INVENTORY, PLATFORMS, MARKET_RATES
+from config import PLATFORMS
 
 
 @dataclass
