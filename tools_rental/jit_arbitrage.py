@@ -27,7 +27,7 @@ This is the Amazon FBA model applied to tool rentals.
 
 import json
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
