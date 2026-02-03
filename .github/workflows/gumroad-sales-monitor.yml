@@ -1,0 +1,92 @@
+name: Gumroad Sales Monitor
+
+on:
+  schedule:
+    # Check every 2 hours
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-sales:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Gumroad Sales
+        id: check-sales
+        env:
+          GUMROAD_ACCESS_TOKEN: ${{ secrets.GUMROAD_ACCESS_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          # Get sales from Gumroad API
+          RESPONSE=$(curl -s "https://api.gumroad.com/v2/sales" \
+            -d "access_token=$GUMROAD_ACCESS_TOKEN" \
+            -d "after=$(date -d '24 hours ago' +%Y-%m-%d)" 2>/dev/null || echo '{"success":false}')
+
+          # Parse sales count
+          SALES_COUNT=$(echo "$RESPONSE" | jq '.sales | length // 0')
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success // "false"')
+
+          echo "API Response Success: $SUCCESS"
+          echo "Sales in last 24h: $SALES_COUNT"
+
+          # Export for next steps
+          echo "sales_count=$SALES_COUNT" >> $GITHUB_OUTPUT
+          echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+
+          if [ "$SUCCESS" = "true" ] && [ "$SALES_COUNT" -gt 0 ]; then
+            # Calculate revenue
+            REVENUE=$(echo "$RESPONSE" | jq '[.sales[].price] | add / 100')
+            echo "revenue=$REVENUE" >> $GITHUB_OUTPUT
+
+            # Extract sale details for SAGE feedback
+            echo "$RESPONSE" | jq -c '.sales[]' > /tmp/sales.jsonl
+
+            # Send notification
+            curl -d "FIRST SALE! $SALES_COUNT sale(s) = \$$REVENUE revenue!" \
+              -H "Title: Gumroad Sale!" \
+              -H "Priority: urgent" \
+              -H "Tags: moneybag,tada" \
+              "https://ntfy.sh/$NTFY_TOPIC"
+
+            echo "Notification sent!"
+          else
+            echo "No new sales yet. Keep marketing!"
+          fi
+
+      - name: Record conversions in SAGE feedback loop
+        if: steps.check-sales.outputs.sales_count > 0
+        run: |
+          # Auto-record each sale as a conversion
+          SALES_COUNT="${{ steps.check-sales.outputs.sales_count }}"
+          REVENUE="${{ steps.check-sales.outputs.revenue }}"
+
+          echo "Recording $SALES_COUNT conversion(s) totaling \$$REVENUE"
+
+          # Append to SAGE conversion events
+          mkdir -p data/sage_feedback
+
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          for i in $(seq 1 $SALES_COUNT); do
+            SALE_REVENUE=$(echo "$REVENUE / $SALES_COUNT" | bc -l 2>/dev/null || echo "$REVENUE")
+            echo "{\"event_type\":\"booking\",\"listing_id\":\"gumroad-automation-stack\",\"platform\":\"gumroad\",\"timestamp\":\"$TIMESTAMP\",\"tool_category\":\"digital_product\",\"revenue\":$SALE_REVENUE,\"profit\":$SALE_REVENUE}" >> data/sage_feedback/conversion_events.jsonl
+          done
+
+          echo "Conversions recorded automatically!"
+
+      - name: Commit conversion data
+        if: steps.check-sales.outputs.sales_count > 0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/sage_feedback/
+          git diff --staged --quiet || git commit -m "chore: auto-record Gumroad sale $(date +%Y%m%d)"
+          git push || echo "Push failed - will retry next run"
+
+      - name: Log check time
+        run: echo "Checked at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
