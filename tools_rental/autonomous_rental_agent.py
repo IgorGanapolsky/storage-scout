@@ -560,7 +560,7 @@ def print_inventory_report(store: DataStore):
         print(f"    Rentals: {tool.total_rentals} | Revenue: ${tool.total_revenue}")
         print(f"    Status: {status}")
 
-    print(f"\n💰 FINANCIALS")
+    print("\n💰 FINANCIALS")
     print("-" * 40)
     print(f"  Total Investment: ${total_investment}")
     print(f"  Total Revenue: ${total_revenue}")
