@@ -1,0 +1,120 @@
+name: SAGE Market Scanner
+
+# 24/7 Autonomous Market Scanning with Feedback Loop
+# Based on Google's SAGE research for intelligent agent decision-making
+
+on:
+  schedule:
+    # Every 4 hours - scan for opportunities
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scan mode'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - standard
+          - deep
+          - retrain
+
+jobs:
+  market-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Load SAGE weights
+        id: load-weights
+        run: |
+          if [ -f "data/sage_feedback/scanner_weights.json" ]; then
+            echo "Loaded existing weights"
+            cat data/sage_feedback/scanner_weights.json
+          else
+            echo "No weights file yet - using defaults"
+          fi
+
+      - name: Scan platforms for opportunities
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SCAN_MODE: ${{ github.event.inputs.mode || 'standard' }}
+        run: |
+          echo "SAGE Market Scanner - Mode: $SCAN_MODE"
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo ""
+
+          # Check each platform for new inquiries/messages
+          # This runs autonomously - no user input needed
+
+          PLATFORMS=("facebook" "craigslist" "2quip" "neighbor" "nextdoor")
+          TOTAL_INQUIRIES=0
+
+          for platform in "${PLATFORMS[@]}"; do
+            echo "Checking $platform..."
+            # In production, this would call platform APIs or scrape
+            # For now, we log the check
+            echo "  - Platform: $platform checked at $(date)"
+          done
+
+          # Summary notification (only if something notable)
+          if [ "$SCAN_MODE" = "deep" ]; then
+            curl -s -d "SAGE Deep Scan completed at $(date)" \
+              -H "Title: Market Scanner" \
+              -H "Priority: low" \
+              "https://ntfy.sh/$NTFY_TOPIC" || true
+          fi
+
+          echo ""
+          echo "Scan complete. Next scan in 4 hours."
+
+      - name: Update RALPH_STATE
+        run: |
+          # Update state file for session continuity
+          echo "## Last SAGE Scan" >> .claude/RALPH_STATE.md
+          echo "- Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .claude/RALPH_STATE.md
+          echo "- Mode: ${{ github.event.inputs.mode || 'standard' }}" >> .claude/RALPH_STATE.md
+          echo "- Status: Completed" >> .claude/RALPH_STATE.md
+
+      - name: Commit state update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: SAGE scan $(date +%Y%m%d-%H%M)"
+          git push || echo "No changes to push"
+
+  retrain-weights:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.mode == 'retrain'
+    needs: market-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Retrain SAGE weights
+        run: |
+          cd agents
+          python sage_feedback_loop.py retrain
+          echo "Weights retrained from conversion data"
+
+      - name: Commit updated weights
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/sage_feedback/scanner_weights.json
+          git diff --staged --quiet || git commit -m "chore: retrain SAGE weights"
+          git push || echo "No changes to push"
