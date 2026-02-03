@@ -8,7 +8,6 @@ Sends alerts via ntfy.sh when good deals are found.
 Run via GitHub Actions on schedule or manually.
 """
 
-import asyncio
 import urllib.request
 import json
 from datetime import datetime
