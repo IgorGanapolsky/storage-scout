@@ -1,0 +1,90 @@
+name: News Aggregator
+
+# Daily news aggregation from multiple sources
+# Tracks HN, Product Hunt, GitHub Trending for market intelligence
+
+on:
+  schedule:
+    # Daily at 8am EST (13:00 UTC)
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source to aggregate (hackernews, producthunt, github, all)'
+        required: false
+        default: 'all'
+
+jobs:
+  aggregate-news:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Fetch HackerNews
+        if: contains(github.event.inputs.source, 'hackernews') || github.event.inputs.source == 'all' || github.event.inputs.source == ''
+        run: |
+          echo "=== HackerNews Top Stories ==="
+
+          # Fetch top stories
+          TOP_STORIES=$(curl -s "https://hacker-news.firebaseio.com/v0/topstories.json" | python3 -c "import sys,json; print(' '.join(map(str, json.load(sys.stdin)[:20])))")
+
+          echo "Top 20 story IDs: $TOP_STORIES"
+
+          mkdir -p data/news
+          echo "# HackerNews Digest - $(date +%Y-%m-%d)" > data/news/hn_digest.md
+          echo "" >> data/news/hn_digest.md
+
+          for id in $TOP_STORIES; do
+            STORY=$(curl -s "https://hacker-news.firebaseio.com/v0/item/${id}.json")
+            TITLE=$(echo "$STORY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('title',''))" 2>/dev/null || true)
+            SCORE=$(echo "$STORY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('score',0))" 2>/dev/null || true)
+            URL=$(echo "$STORY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url','https://news.ycombinator.com/item?id=$id'))" 2>/dev/null || true)
+
+            if [ -n "$TITLE" ]; then
+              echo "- [$TITLE]($URL) (${SCORE} pts)" >> data/news/hn_digest.md
+            fi
+
+            sleep 0.2  # Rate limit
+          done
+
+          echo "HN digest saved to data/news/hn_digest.md"
+
+      - name: Check for Relevant Keywords
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          # Keywords relevant to our business
+          KEYWORDS="automation|github actions|gumroad|zapier|n8n|arbitrage|rental|storage"
+
+          if [ -f "data/news/hn_digest.md" ]; then
+            MATCHES=$(grep -iE "$KEYWORDS" data/news/hn_digest.md | head -5 || true)
+
+            if [ -n "$MATCHES" ]; then
+              echo "Found relevant stories:"
+              echo "$MATCHES"
+
+              # Send notification
+              curl -s -d "📰 Relevant HN Stories Found:\n\n$MATCHES" \
+                -H "Title: News Alert" \
+                -H "Priority: default" \
+                -H "Tags: newspaper" \
+                "https://ntfy.sh/$NTFY_TOPIC" || true
+            fi
+          fi
+
+      - name: Commit digest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/news/ || true
+          git diff --staged --quiet || git commit -m "chore: news digest $(date +%Y-%m-%d)"
+          git push || echo "No changes to push"

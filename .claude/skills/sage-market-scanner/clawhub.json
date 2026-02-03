@@ -1,0 +1,49 @@
+{
+  "name": "sage-market-scanner",
+  "version": "1.0.0",
+  "description": "24/7 autonomous market scanning with SAGE-inspired feedback loop for intelligent opportunity detection. Based on Google's SAGE research.",
+  "author": "IgorGanapolsky",
+  "license": "MIT",
+  "repository": "https://github.com/IgorGanapolsky/storage-scout",
+  "keywords": [
+    "market-scanning",
+    "arbitrage",
+    "automation",
+    "github-actions",
+    "sage",
+    "feedback-loop",
+    "thompson-sampling",
+    "ntfy"
+  ],
+  "category": "automation",
+  "triggers": [
+    "scan market",
+    "find opportunities",
+    "check listings",
+    "arbitrage",
+    "clearance",
+    "deals",
+    "/sage-scan",
+    "/market-scanner"
+  ],
+  "dependencies": {
+    "python": ">=3.10",
+    "github-actions": true,
+    "ntfy.sh": true
+  },
+  "files": [
+    "SKILL.md",
+    "sage_feedback_loop.py",
+    "workflows/sage-market-scanner.yml"
+  ],
+  "pricing": {
+    "type": "freemium",
+    "free_tier": true,
+    "paid_url": "https://iganapolsky.gumroad.com/l/nvwulz"
+  },
+  "stats": {
+    "platforms_supported": 6,
+    "workflows_included": 2,
+    "monthly_cost": "$0"
+  }
+}
