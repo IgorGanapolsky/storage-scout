@@ -218,7 +218,7 @@ ACT NOW - Clearance items sell out!"""
                 }
             )
             urllib.request.urlopen(req, timeout=10)
-            print(f"Alert sent!")
+            print("Alert sent!")
         except Exception as e:
             print(f"Alert failed: {e}")
 

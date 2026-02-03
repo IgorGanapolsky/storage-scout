@@ -127,7 +127,7 @@ async def scrape_homedepot_clearance() -> List[Dict]:
         print("Patchright not installed. Install with: pip install patchright")
         return []
 
-    print(f"\nScraping Home Depot clearance...")
+    print("\nScraping Home Depot clearance...")
     print(f"Location: {LOCATION['city']}, {LOCATION['state']}")
 
     results = []
