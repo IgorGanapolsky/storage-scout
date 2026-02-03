@@ -327,7 +327,7 @@ def load_lessons() -> List[Dict[str, Any]]:
 
 def index_all(model_key: str = DEFAULT_MODEL):
     """Index all feedback and lessons into LanceDB"""
-    print(f"\nIndexing into LanceDB...")
+    print("\nIndexing into LanceDB...")
     print(f"   Model: {EMBEDDING_MODELS.get(model_key, model_key)}")
     print(f"   Storage: {LANCE_DIR}")
 
@@ -361,7 +361,7 @@ def index_all(model_key: str = DEFAULT_MODEL):
 
     if lessons:
         print(f"   Generating embeddings for {len(lessons)} lessons...")
-        texts = [l["full_text"] for l in lessons]
+        texts = [lesson["full_text"] for lesson in lessons]
         embeddings = model.encode(texts, show_progress_bar=True)
 
         for i, lesson in enumerate(lessons):
@@ -395,7 +395,7 @@ def index_all(model_key: str = DEFAULT_MODEL):
         "model": model_key,
     })
 
-    print(f"\nIndexing complete!")
+    print("\nIndexing complete!")
     print(f"   Total documents: {len(feedback) + len(lessons)}")
 
 
