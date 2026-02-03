@@ -8,14 +8,13 @@ Sends alerts via ntfy.sh when good deals are found.
 Run via GitHub Actions on schedule or manually.
 """
 
-import asyncio
 import urllib.request
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from config import HD_CLEARANCE_CATEGORIES, NTFY_TOPIC, MARKET_RATES, LOCATION
+from config import NTFY_TOPIC, MARKET_RATES, LOCATION
 
 
 # Minimum discount to alert on
