@@ -1,0 +1,113 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+jobs:
+  # Claude deep review for architectural and project-specific checks
+  claude-review:
+    name: Claude Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this PR for Storage Scout - a Flutter/Dart app for storage arbitrage tracking.
+
+            CRITICAL CHECKS (fail the review if violated):
+            1. No hardcoded secrets, API keys, or tokens in source code
+            2. GitHub token MUST use String.fromEnvironment, NOT hardcoded
+            3. Spread calculation formula must be: (neighborRate * 4) - commercialPrice - insurance
+            4. Insurance default is $12 (Florida requirement)
+            5. High priority threshold is $120
+
+            STYLE CHECKS (suggest improvements):
+            - Follow Dart/Flutter conventions (snake_case files, PascalCase classes)
+            - Use const constructors where possible
+            - Prefer immutable data structures
+            - Document public APIs
+
+            SECURITY CHECKS:
+            - No secrets, API keys, or credentials in code
+            - Validate all external inputs
+            - Use HTTPS for all network calls
+
+            Output format:
+            - Start with overall assessment (APPROVE, REQUEST_CHANGES, or COMMENT)
+            - List specific issues with file:line references
+            - Provide fix suggestions for each issue
+          claude_args: "--max-turns 10 --model claude-sonnet-4-5-20250929"
+
+  # On-demand Claude assist via @claude mention
+  claude-assist:
+    name: Claude Assist
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Claude Code Assist
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            A reviewer mentioned @claude with the following comment:
+
+            ${{ github.event.comment.body }}
+
+            Context: This is a Flutter/Dart app (Storage Scout) for tracking storage arbitrage with:
+            - GitHub API integration for CSV storage
+            - ntfy.sh push notifications
+            - Spread calculation: (P2P_rate × 4) - Commercial_price - Insurance
+
+            Respond helpfully to their request. If they're asking for code changes,
+            explain what needs to be done and where. Be specific with file paths.
+          claude_args: "--max-turns 5"
+
+  # Copilot coding agent for auto-fix (triggered by @copilot in comments)
+  copilot-autofix:
+    name: Copilot Auto-Fix
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@copilot fix')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Notify Copilot triggered
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '🤖 Copilot coding agent triggered. Check your repository settings to ensure Copilot coding agent is enabled.\n\nTo use: Assign an issue to `@copilot` or mention `@copilot` in the issue description.'
+            });

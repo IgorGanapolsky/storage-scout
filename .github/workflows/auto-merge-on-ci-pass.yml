@@ -1,0 +1,130 @@
+name: Auto-Merge on CI Pass
+
+# Automatically merge PRs when all required checks pass
+# This enables autonomous workflow - no manual review needed
+
+on:
+  check_suite:
+    types: [completed]
+  workflow_run:
+    workflows: ["CI", "Flutter Tests"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    # Only run on successful CI completion for PRs
+    if: >
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event.check_suite.conclusion == 'success'
+    steps:
+      - name: Get PR number
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            // Find PR associated with this workflow run
+            const head_sha = context.payload.workflow_run?.head_sha ||
+                            context.payload.check_suite?.head_sha;
+
+            if (!head_sha) {
+              console.log('No head_sha found');
+              return;
+            }
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${head_sha}`
+            });
+
+            // Also check by commit
+            const { data: prsByCommit } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: head_sha
+            });
+
+            const openPrs = prsByCommit.filter(pr => pr.state === 'open');
+
+            if (openPrs.length > 0) {
+              console.log(`Found PR #${openPrs[0].number}`);
+              core.setOutput('number', openPrs[0].number);
+              core.setOutput('found', 'true');
+            } else {
+              console.log('No open PR found for this commit');
+              core.setOutput('found', 'false');
+            }
+
+      - name: Check all required checks passed
+        id: checks
+        if: steps.pr.outputs.found == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr_number = ${{ steps.pr.outputs.number || 0 }};
+            if (!pr_number) return;
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number
+            });
+
+            // Get check runs for the PR head
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+
+            // Required checks (customize as needed)
+            const requiredChecks = ['Quality', 'test', 'Security'];
+            const optionalChecks = ['SonarCloud', 'Claude Review', 'Seer Code Review'];
+
+            let allRequiredPassed = true;
+            let pendingRequired = false;
+
+            for (const check of requiredChecks) {
+              const run = checkRuns.check_runs.find(r => r.name === check);
+              if (!run) {
+                console.log(`Required check '${check}' not found`);
+                allRequiredPassed = false;
+              } else if (run.status !== 'completed') {
+                console.log(`Required check '${check}' still pending`);
+                pendingRequired = true;
+              } else if (run.conclusion !== 'success') {
+                console.log(`Required check '${check}' failed: ${run.conclusion}`);
+                allRequiredPassed = false;
+              } else {
+                console.log(`Required check '${check}' passed`);
+              }
+            }
+
+            if (pendingRequired) {
+              console.log('Some required checks still pending - will try again later');
+              core.setOutput('ready', 'false');
+            } else if (allRequiredPassed) {
+              console.log('All required checks passed!');
+              core.setOutput('ready', 'true');
+            } else {
+              console.log('Some required checks failed');
+              core.setOutput('ready', 'false');
+            }
+
+      - name: Auto-merge PR
+        if: steps.pr.outputs.found == 'true' && steps.checks.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Merging PR #${{ steps.pr.outputs.number }}"
+          gh pr merge ${{ steps.pr.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --squash \
+            --delete-branch \
+            --body "Auto-merged after CI passed"
