@@ -50,11 +50,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # SonarCloud analysis
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for blame information
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Snyk dependency vulnerability scanning
+  snyk:
+    name: Snyk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python@master
+        continue-on-error: true  # Don't block PRs, just report
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
   # Notify on completion (PRs only)
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [python-quality, security]
+    needs: [python-quality, security, sonarcloud, snyk]
     if: always() && github.event_name == 'pull_request'
     permissions:
       pull-requests: write
@@ -65,10 +95,12 @@ jobs:
           script: |
             const pythonResult = '${{ needs.python-quality.result }}';
             const securityResult = '${{ needs.security.result }}';
+            const sonarResult = '${{ needs.sonarcloud.result }}';
+            const snykResult = '${{ needs.snyk.result }}';
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             let emoji, status;
-            const allPassed = pythonResult === 'success' && securityResult === 'success';
+            const allPassed = pythonResult === 'success' && securityResult === 'success' && sonarResult === 'success';
 
             if (allPassed) {
               emoji = '✅';
@@ -82,5 +114,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              body: `${emoji} **CI ${status}**\n\n| Check | Result |\n|-------|--------|\n| Python Quality | ${pythonResult} |\n| Security | ${securityResult} |\n\n[View details](${runUrl})\n\n*Note: SonarCloud runs via automatic analysis*`
+              body: `${emoji} **CI ${status}**\n\n| Check | Result |\n|-------|--------|\n| Python Quality | ${pythonResult} |\n| Security | ${securityResult} |\n| SonarCloud | ${sonarResult} |\n| Snyk (deps) | ${snykResult} |\n\n[View details](${runUrl})`
             });
