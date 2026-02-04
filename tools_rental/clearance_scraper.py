@@ -9,6 +9,7 @@ Run via GitHub Actions on schedule or manually.
 """
 
 import asyncio
+import ssl
 import urllib.request
 import json
 from datetime import datetime
@@ -16,6 +17,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from config import NTFY_TOPIC, MARKET_RATES, LOCATION
+
+# Create SSL context for secure HTTPS requests
+_SSL_CONTEXT = ssl.create_default_context()
 
 
 # Minimum discount to alert on
@@ -97,7 +101,7 @@ def categorize_tool(name: str) -> Optional[str]:
 
 
 async def send_alert(message: str, priority: str = "default", tags: str = "toolbox"):
-    """Send push notification via ntfy.sh"""
+    """Send push notification via ntfy.sh (HTTPS with verified SSL)."""
     try:
         req = urllib.request.Request(
             f"https://ntfy.sh/{NTFY_TOPIC}",
@@ -108,7 +112,7 @@ async def send_alert(message: str, priority: str = "default", tags: str = "toolb
                 "Tags": tags,
             }
         )
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT)
         print(f"  Alert sent: {message[:50]}...")
     except Exception as e:
         print(f"  Failed to send alert: {e}")

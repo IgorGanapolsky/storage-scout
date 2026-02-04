@@ -26,6 +26,7 @@ This is the Amazon FBA model applied to tool rentals.
 """
 
 import json
+import ssl
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 
 from config import LOCATION, MARKET_RATES, NTFY_TOPIC
+
+# Create SSL context for secure HTTPS requests
+_SSL_CONTEXT = ssl.create_default_context()
 
 
 @dataclass
@@ -302,7 +306,7 @@ Reply YES to approve and get purchase link."""
                     "Actions": f"view, Buy Tool, {listing.source_url}" if listing.source_url else "",
                 }
             )
-            urllib.request.urlopen(req, timeout=10)
+            urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT)
             print(f"Alert sent for {request.id}")
         except Exception as e:
             print(f"Failed to send alert: {e}")
