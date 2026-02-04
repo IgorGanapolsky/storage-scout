@@ -14,7 +14,7 @@ Flow:
 
 import json
 import urllib.request
-import urllib.parse
+import urllib.parse  # noqa: F401 - used for urllib.parse.quote
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path

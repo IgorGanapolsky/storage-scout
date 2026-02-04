@@ -14,7 +14,7 @@ Products auto-upload to Gumroad via API.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional  # noqa: F401 - Optional used in type hints
 
 # Product categories with pricing
 PRODUCT_CATEGORIES = {

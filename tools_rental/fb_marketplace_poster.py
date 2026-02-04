@@ -10,7 +10,7 @@ Usage:
 Requires: You to be logged into Facebook in your browser.
 """
 
-import json
+import json  # noqa: F401 - used for json.load
 from pathlib import Path
 
 # Load tools inventory

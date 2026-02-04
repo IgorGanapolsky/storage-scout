@@ -33,8 +33,8 @@ async def list_space_on_neighbor():
         try:
             await page.click('text=Continue with Email', timeout=5000)
             await asyncio.sleep(2)
-        except Exception:
-            print("   Email option not found, trying direct...")
+        except (TimeoutError, Exception) as e:
+            print(f"   Email option not found, trying direct... ({e})")
 
         await page.screenshot(path="/tmp/neighbor-email-form.png")
 
@@ -64,9 +64,14 @@ async def list_space_on_neighbor():
         await page.screenshot(path="/tmp/neighbor-logged-in.png")
         print(f"   URL: {page.url}")
 
-        # Go to listing flow if logged in
+        # Go to listing flow if logged in (validate URL properly)
         parsed_url = urlparse(page.url)
-        if parsed_url.hostname and parsed_url.hostname.endswith("neighbor.com") and "auth" not in page.url:
+        is_neighbor_domain = (
+            parsed_url.hostname is not None and
+            (parsed_url.hostname == "neighbor.com" or parsed_url.hostname == "www.neighbor.com")
+        )
+        is_authenticated = "auth" not in parsed_url.path
+        if is_neighbor_domain and is_authenticated:
             print("\n6. Starting listing flow...")
             await page.goto("https://www.neighbor.com/become-a-host/intro", wait_until="domcontentloaded")
             await asyncio.sleep(3)

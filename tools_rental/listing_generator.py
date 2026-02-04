@@ -6,7 +6,7 @@ Generates professional rental listings for peer-to-peer platforms.
 Uses templates optimized for conversion.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from config import MARKET_RATES, LOCATION
 
 

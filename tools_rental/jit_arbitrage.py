@@ -29,7 +29,7 @@ import json
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass, asdict
 
 from config import LOCATION, MARKET_RATES, NTFY_TOPIC
@@ -160,7 +160,7 @@ class JITArbitrageEngine:
         if self.listings_file.exists():
             with open(self.listings_file) as f:
                 data = json.load(f)
-                self.listings = {l['id']: VirtualListing(**l) for l in data}
+                self.listings = {item['id']: VirtualListing(**item) for item in data}
 
         if self.requests_file.exists():
             with open(self.requests_file) as f:
@@ -169,7 +169,7 @@ class JITArbitrageEngine:
 
     def _save(self):
         with open(self.listings_file, 'w') as f:
-            json.dump([asdict(l) for l in self.listings.values()], f, indent=2)
+            json.dump([asdict(listing) for listing in self.listings.values()], f, indent=2)
 
         with open(self.requests_file, 'w') as f:
             json.dump([asdict(r) for r in self.requests], f, indent=2)
@@ -419,7 +419,7 @@ if __name__ == "__main__":
         platform="neighbor",
     )
 
-    print(f"\n✅ Booking request received!")
+    print("\n✅ Booking request received!")
     print(f"   Rental: ${request.quoted_amount} for {request.rental_days} days")
     print(f"   Tool cost: ${request.source_price}")
     print(f"   PROFIT: ${request.profit_if_fulfilled}")

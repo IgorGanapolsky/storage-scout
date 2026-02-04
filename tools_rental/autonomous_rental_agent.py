@@ -20,7 +20,6 @@ Revenue Model:
 
 import json
 import urllib.request
-import urllib.parse
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from pathlib import Path
