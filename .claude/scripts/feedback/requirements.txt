@@ -1,5 +1,0 @@
-# RLHF Semantic Memory Dependencies
-lancedb>=0.3.0
-sentence-transformers>=3.0.0
-pandas>=2.0.0
-numpy>=1.24.0
