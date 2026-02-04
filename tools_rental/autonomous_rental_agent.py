@@ -19,12 +19,16 @@ Revenue Model:
 """
 
 import json
+import ssl
 import urllib.request
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 import hashlib
+
+# Create SSL context for secure HTTPS requests
+_SSL_CONTEXT = ssl.create_default_context()
 
 
 # ============================================================
@@ -217,7 +221,7 @@ class DataStore:
 # ============================================================
 
 def send_alert(title: str, message: str, priority: str = "default", tags: str = ""):
-    """Send push notification via ntfy.sh"""
+    """Send push notification via ntfy.sh (HTTPS with verified SSL)."""
     try:
         req = urllib.request.Request(
             f"https://ntfy.sh/{CONFIG['ntfy_topic']}",
@@ -228,7 +232,7 @@ def send_alert(title: str, message: str, priority: str = "default", tags: str = 
                 "Tags": tags,
             }
         )
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT)
         print(f"📱 Alert sent: {title}")
     except Exception as e:
         print(f"⚠️ Alert failed: {e}")
