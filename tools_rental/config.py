@@ -2,6 +2,7 @@
 """
 Tools Rental Arbitrage - Configuration
 """
+import os
 
 # Your inventory - add tools as you acquire them
 INVENTORY = [
@@ -71,9 +72,10 @@ MARKET_RATES = {
 }
 
 # Notification settings
-NTFY_TOPIC = "igor_tools_alerts"
-TELEGRAM_BOT_TOKEN = ""  # Add your bot token
-TELEGRAM_CHAT_ID = ""    # Add your chat ID
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "igor_tools_alerts")
+# Telegram credentials from environment variables (never hardcode)
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # Location
 LOCATION = {
