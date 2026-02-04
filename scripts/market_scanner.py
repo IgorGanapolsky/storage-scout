@@ -186,7 +186,7 @@ class SeedDataSource:
         return facilities
 
 
-class SparефоотScraper:
+class SpareFootScraper:
     """Fetch storage prices from SpareFoot (public search API)"""
 
     BASE_URL = "https://www.sparefoot.com/api/v2/search"
@@ -319,7 +319,7 @@ class MarketScanner:
             print(f"Scanning {zip_code}...")
 
             # Fetch from multiple sources
-            sparefoot = SparефоотScraper.search(zip_code)
+            sparefoot = SpareFootScraper.search(zip_code)
             storagecafe = StorageCafeScraper.search(zip_code)
 
             facilities = sparefoot + storagecafe

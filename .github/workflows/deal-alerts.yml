@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: pip install requests
+
       - name: Check for high-value deals
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}

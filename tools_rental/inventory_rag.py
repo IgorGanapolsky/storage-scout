@@ -15,6 +15,9 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from dataclasses import dataclass, asdict, field
+from typing import Dict, List
+from collections import defaultdict
 
 try:
     import lancedb
@@ -23,9 +26,11 @@ except ImportError:
     print("Install dependencies: pip install lancedb sentence-transformers")
     sys.exit(1)
 
-# Paths
+# Paths - use tools_rental/data as primary, fall back to storage/data
 STORAGE_ROOT = Path(__file__).parent.parent
-DATA_DIR = STORAGE_ROOT / "data" / "listings"
+DATA_DIR = Path(__file__).parent / "data"  # tools_rental/data
+if not DATA_DIR.exists():
+    DATA_DIR = STORAGE_ROOT / "data" / "listings"
 DB_PATH = STORAGE_ROOT / "data" / "inventory_lancedb"
 
 # Use same model as RLHF system for consistency
@@ -103,7 +108,7 @@ def index_inventory():
     # Drop existing table if exists
     try:
         db.drop_table("inventory")
-    except:
+    except Exception:
         pass
 
     table = db.create_table("inventory", records)
