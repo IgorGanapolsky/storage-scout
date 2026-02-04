@@ -28,16 +28,15 @@ Spread = (P2P_5x5_Rate × 4) - Commercial_10x20_Price - Insurance
 
 ```bash
 cd flutter_scout_app
+cp .env.example .env
+# Edit .env and add your GitHub token
 flutter pub get
-flutter run
 ```
 
-Configure in `lib/main.dart`:
-```dart
-static const String ghToken = 'YOUR_GITHUB_TOKEN';
-static const String ghUser = 'YOUR_USERNAME';
-static const String ghRepo = 'YOUR_REPO_NAME';
-static const String ntfyTopic = 'your_ntfy_topic';
+Run with token:
+```bash
+source .env
+flutter run --dart-define=GITHUB_TOKEN=$GITHUB_TOKEN
 ```
 
 ### 2. GitHub Token
@@ -46,7 +45,7 @@ Create a Personal Access Token with `repo` scope:
 1. GitHub → Settings → Developer settings → Personal access tokens
 2. Generate new token (classic)
 3. Select `repo` scope
-4. Copy token to app config
+4. Add token to `flutter_scout_app/.env` (never commit this file)
 
 ### 3. GitHub Pages Dashboard
 
