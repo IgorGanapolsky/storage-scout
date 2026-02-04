@@ -13,12 +13,16 @@ Flow:
 """
 
 import json
+import ssl
 import urllib.request
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+
+# Create SSL context for secure HTTPS requests
+_SSL_CONTEXT = ssl.create_default_context()
 
 
 @dataclass
@@ -217,7 +221,7 @@ ACT NOW - Clearance items sell out!"""
                     "Tags": "moneybag,shopping",
                 }
             )
-            urllib.request.urlopen(req, timeout=10)
+            urllib.request.urlopen(req, timeout=10, context=_SSL_CONTEXT)
             print("Alert sent!")
         except Exception as e:
             print(f"Alert failed: {e}")
