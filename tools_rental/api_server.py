@@ -44,13 +44,20 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS for agent access
+# CORS configuration
+# Define allowed origins explicitly for security
+# In production, restrict to specific domains
+ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:8080,https://igorganapolsky.github.io"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for agent access
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Initialize catalog with sample data (replace with real inventory)
