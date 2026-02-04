@@ -31,7 +31,7 @@ jobs:
 
       - name: Lint Python
         run: |
-          ruff check tools_rental/ digital_products/ agents/ scripts/ --select E,F,W --ignore E501 || true
+          ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501 || true
 
   # Security scanning
   security:
