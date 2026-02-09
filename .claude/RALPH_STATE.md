@@ -11,6 +11,7 @@
 ## Recently Completed (This Session)
 
 ### Autonomous Outreach Engine (Scaffolded)
+- ✅ PR #62 created for autonomy scaffold (auto-merge enabled)
 - ✅ Added Frontier-ready outreach engine scaffold under `autonomy/`
 - ✅ Added context store, audit log, lead ingestion, scoring, and SMTP sender (dry-run default)
 - ✅ Added sample config + CSV header
