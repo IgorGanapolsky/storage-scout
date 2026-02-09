@@ -20,3 +20,6 @@ flutter_scout_app/pubspec.lock
 
 # RLHF Memory (local only, contains feedback data)
 .claude/memory/
+
+# Autonomy runtime state
+autonomy/state/
