@@ -131,7 +131,8 @@ class ContextStore:
         cur = self.conn.cursor()
         cur.execute(
             """
-            SELECT * FROM leads
+            SELECT id, name, company, email, phone, service, city, state, source, score, status
+            FROM leads
             WHERE status = 'new' AND score >= ?
             ORDER BY score DESC
             LIMIT ?
