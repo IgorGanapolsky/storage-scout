@@ -3,12 +3,23 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-06T20:29:40Z
+2026-02-09T22:40:00Z
 
 ## Current Status
-🎯 **ACTIVE** - Autonomous outreach engine + domain/email setup
+🎯 **ACTIVE** - CallCatcher Ops launch assets + automation scaffolding
 
 ## Recently Completed (This Session)
+
+### CallCatcher Ops (Launch Assets)
+- ✅ Domain purchased: callcatcherops.com
+- ✅ Email configured: Fastmail (MX/DKIM/SPF) + DMARC (monitoring)
+- ✅ DNS wired in Cloudflare for email + GitHub Pages
+- ✅ Landing page built: `docs/callcatcherops/index.html`
+- ✅ Dedicated site repo created: https://github.com/IgorGanapolsky/callcatcherops-site
+- ✅ GitHub Pages configured with custom domain callcatcherops.com
+- ✅ Business docs + pricing ladder + outreach scripts added in `business/callcatcherops/`
+- ✅ Outreach config created: `autonomy/config.callcatcherops.json`
+- ✅ Sample lead CSV created: `autonomy/data/leads_callcatcherops.csv`
 
 ### Autonomous Outreach Engine (Scaffolded)
 - ✅ PR #62 created for autonomy scaffold (auto-merge enabled)
