@@ -87,8 +87,8 @@ jobs:
             5. DO NOT break existing tests
 
             After implementation:
-            - Run `flutter test` to verify
-            - Fix any failing tests
+            - Run `ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501`
+            - Fix any failing checks
             - Commit with clear message referencing the issue
 
             LOOP until tests pass or you've tried 5 times.
@@ -136,12 +136,13 @@ jobs:
           ref: ${{ needs.code-generation.outputs.branch_name }}
           fetch-depth: 0
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-          cache: true
+          python-version: '3.11'
+
+      - name: Install ruff
+        run: pip install ruff
 
       - name: Run tests with retry loop
         id: tests
@@ -153,18 +154,13 @@ jobs:
             ITERATION=$((ITERATION + 1))
             echo "::group::Iteration $ITERATION of $MAX_ITERATIONS"
 
-            cd flutter_scout_app
-            flutter pub get
-
-            if flutter test; then
+            if ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501; then
               echo "✅ Tests passed on iteration $ITERATION"
               echo "status=passed" >> $GITHUB_OUTPUT
               echo "iterations=$ITERATION" >> $GITHUB_OUTPUT
               exit 0
             fi
-
-            echo "❌ Tests failed, attempting fix..."
-            cd ..
+            echo "❌ Checks failed, attempting fix..."
             echo "::endgroup::"
           done
 

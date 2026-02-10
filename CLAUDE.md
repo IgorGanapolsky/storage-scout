@@ -1,83 +1,65 @@
-# Storage Scout - Claude Configuration
+# CallCatcher Ops - Claude Configuration
 
 ## Project Overview
-Flutter mobile app for tracking storage arbitrage opportunities in Coral Springs, FL (zip codes 33071, 33076).
+CallCatcher Ops is a missed-call recovery and appointment booking offer for local service businesses. This repo also contains outreach automation and digital product landing pages.
+
+## User Mandates
+- Never argue with the user.
+- If an external system requires a human action (payment, captcha, identity), proceed to the final step and report the exact blocking point in one line.
+- Use local `.env` for secrets; never commit `.env` to git.
 
 ## Architecture
-- **Flutter App** (`flutter_scout_app/`) - Manual price entry with live spread calculation
-- **GitHub CSV** - Data storage via GitHub REST API
-- **GitHub Pages** (`docs/`) - Dashboard visualization
-- **ntfy.sh** - Push notifications for high-priority deals
-- **GitHub Actions** - CI/CD and auto-pruning
-
-## Key Formula
-```
-Spread = (P2P_5x5_Rate × 4) - Commercial_10x20_Price - Insurance($12)
-High Priority = Spread >= $120
-```
+- `docs/callcatcherops/` - Marketing site (GitHub Pages)
+- `autonomy/` - Outreach engine (CSV leads + SMTP, dry-run default)
+- `business/callcatcherops/` - Pricing, outreach scripts, deployment notes
+- `docs/` - Gumroad product landing pages
+- `tools_rental/` - Tools arbitrage experiments (optional)
 
 ## Commands
-
-### Flutter
+### Outreach Engine
 ```bash
-cd flutter_scout_app
-source .env  # Load GitHub token
-flutter pub get
-flutter run --dart-define=GITHUB_TOKEN=$GITHUB_TOKEN
-flutter test  # Run unit tests
+python3 autonomy/run.py
 ```
 
-### Git Workflow
+### Lead Generation (Broward County)
+```bash
+export GOOGLE_PLACES_API_KEY=...
+python3 autonomy/tools/lead_gen_broward.py --limit 30
+```
+
+### Tools Rental API (Optional)
+```bash
+python3 tools_rental/api_server.py
+```
+
+## Git Workflow
 - `main` - Releases only
 - `develop` - Default working branch
 - All changes via PRs to `develop`
 
-### RLHF Feedback
-```bash
-node .claude/scripts/feedback/capture-feedback.js stats  # View stats
-node .claude/scripts/feedback/capture-feedback.js up "Context"  # Record positive
-node .claude/scripts/feedback/capture-feedback.js down "Context"  # Record negative
-```
-
 ## Coding Standards
-- TDD: Write tests first, then implementation
-- Extract business logic into testable classes
 - Use environment variables for secrets (never commit tokens)
-- PR workflow: feature branch → PR → squash merge → delete branch
+- Keep automation scripts small and auditable
+- Add tests when new logic is non-trivial
 
 ## Testing
-- Unit tests in `flutter_scout_app/test/`
-- Business logic in `lib/models/spread_calculator.dart`
-- CI runs on every PR via `.github/workflows/flutter-test.yml`
+- No automated test suite configured.
+- CI runs `ruff` on `tools_rental/` and `digital_products/`.
 
-## RLHF System
-Feedback is captured automatically via hooks:
-- Thumbs up → Records success pattern
-- Thumbs down → Records failure + auto-generates lesson
-- Lessons injected at session start
+## Security
+- Secrets stored in `.env` (gitignored)
+- Never commit PII or credentials
 
 ## File Structure
 ```
 storage/
 ├── .claude/
-│   ├── hooks/              # Session and prompt hooks
-│   ├── scripts/feedback/   # RLHF capture scripts
-│   ├── memory/             # Feedback logs and lessons (gitignored)
-│   └── skills/             # Skill definitions
-├── .github/workflows/      # CI/CD
-├── docs/                   # GitHub Pages dashboard
-├── flutter_scout_app/
-│   ├── lib/
-│   │   ├── main.dart       # App UI
-│   │   └── models/         # Business logic
-│   └── test/               # Unit tests
-└── storage_spreads.csv     # Data file
+├── .github/workflows/
+├── autonomy/
+├── business/
+├── docs/
+└── tools_rental/
 ```
-
-## Security
-- GitHub token stored in `.env` (gitignored)
-- Token injected via `--dart-define` at build time
-- Never commit secrets to repository
 
 ## SESSION CONTINUITY
 
@@ -100,9 +82,9 @@ When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
 1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
 2. **Implement the changes** - Write all necessary code
-3. **Run tests**: `cd flutter_scout_app && flutter test`
-4. **If tests FAIL**: Analyze error → Fix code → Run tests again (LOOP)
-5. **If tests PASS**: Commit with `Ralph: <description>`
+3. **Run checks**: `pip install ruff && ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501`
+4. **If checks FAIL**: Analyze error → Fix code → Run checks again (LOOP)
+5. **If checks PASS**: Commit with `Ralph: <description>`
 6. **Push**: `git push -u origin <branch>`
 7. **Create PR**: `gh pr create --base develop --title "Ralph: <desc>"`
 8. **Auto-merge**: `gh pr merge --auto --squash`
@@ -114,12 +96,12 @@ When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 - Stop after partial implementation
 
 **DO:**
-- Execute the full loop until tests pass
+- Execute the full loop until checks pass
 - Commit after each successful fix
 - Create PR and enable auto-merge
 - Report completion with PR link
 
-Required checks for merge: `test`, `Quality`, `Security`
+Required checks for merge: `Python Quality`, `Security`
 Optional (won't block): SonarCloud, Claude Review, Seer
 
 **After completing any task:**
