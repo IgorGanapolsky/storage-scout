@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CallCatcher Ops Intake</title>
+    <meta name="description" content="Start your CallCatcher Ops recovery audit. Share your call flow details and we will respond within one business day." />
+    <meta property="og:title" content="CallCatcher Ops Intake" />
+    <meta property="og:description" content="Start your recovery audit in 2 minutes." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://callcatcherops.com/intake.html" />
+    <meta name="theme-color" content="#0F1C1B" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #0f1c1b;
+        --mist: #f4f2ed;
+        --sand: #f5d7b2;
+        --sage: #bfe6c2;
+        --sea: #5ca4a9;
+        --ember: #ff7a59;
+        --shadow: rgba(15, 28, 27, 0.16);
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Spectral", serif;
+        color: var(--ink);
+        background: radial-gradient(1200px 800px at 10% -10%, #fff9f1 0%, #f5efe5 35%, #f1f6f2 80%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 96px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 24px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      .brand-badge {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: linear-gradient(140deg, var(--sea), var(--sage));
+        box-shadow: 0 10px 30px rgba(92, 164, 169, 0.3);
+      }
+
+      h1 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: clamp(2.3rem, 3vw, 3rem);
+        margin: 0 0 12px;
+      }
+
+      .subhead {
+        color: #334a47;
+        margin: 0 0 24px;
+        font-size: 1.05rem;
+      }
+
+      .panel {
+        background: #fff;
+        border-radius: var(--radius);
+        padding: 28px;
+        box-shadow: 0 18px 40px var(--shadow);
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      label {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(15, 28, 27, 0.2);
+        font-family: "Spectral", serif;
+        font-size: 1rem;
+        background: #fff;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .grid-2 {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px 22px;
+        border-radius: 999px;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background: var(--ink);
+        color: #fff;
+        border: none;
+        cursor: pointer;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+      }
+
+      .note {
+        font-size: 0.95rem;
+        color: #5a6f6c;
+      }
+
+      .footer {
+        margin-top: 40px;
+        color: #536b68;
+        font-size: 0.95rem;
+      }
+
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="brand-badge"></div>
+          CallCatcher Ops
+        </div>
+        <a href="./index.html">Back to site</a>
+      </header>
+
+      <h1>Start your recovery audit</h1>
+      <p class="subhead">Share your call flow details and we will respond within one business day with next steps and a recovery estimate.</p>
+
+      <div class="panel">
+        <form action="https://formsubmit.co/hello@callcatcherops.com" method="POST">
+          <input type="hidden" name="_subject" value="CallCatcher Ops Intake" />
+          <input type="hidden" name="_template" value="table" />
+          <input type="hidden" name="_captcha" value="false" />
+          <input type="hidden" name="_next" value="https://callcatcherops.com/thanks.html" />
+
+          <div class="grid-2">
+            <div>
+              <label for="business_name">Business name</label>
+              <input id="business_name" name="business_name" required />
+            </div>
+            <div>
+              <label for="contact_name">Primary contact</label>
+              <input id="contact_name" name="contact_name" required />
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label for="phone">Phone</label>
+              <input id="phone" name="phone" type="tel" required />
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label for="website">Website</label>
+              <input id="website" name="website" type="url" placeholder="https://" />
+            </div>
+            <div>
+              <label for="industry">Industry</label>
+              <input id="industry" name="industry" placeholder="Med spa, HVAC, dental" />
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label for="call_volume">Average calls per day</label>
+              <select id="call_volume" name="call_volume" required>
+                <option value="1-5">1-5</option>
+                <option value="6-10">6-10</option>
+                <option value="11-20">11-20</option>
+                <option value="21-40">21-40</option>
+                <option value="40+">40+</option>
+              </select>
+            </div>
+            <div>
+              <label for="missed_call_estimate">Estimated missed calls</label>
+              <select id="missed_call_estimate" name="missed_call_estimate" required>
+                <option value="<10%">&lt;10%</option>
+                <option value="10-20%">10-20%</option>
+                <option value="20-35%">20-35%</option>
+                <option value="35%+">35%+</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label for="booking_system">Booking system</label>
+              <input id="booking_system" name="booking_system" placeholder="Calendly, Mindbody, Square, custom" />
+            </div>
+            <div>
+              <label for="start_date">Desired start date</label>
+              <input id="start_date" name="start_date" type="date" />
+            </div>
+          </div>
+
+          <div>
+            <label for="notes">Anything else we should know?</label>
+            <textarea id="notes" name="notes" placeholder="Call routing tools, after-hours coverage, staff size, goals"></textarea>
+          </div>
+
+          <button class="button" type="submit">Submit intake</button>
+          <p class="note">By submitting, you agree to be contacted about this audit. We do not resell your data.</p>
+        </form>
+      </div>
+
+      <div class="footer">
+        <div>CallCatcher Ops · Coral Springs, FL</div>
+        <div>hello@callcatcherops.com</div>
+      </div>
+    </div>
+  </body>
+</html>
