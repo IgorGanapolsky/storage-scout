@@ -3,7 +3,7 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-10T16:37:07Z
+2026-02-10T16:53:24Z
 
 ## Current Status
 🎯 **ACTIVE** - CallCatcher Ops launch assets + automation scaffolding
@@ -14,6 +14,11 @@
 - ✅ Merged CallCatcher Ops assets + Flutter removal via PR #65
 - ✅ Resolved develop/main conflicts and released to main via PR #67
 - ✅ Closed superseded PRs #63 and #64
+
+### CallCatcher Ops Intake (2026-02-10)
+- ✅ Added intake form + thank-you page (PR #71)
+- ✅ Routed CallCatcher Ops CTAs to intake form
+- ✅ Released to main via PR #73
 
 ### CallCatcher Ops (Launch Assets)
 - ✅ Domain purchased: callcatcherops.com
