@@ -25,20 +25,18 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            Review this PR for Storage Scout - a Flutter/Dart app for storage arbitrage tracking.
+            Review this PR for CallCatcher Ops and its automation tooling.
 
             CRITICAL CHECKS (fail the review if violated):
             1. No hardcoded secrets, API keys, or tokens in source code
-            2. GitHub token MUST use String.fromEnvironment, NOT hardcoded
-            3. Spread calculation formula must be: (neighborRate * 4) - commercialPrice - insurance
-            4. Insurance default is $12 (Florida requirement)
-            5. High priority threshold is $120
+            2. No PII committed to the repository
+            3. Outreach engine remains safe by default (dry-run unless explicitly configured)
+            4. Email sending uses environment variables for credentials
 
             STYLE CHECKS (suggest improvements):
-            - Follow Dart/Flutter conventions (snake_case files, PascalCase classes)
-            - Use const constructors where possible
-            - Prefer immutable data structures
-            - Document public APIs
+            - Keep Python code readable and minimal
+            - Avoid unnecessary dependencies
+            - Document public APIs or scripts
 
             SECURITY CHECKS:
             - No secrets, API keys, or credentials in code
@@ -75,10 +73,10 @@ jobs:
 
             ${{ github.event.comment.body }}
 
-            Context: This is a Flutter/Dart app (Storage Scout) for tracking storage arbitrage with:
-            - GitHub API integration for CSV storage
-            - ntfy.sh push notifications
-            - Spread calculation: (P2P_rate × 4) - Commercial_price - Insurance
+            Context: This repo hosts CallCatcher Ops assets and automation:
+            - Marketing site in `docs/callcatcherops/`
+            - Outreach engine in `autonomy/`
+            - Optional tools rental experiments in `tools_rental/`
 
             Respond helpfully to their request. If they're asking for code changes,
             explain what needs to be done and where. Be specific with file paths.

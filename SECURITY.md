@@ -30,7 +30,6 @@ If you discover a security vulnerability in this project, please report it respo
 ### Secrets Management
 - **NEVER** commit tokens, API keys, or credentials
 - Use environment variables via `.env` files (gitignored)
-- Use `--dart-define` for Flutter build-time secrets
 
 ### Code Security
 - Validate all user inputs
@@ -40,13 +39,12 @@ If you discover a security vulnerability in this project, please report it respo
 
 ## Known Security Considerations
 
-### GitHub Token
-The app uses a GitHub Personal Access Token for CSV storage:
-- Token is loaded via environment variable
-- Never hardcoded in source
-- Requires only `repo` scope
+### GitHub Tokens
+If you use GitHub tokens for automation:
+- Load via environment variable
+- Never hardcode in source
+- Use the minimum required scopes
 
 ### Data Privacy
 - All RLHF feedback data is stored locally (`.claude/memory/`)
 - No sensitive data is committed to the repository
-- CSV data contains only storage pricing information
