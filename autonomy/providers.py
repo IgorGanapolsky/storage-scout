@@ -24,15 +24,17 @@ class LeadSourceCSV:
                 email = (row.get("email") or "").strip()
                 if not email:
                     continue
+                name = (row.get("name") or row.get("contact_name") or "").strip()
+                service = (row.get("service") or row.get("category") or "").strip()
                 lead_id = f"{email.lower()}"
                 leads.append(
                     Lead(
                         id=lead_id,
-                        name=(row.get("name") or "").strip(),
+                        name=name,
                         company=(row.get("company") or "").strip(),
                         email=email,
                         phone=(row.get("phone") or "").strip(),
-                        service=(row.get("service") or "").strip(),
+                        service=service,
                         city=(row.get("city") or "").strip(),
                         state=(row.get("state") or "").strip(),
                         source=self.source,

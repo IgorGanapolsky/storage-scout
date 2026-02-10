@@ -3,6 +3,11 @@
 ## Project Overview
 Flutter mobile app for tracking storage arbitrage opportunities in Coral Springs, FL (zip codes 33071, 33076).
 
+## User Mandates
+- Never argue with the user.
+- If an external system requires a human action (payment, captcha, identity), proceed to the final step and report the exact blocking point in one line.
+- Use local `.env` for secrets; never commit `.env` to git.
+
 ## Architecture
 - **Flutter App** (`flutter_scout_app/`) - Manual price entry with live spread calculation
 - **GitHub CSV** - Data storage via GitHub REST API
