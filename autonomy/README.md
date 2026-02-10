@@ -24,8 +24,18 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/context_store.py` - SQLite context store
 - `autonomy/providers.py` - lead + email providers
 - `autonomy/agents.py` - scoring + message generation
+- `autonomy/tools/lead_gen_broward.py` - Google Places lead generator (Broward County)
 
 ## Notes
 - No secrets are committed.
 - All actions are written to a JSONL audit log.
 - This is intentionally minimal and extensible.
+
+## Lead Generation (Broward County)
+`autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
+
+Example:
+```bash
+export GOOGLE_PLACES_API_KEY=...
+python autonomy/tools/lead_gen_broward.py --limit 30
+```
