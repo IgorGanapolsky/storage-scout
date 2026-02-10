@@ -6,6 +6,7 @@ Tracks your rental tool inventory, calculates ROI, and manages availability.
 Syncs data to GitHub CSV for dashboard visualization.
 """
 
+import csv
 import json
 from datetime import datetime
 from pathlib import Path

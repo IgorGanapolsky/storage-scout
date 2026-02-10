@@ -76,7 +76,7 @@ These require ZERO physical presence once set up.
 
 ### Option A: Price Arbitrage Alert Service
 
-You already have the infrastructure from Storage Scout!
+You already have infrastructure in this repo that can be reused.
 
 ```
 Architecture:
@@ -134,7 +134,7 @@ Examples:
 ### Phase 1: Week 1-2 ($100 budget)
 
 **Digital Foundation:**
-1. Deploy price alert bot (reuse Storage Scout code)
+1. Deploy price alert bot (reuse existing automation code)
 2. Set up Telegram bot for subscribers
 3. Create landing page for signups
 4. Cost: $0 (GitHub Actions free)
@@ -221,7 +221,7 @@ Features:
 - Alert you to booking requests
 ```
 
-### Price Alert Service (Reuse Storage Scout)
+### Price Alert Service (Reuse Existing Automation)
 
 ```python
 # Modify existing scraper for:
