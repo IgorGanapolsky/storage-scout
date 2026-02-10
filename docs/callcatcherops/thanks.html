@@ -49,6 +49,25 @@
         box-shadow: 0 24px 50px var(--shadow);
       }
 
+      .steps {
+        margin: 24px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        margin-bottom: 10px;
+        padding-left: 22px;
+        position: relative;
+      }
+
+      .steps li::before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: var(--ember);
+      }
+
       h1 {
         font-family: "Space Grotesk", sans-serif;
         margin: 0 0 12px;
@@ -86,7 +105,16 @@
       <div class="card">
         <h1>Thanks, we received your intake.</h1>
         <p>We will review your call flow and reply within one business day with next steps and a recovery estimate.</p>
-        <a class="button" href="./index.html">Back to CallCatcher Ops</a>
+        <ul class="steps">
+          <li>Pay the $249 audit to secure your slot (if not paid yet).</li>
+          <li>Book a 15-minute audit call.</li>
+          <li>Expect your recovery plan within 48 hours of the call.</li>
+        </ul>
+        <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px;">
+          <a class="button" href="https://buy.stripe.com/REPLACE_WITH_AUDIT_LINK">Pay $249 now</a>
+          <a class="button" href="https://calendly.com/REPLACE_WITH_BOOKING_LINK">Book the audit call</a>
+          <a class="button" href="./index.html">Back to CallCatcher Ops</a>
+        </div>
         <div class="footer">
           <div>CallCatcher Ops · Coral Springs, FL</div>
           <div>hello@callcatcherops.com</div>
