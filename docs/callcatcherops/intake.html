@@ -144,9 +144,40 @@
         transform: translateY(-2px);
       }
 
+      .button.secondary {
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid rgba(15, 28, 27, 0.25);
+      }
+
       .note {
         font-size: 0.95rem;
         color: #5a6f6c;
+      }
+
+      .note.small {
+        font-size: 0.9rem;
+      }
+
+      .cta-panel {
+        margin-top: 24px;
+        padding: 20px;
+        border-radius: 16px;
+        background: rgba(245, 215, 178, 0.28);
+        border: 1px solid rgba(15, 28, 27, 0.08);
+      }
+
+      .cta-panel h2 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.35rem;
+        margin: 0 0 8px;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 12px;
       }
 
       .footer {
@@ -258,6 +289,16 @@
           <button class="button" type="submit">Submit intake</button>
           <p class="note">By submitting, you agree to be contacted about this audit. We do not resell your data.</p>
         </form>
+
+        <div class="cta-panel">
+          <h2>Next: lock in your audit.</h2>
+          <p class="note">Step 1: pay the $249 audit. Step 2: book your call so we can review your missed-call flow together.</p>
+          <div class="cta-row">
+            <a class="button" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 now</a>
+            <a class="button secondary" href="https://calendly.com/igorganapolsky/audit-call">Book audit call</a>
+          </div>
+          <p class="note small">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
+        </div>
       </div>
 
       <div class="footer">
