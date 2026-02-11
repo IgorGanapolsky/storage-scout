@@ -74,6 +74,44 @@
         margin-top: 16px;
       }
 
+      .button.secondary {
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid rgba(15, 28, 27, 0.25);
+      }
+
+      .steps {
+        margin: 24px 0 8px;
+        padding: 18px;
+        background: rgba(191, 230, 194, 0.25);
+        border-radius: 14px;
+        border: 1px solid rgba(15, 28, 27, 0.08);
+      }
+
+      .steps h2 {
+        font-family: "Space Grotesk", sans-serif;
+        margin: 0 0 10px;
+        font-size: 1.35rem;
+      }
+
+      .steps ol {
+        margin: 0;
+        padding-left: 20px;
+        color: #334a47;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 16px 0 6px;
+      }
+
+      .note {
+        color: #536b68;
+        font-size: 0.95rem;
+      }
+
       .footer {
         margin-top: 24px;
         color: #536b68;
@@ -86,7 +124,20 @@
       <div class="card">
         <h1>Thanks, we received your intake.</h1>
         <p>We will review your call flow and reply within one business day with next steps and a recovery estimate.</p>
-        <a class="button" href="./index.html">Back to CallCatcher Ops</a>
+        <div class="steps">
+          <h2>Next steps</h2>
+          <ol>
+            <li>Pay the $249 audit so we can start the analysis.</li>
+            <li>Book your audit call to review missed-call leaks and next actions.</li>
+            <li>We deliver the recovery plan within one business day of payment.</li>
+          </ol>
+          <div class="cta-row">
+            <a class="button" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 now</a>
+            <a class="button secondary" href="https://calendly.com/igorganapolsky/audit-call">Book audit call</a>
+          </div>
+          <p class="note">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
+        </div>
+        <a class="button secondary" href="./index.html">Back to CallCatcher Ops</a>
         <div class="footer">
           <div>CallCatcher Ops · Coral Springs, FL</div>
           <div>hello@callcatcherops.com</div>
