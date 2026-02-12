@@ -23,6 +23,7 @@ from typing import List, Optional
 
 # Create SSL context for secure HTTPS requests
 _SSL_CONTEXT = ssl.create_default_context()
+_SSL_CONTEXT.minimum_version = ssl.TLSVersion.TLSv1_2
 
 
 @dataclass
