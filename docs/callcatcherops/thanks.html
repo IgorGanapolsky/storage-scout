@@ -10,6 +10,13 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://callcatcherops.com/thanks.html" />
     <meta name="theme-color" content="#0F1C1B" />
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W8E0EKB7W4"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-W8E0EKB7W4');
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -105,21 +112,35 @@
       <div class="card">
         <h1>Thanks, we received your intake.</h1>
         <p>We will review your call flow and reply within one business day with next steps and a recovery estimate.</p>
-        <ul class="steps">
-          <li>Pay the $249 audit to secure your slot (if not paid yet).</li>
-          <li>Book a 15-minute audit call.</li>
-          <li>Expect your recovery plan within 48 hours of the call.</li>
-        </ul>
-        <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px;">
-          <a class="button" href="https://buy.stripe.com/REPLACE_WITH_AUDIT_LINK">Pay $249 now</a>
-          <a class="button" href="https://calendly.com/REPLACE_WITH_BOOKING_LINK">Book the audit call</a>
-          <a class="button" href="./index.html">Back to CallCatcher Ops</a>
-        </div>
+        <div class="steps">
+          <h2>Next steps</h2>
+          <ol>
+            <li>Pay the $249 audit so we can start the analysis.</li>
+            <li>Book your audit call to review missed-call leaks and next actions.</li>
+            <li>We deliver the recovery plan within one business day of payment.</li>
+          </ol>
+          <div class="cta-row">
+            <a class="button" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 now</a>
+            <a class="button secondary" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book audit call</a>
+          </div>
+          <p class="note">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
+        </div>        </div>
         <div class="footer">
           <div>CallCatcher Ops · Coral Springs, FL</div>
           <div>hello@callcatcherops.com</div>
         </div>
       </div>
     </div>
+    <script>
+      const trackCta = (id, label) => {
+        const el = document.getElementById(id);
+        if (!el || typeof gtag !== 'function') return;
+        el.addEventListener('click', () => {
+          gtag('event', 'cta_click', { event_category: 'thanks', event_label: label });
+        });
+      };
+      trackCta('cta-pay', 'pay_249');
+      trackCta('cta-book', 'book_audit');
+    </script>
   </body>
 </html>
