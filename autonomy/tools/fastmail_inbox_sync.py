@@ -175,6 +175,12 @@ def sync_fastmail_inbox(
                 uid = int(raw_uid)
             except Exception:
                 continue
+            # Fastmail resolves '*' in UID search sets to the current max UID. When
+            # last_uid already equals max UID, a query like `UID {last_uid+1}:*`
+            # becomes a reversed range (e.g. 66:65) which includes 65 again.
+            # Filter to only strictly-new UIDs so we don't reprocess the last message.
+            if uid <= last_uid:
+                continue
             max_uid_seen = max(max_uid_seen, uid)
 
             typ, msg_data = imap.uid("fetch", raw_uid, "(RFC822)")
@@ -287,9 +293,9 @@ def main() -> None:
     env = load_dotenv(Path(args.dotenv))
     user = env.get("FASTMAIL_USER", "")
     # Fastmail typically requires an app password for IMAP; we reuse SMTP_PASSWORD.
-    pw = env.get("SMTP_PASSWORD", "") or env.get("FASTMAIL_PASSWORD", "")
+    pw = env.get("SMTP_PASSWORD", "")
     if not user or not pw:
-        raise SystemExit("Missing FASTMAIL_USER and SMTP_PASSWORD (or FASTMAIL_PASSWORD) in .env")
+        raise SystemExit("Missing FASTMAIL_USER and SMTP_PASSWORD in .env")
 
     res = sync_fastmail_inbox(
         sqlite_path=Path(args.sqlite),
