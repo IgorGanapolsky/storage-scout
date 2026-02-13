@@ -335,7 +335,7 @@
           <div class="brand-badge"></div>
           CallCatcher Ops
         </div>
-        <a class="button secondary" href="./intake.html">Get a free baseline</a>
+        <a class="button secondary" data-cta="header_baseline" href="./intake.html">Get a free baseline</a>
       </header>
 
       <section class="hero">
@@ -347,8 +347,8 @@
             after hours, on busy days, or when phones ring off the hook.
           </p>
           <div class="cta-row">
-            <a class="button primary" href="./intake.html">Get a free baseline</a>
-            <a class="button secondary" href="#pricing">See pricing ladder</a>
+            <a class="button primary" data-cta="hero_baseline" href="./intake.html">Get a free baseline</a>
+            <a class="button secondary" data-cta="hero_pricing" href="#pricing">See pricing ladder</a>
           </div>
           <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">2-minute intake, baseline within one business day.</p>
           <p style="margin-top: 18px; font-size: 0.95rem; color: #5a6f6c;">Designed for med spas, home services, clinics, and local franchises.</p>
@@ -453,8 +453,8 @@
         <h2 style="font-family: 'Space Grotesk', sans-serif;">Ready to stop losing inbound leads?</h2>
         <p style="color: #5a6f6c;">Email us and we’ll respond within one business day.</p>
         <div class="cta-row" style="justify-content: center;">
-          <a class="button primary" href="./intake.html">Start now</a>
-          <a class="button secondary" href="./intake.html">Request a quote</a>
+          <a class="button primary" data-cta="final_start" href="./intake.html">Start now</a>
+          <a class="button secondary" data-cta="final_quote" href="./intake.html">Request a quote</a>
         </div>
       </section>
 
@@ -464,5 +464,16 @@
         <div style="margin-top: 8px;">© 2026 CallCatcher Ops. All rights reserved.</div>
       </div>
     </div>
+    <script>
+      (() => {
+        if (typeof gtag !== 'function') return;
+        document.querySelectorAll('[data-cta]').forEach((el) => {
+          const label = el.getAttribute('data-cta') || 'unknown';
+          el.addEventListener('click', () => {
+            gtag('event', 'cta_click', { event_category: 'landing', event_label: label });
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

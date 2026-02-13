@@ -30,3 +30,6 @@ See `business/callcatcherops/outreach.md`.
 
 **30-Day Checklist**
 See `business/callcatcherops/30-day-checklist.md`.
+
+**2026 Research + Execution Plan**
+See `business/callcatcherops/research-2026.md`.

@@ -9,9 +9,18 @@
 # Secrets (if you use .env)
 .env
 *.env
+.secrets/
 
 # RLHF Memory (local only, contains feedback data)
 .claude/memory/
+.claude/ralph/
 
 # Autonomy runtime state
 autonomy/state/
+
+# Python
+__pycache__/
+*.pyc
+
+# Local scratch (not part of CallCatcher Ops scope)
+tools_rental/
