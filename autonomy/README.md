@@ -25,6 +25,8 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/providers.py` - lead + email providers
 - `autonomy/agents.py` - scoring + message generation
 - `autonomy/tools/lead_gen_broward.py` - Google Places lead generator (Broward County)
+- `autonomy/tools/scoreboard.py` - local outreach scoreboard (no PII)
+- `autonomy/tools/opt_out.py` - record opt-outs into sqlite
 
 ## Notes
 - No secrets are committed.
@@ -38,4 +40,25 @@ Example:
 ```bash
 export GOOGLE_PLACES_API_KEY=...
 python autonomy/tools/lead_gen_broward.py --limit 30
+```
+
+## Scoreboard
+View local pipeline counts (leads + emails sent):
+
+```bash
+python3 autonomy/tools/scoreboard.py
+```
+
+Record an opt-out email (when someone requests unsubscribe):
+
+```bash
+python3 autonomy/tools/opt_out.py --email someone@example.com
+```
+
+Optional analytics/revenue snapshots (requires credentials + deps):
+
+```bash
+pip install -r autonomy/tools/requirements.txt
+GA4_PROPERTY_ID=... python3 autonomy/tools/ga4_report.py --days 7
+STRIPE_SECRET_KEY=... python3 autonomy/tools/stripe_report.py --days 30 --amount-usd 249
 ```

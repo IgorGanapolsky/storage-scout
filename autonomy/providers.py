@@ -70,9 +70,12 @@ class EmailSender:
         msg["Reply-To"] = reply_to
         msg.set_content(body)
 
-        with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port) as server:
-            server.starttls()
-            server.login(self.config.smtp_user, password)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port, timeout=20) as server:
+                server.starttls()
+                server.login(self.config.smtp_user, password)
+                server.send_message(msg)
+        except Exception:
+            return "send-error"
 
         return "sent"
