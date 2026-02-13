@@ -28,6 +28,9 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/tools/lead_gen_broward.py` - Google Places lead generator (Broward County)
 - `autonomy/tools/scoreboard.py` - local outreach scoreboard (no PII)
 - `autonomy/tools/opt_out.py` - record opt-outs into sqlite
+- `autonomy/tools/fastmail_inbox_sync.py` - mark bounces/replies from inbox signals (no PII output)
+- `autonomy/tools/live_job.py` - live daily job: inbox sync + outreach + email report
+- `autonomy/tools/install_launchd_daily.py` - install macOS LaunchAgent for daily automation
 
 ## Notes
 - No secrets are committed.
