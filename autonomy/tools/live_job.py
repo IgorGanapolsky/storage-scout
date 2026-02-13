@@ -15,6 +15,15 @@ if __package__ is None:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from autonomy.engine import Engine, load_config
+from autonomy.tools.lead_gen_broward import (
+    DEFAULT_CATEGORIES,
+    build_leads,
+    get_api_key,
+    load_cities,
+    load_existing,
+    save_city_index,
+    write_leads,
+)
 from autonomy.tools.fastmail_inbox_sync import load_dotenv, sync_fastmail_inbox
 from autonomy.tools.scoreboard import load_scoreboard
 
@@ -49,11 +58,14 @@ def _send_email(*, smtp_user: str, smtp_password: str, to_email: str, subject: s
         server.send_message(msg)
 
 
-def _format_report(*, engine_result: dict, inbox_result, scoreboard, scoreboard_days: int) -> str:
+def _format_report(*, leadgen_new: int, engine_result: dict, inbox_result, scoreboard, scoreboard_days: int) -> str:
     now_utc = datetime.now(UTC).replace(microsecond=0).isoformat()
     lines: list[str] = []
     lines.append("CallCatcher Ops Daily Report")
     lines.append(f"As-of (UTC): {now_utc}")
+    lines.append("")
+    lines.append("Lead gen")
+    lines.append(f"- new_leads_generated: {int(leadgen_new)}")
     lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
@@ -81,6 +93,70 @@ def _format_report(*, engine_result: dict, inbox_result, scoreboard, scoreboard_
     )
     lines.append(f"Opt-outs recorded: {scoreboard.opt_out_total}")
     return "\n".join(lines).strip() + "\n"
+
+
+def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
+    limit_raw = (env.get("DAILY_LEADGEN_LIMIT") or "").strip()
+    if not limit_raw:
+        return 0
+    try:
+        limit = int(limit_raw)
+    except Exception:
+        return 0
+    if limit <= 0:
+        return 0
+
+    # Put Google API key(s) into process env so leadgen can read them.
+    for key_name in ("GOOGLE_PLACES_API_KEY", "GOOGLE_CLOUD_API_KEY", "GOOGLE_API_KEY"):
+        val = (env.get(key_name) or "").strip()
+        if val:
+            os.environ.setdefault(key_name, val)
+
+    # Determine output CSV from the first configured CSV lead source.
+    output_rel = ""
+    for src in (cfg.lead_sources or []):
+        if (src.get("type") or "").lower() == "csv":
+            output_rel = str(src.get("path") or "").strip()
+            break
+    if not output_rel:
+        return 0
+
+    output_path = (repo_root / output_rel).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        api_key = get_api_key()
+    except SystemExit:
+        return 0
+
+    try:
+        cities = load_cities(None)
+    except SystemExit:
+        return 0
+    categories = DEFAULT_CATEGORIES[:]
+
+    existing_emails, existing_domains, existing_phones = load_existing(output_path)
+    try:
+        leads, new_index = build_leads(
+            cities=cities,
+            categories=categories,
+            limit=limit,
+            api_key=api_key,
+            existing_emails=existing_emails,
+            existing_domains=existing_domains,
+            existing_phones=existing_phones,
+        )
+    except SystemExit:
+        return 0
+    except Exception:
+        return 0
+
+    if not leads:
+        return 0
+
+    write_leads(output_path, leads, replace=False)
+    save_city_index(new_index)
+    return len(leads)
 
 
 def main() -> None:
@@ -117,6 +193,9 @@ def main() -> None:
     cfg_path = (repo_root / args.config).resolve()
     cfg = load_config(str(cfg_path))
 
+    # 0) Optional: generate new leads before outreach (to keep pipeline full).
+    leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
+
     # 1) Sync inbox first so bounces/replies suppress follow-ups.
     inbox_result = sync_fastmail_inbox(
         sqlite_path=Path(cfg.storage["sqlite_path"]),
@@ -133,6 +212,7 @@ def main() -> None:
     # 3) Scoreboard + email report.
     board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
     report = _format_report(
+        leadgen_new=leadgen_new,
         engine_result=engine_result,
         inbox_result=inbox_result,
         scoreboard=board,
@@ -149,6 +229,7 @@ def main() -> None:
     today_utc = datetime.now(UTC).date().isoformat()
 
     summary_payload = {
+        "leadgen_new": int(leadgen_new),
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
         "scoreboard_days": int(args.scoreboard_days),
@@ -170,6 +251,7 @@ def main() -> None:
             int(inbox_result.intake_submissions or 0) > 0,
             int(inbox_result.calendly_bookings or 0) > 0,
             int(inbox_result.stripe_payments or 0) > 0,
+            int(leadgen_new or 0) > 0,
         ]
     )
 
