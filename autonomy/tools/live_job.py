@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
+import json
 import os
 import smtplib
 import sys
@@ -18,6 +20,20 @@ from autonomy.tools.scoreboard import load_scoreboard
 
 
 UTC = timezone.utc
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _send_email(*, smtp_user: str, smtp_password: str, to_email: str, subject: str, body: str) -> None:
@@ -127,14 +143,59 @@ def main() -> None:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
 
-    subject = f"CallCatcher Ops Daily Report ({datetime.now(UTC).date().isoformat()})"
-    _send_email(
-        smtp_user=cfg.email["smtp_user"],
-        smtp_password=smtp_password,
-        to_email=report_to,
-        subject=subject,
-        body=report,
+    # De-dupe: avoid spamming multiple reports in the same day (common during restarts).
+    report_state_path = repo_root / "autonomy" / "state" / "daily_report_state.json"
+    state = _read_json(report_state_path)
+    today_utc = datetime.now(UTC).date().isoformat()
+
+    summary_payload = {
+        "engine_result": engine_result,
+        "inbox_result": asdict(inbox_result),
+        "scoreboard_days": int(args.scoreboard_days),
+        "scoreboard": asdict(board),
+    }
+    summary_sha1 = hashlib.sha1(json.dumps(summary_payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+    last_sent_date = state.get("last_sent_date_utc")
+    # Backward compat: older runs wrote last_sent_sha1.
+    last_sent_sha1 = state.get("last_summary_sha1") or state.get("last_sent_sha1")
+
+    significant_change = any(
+        [
+            int(engine_result.get("sent_initial") or 0) > 0,
+            int(engine_result.get("sent_followup") or 0) > 0,
+            int(inbox_result.new_replies or 0) > 0,
+            int(inbox_result.new_opt_outs or 0) > 0,
+            int(inbox_result.new_bounces or 0) > 0,
+            int(inbox_result.intake_submissions or 0) > 0,
+            int(inbox_result.calendly_bookings or 0) > 0,
+            int(inbox_result.stripe_payments or 0) > 0,
+        ]
     )
+
+    should_send = False
+    if last_sent_date != today_utc:
+        should_send = True  # daily heartbeat
+    elif summary_sha1 != last_sent_sha1 and significant_change:
+        should_send = True  # meaningful update the same day
+
+    if should_send:
+        subject = f"CallCatcher Ops Daily Report ({today_utc})"
+        _send_email(
+            smtp_user=cfg.email["smtp_user"],
+            smtp_password=smtp_password,
+            to_email=report_to,
+            subject=subject,
+            body=report,
+        )
+        _write_json(
+            report_state_path,
+            {
+                "last_sent_date_utc": today_utc,
+                "last_summary_sha1": summary_sha1,
+                "sent_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            },
+        )
 
     # Helpful for launchd logs.
     print(report)
