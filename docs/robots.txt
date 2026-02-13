@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://igorganapolsky.github.io/storage-scout/sitemap.xml
+Host: callcatcherops.com
+Sitemap: https://callcatcherops.com/sitemap.xml

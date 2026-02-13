@@ -5,7 +5,7 @@ import os
 import random
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 

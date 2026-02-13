@@ -4,7 +4,7 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import List
 
 from .context_store import Lead
 
