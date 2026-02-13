@@ -32,7 +32,7 @@ class OutreachWriter:
             f"Hi {lead.name or 'there'},\n\n"
             f"Quick question: are you tracking how many inbound calls go unanswered?\n\n"
             f"We install a 24/7 missed-call recovery + booking system for home service teams. "
-            f"If I can show how to recover 10–20 jobs/month, worth a 15-minute look?\n\n"
+            f"I can share a free baseline: missed-call leakage + a recovery estimate. Worth a 15-minute look?\n\n"
             f"{self.signature}\n"
             f"{self.company_name}\n"
             f"{self.mailing_address}\n\n"
