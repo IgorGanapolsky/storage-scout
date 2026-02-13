@@ -14,6 +14,7 @@
 # RLHF Memory (local only, contains feedback data)
 .claude/memory/
 .claude/ralph/
+.claude/tmp/
 
 # Autonomy runtime state
 autonomy/state/
