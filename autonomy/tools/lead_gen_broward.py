@@ -2,9 +2,9 @@ import argparse
 import csv
 import json
 import os
-import random
 import time
 from pathlib import Path
+from random import SystemRandom
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -26,6 +26,7 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DEFAULT_CITY_FILE = DATA_DIR / "broward_cities.json"
 STATE_DIR = Path(__file__).resolve().parents[1] / "state"
 CITY_INDEX_FILE = STATE_DIR / "broward_city_index.json"
+RNG = SystemRandom()
 
 
 def get_api_key() -> str:
@@ -136,6 +137,81 @@ def save_city_index(index: int) -> None:
         json.dump({"index": index}, f)
 
 
+def iter_city_cycle(cities: List[str], start_index: int):
+    if not cities:
+        raise SystemExit("No cities provided.")
+    for i in range(len(cities)):
+        yield cities[(start_index + i) % len(cities)]
+
+
+def iter_city_category_pairs(cities: List[str], categories: List[str], start_index: int):
+    for city in iter_city_cycle(cities, start_index):
+        shuffled_categories = categories[:]
+        RNG.shuffle(shuffled_categories)
+        for category in shuffled_categories:
+            yield city, category
+
+
+def build_lead_from_place(
+    place: Dict,
+    category: str,
+    city: str,
+    api_key: str,
+    existing_emails: Set[str],
+    existing_domains: Set[str],
+    existing_phones: Set[str],
+) -> Optional[Dict]:
+    place_id = place.get("place_id")
+    if not place_id:
+        return None
+
+    details = place_details(place_id, api_key)
+    if not details:
+        return None
+    if details.get("business_status") == "CLOSED_PERMANENTLY":
+        return None
+
+    company = details.get("name") or place.get("name") or ""
+    phone = details.get("formatted_phone_number") or ""
+    website = details.get("website") or ""
+    domain = domain_from_url(website)
+    email = guess_email(domain)
+
+    if not email:
+        return None
+
+    email_key = email.lower()
+    if email_key in existing_emails:
+        return None
+
+    domain_key = domain.lower() if domain else ""
+    if domain_key and domain_key in existing_domains:
+        return None
+
+    if phone and phone in existing_phones:
+        return None
+
+    lead = {
+        "company": company,
+        "name": "",
+        "email": email,
+        "phone": phone,
+        "service": category.title(),
+        "city": city,
+        "state": "FL",
+        "website": website,
+        "notes": f"source=google_places; category={category}; place_id={place_id}",
+    }
+
+    existing_emails.add(email_key)
+    if domain_key:
+        existing_domains.add(domain_key)
+    if phone:
+        existing_phones.add(phone)
+
+    return lead
+
+
 def build_leads(
     cities: List[str],
     categories: List[str],
@@ -147,68 +223,36 @@ def build_leads(
 ) -> Tuple[List[Dict], int]:
     leads: List[Dict] = []
     start_index = load_city_index()
-    city_cycle = [cities[(start_index + i) % len(cities)] for i in range(len(cities))]
 
     cities_used = 0
-    for city in city_cycle:
+    last_city = None
+    for city, category in iter_city_category_pairs(cities, categories, start_index):
         if len(leads) >= limit:
             break
-        cities_used += 1
-        shuffled_categories = categories[:]
-        random.shuffle(shuffled_categories)
-        for category in shuffled_categories:
+        if city != last_city:
+            cities_used += 1
+            last_city = city
+
+        query = f"{category} in {city}, FL"
+        results = text_search(query, api_key)
+        for place in results:
             if len(leads) >= limit:
                 break
-            query = f"{category} in {city}, FL"
-            results = text_search(query, api_key)
-            for place in results:
-                if len(leads) >= limit:
-                    break
-                place_id = place.get("place_id")
-                if not place_id:
-                    continue
-                details = place_details(place_id, api_key)
-                if not details:
-                    continue
-                if details.get("business_status") == "CLOSED_PERMANENTLY":
-                    continue
-                company = details.get("name") or place.get("name") or ""
-                phone = details.get("formatted_phone_number") or ""
-                website = details.get("website") or ""
-                domain = domain_from_url(website)
-                email = guess_email(domain)
+            lead = build_lead_from_place(
+                place=place,
+                category=category,
+                city=city,
+                api_key=api_key,
+                existing_emails=existing_emails,
+                existing_domains=existing_domains,
+                existing_phones=existing_phones,
+            )
+            if not lead:
+                continue
+            leads.append(lead)
+            time.sleep(0.1)
 
-                if not email:
-                    continue
-                if email.lower() in existing_emails:
-                    continue
-                if domain and domain.lower() in existing_domains:
-                    continue
-                if phone and phone in existing_phones:
-                    continue
-
-                leads.append(
-                    {
-                        "company": company,
-                        "name": "",
-                        "email": email,
-                        "phone": phone,
-                        "service": category.title(),
-                        "city": city,
-                        "state": "FL",
-                        "website": website,
-                        "notes": f"source=google_places; category={category}; place_id={place_id}",
-                    }
-                )
-                existing_emails.add(email.lower())
-                if domain:
-                    existing_domains.add(domain.lower())
-                if phone:
-                    existing_phones.add(phone)
-
-                time.sleep(0.1)
-
-    new_index = (start_index + cities_used) % len(cities)
+    new_index = (start_index + cities_used) % len(cities) if cities else 0
     return leads, new_index
 
 

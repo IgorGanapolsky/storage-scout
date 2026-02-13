@@ -6,6 +6,26 @@ from pathlib import Path
 from typing import Any, Dict, Iterable
 
 UTC = timezone.utc
+REPO_ROOT = Path(__file__).resolve().parents[1]
+STATE_DIR = REPO_ROOT / "autonomy" / "state"
+
+
+def _resolve_under_state_dir(raw_path: str) -> Path:
+    """Resolve a path and ensure it stays within autonomy/state.
+
+    Sonar flags filesystem paths sourced from config as user-controlled. We
+    restrict runtime state writes to a safe directory to avoid path traversal
+    and accidental writes elsewhere on disk.
+    """
+
+    candidate = Path(raw_path)
+    resolved = candidate.resolve() if candidate.is_absolute() else (REPO_ROOT / candidate).resolve()
+
+    state_root = STATE_DIR.resolve()
+    if resolved != state_root and state_root not in resolved.parents:
+        raise ValueError(f"Refusing path outside {state_root}: {resolved}")
+
+    return resolved
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -26,8 +46,8 @@ class Lead:
 
 class ContextStore:
     def __init__(self, sqlite_path: str, audit_log: str) -> None:
-        self.sqlite_path = Path(sqlite_path)
-        self.audit_log = Path(audit_log)
+        self.sqlite_path = _resolve_under_state_dir(sqlite_path)
+        self.audit_log = _resolve_under_state_dir(audit_log)
         self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         self.audit_log.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.sqlite_path)
@@ -170,9 +190,8 @@ class ContextStore:
             "trace_id": trace_id,
             "payload": payload,
         }
-        self.audit_log.write_text(
-            (self.audit_log.read_text() if self.audit_log.exists() else "") + json.dumps(record) + "\n"
-        )
+        with self.audit_log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
         cur = self.conn.cursor()
         cur.execute(
             "INSERT INTO actions (ts, agent_id, action_type, trace_id, payload_json) VALUES (?, ?, ?, ?, ?)",
