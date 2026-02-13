@@ -214,6 +214,31 @@ class ContextStore:
         )
         self.conn.commit()
 
+    def mark_status_by_email(self, email: str, status: str) -> bool:
+        """Update lead status by email (lead id is normalized email).
+
+        Returns True if a lead row was updated, False otherwise.
+        """
+
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return False
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE leads SET status=?, updated_at=? WHERE id=?",
+            (status, now_iso(), normalized),
+        )
+        self.conn.commit()
+        return bool(cur.rowcount)
+
+    def get_lead_status(self, email: str) -> str | None:
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return None
+        cur = self.conn.cursor()
+        row = cur.execute("SELECT status FROM leads WHERE id=?", (normalized,)).fetchone()
+        return str(row[0]) if row else None
+
     def add_message(self, lead_id: str, channel: str, subject: str, body: str, status: str) -> None:
         cur = self.conn.cursor()
         cur.execute(

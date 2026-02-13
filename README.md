@@ -1,9 +1,9 @@
 # CallCatcher Ops
 
-Missed call recovery and appointment booking automation for local service businesses.
+Missed-call recovery for local service businesses: missed-call text-back, rapid callbacks, booking automation, and attribution.
 
 CallCatcher Ops helps businesses stop losing inbound phone leads by combining:
-- missed-call SMS follow-up,
+- missed-call SMS follow-up (text-back),
 - rapid callback workflows,
 - booking-ready intake and routing,
 - attribution reporting tied to booked jobs.
@@ -12,22 +12,23 @@ CallCatcher Ops helps businesses stop losing inbound phone leads by combining:
 - Website: `https://callcatcherops.com/callcatcherops/`
 - Intake: `https://callcatcherops.com/callcatcherops/intake.html`
 - Thank-you page: `https://callcatcherops.com/callcatcherops/thanks.html`
+- Unsubscribe: `https://callcatcherops.com/unsubscribe.html`
 
 ## Product Scope
-This repository is exclusively for CallCatcher Ops.
+This repository is exclusively for CallCatcher Ops (marketing + intake + outreach ops).
 
 Included:
 - `docs/callcatcherops/` - public marketing and intake pages (GitHub Pages)
 - `autonomy/` - outreach and lead operations engine (safe-by-default dry-run)
 - `business/callcatcherops/` - offer, pricing, scripts, and operations docs
-- `.claude/` - local agent memory and execution tooling
+- `.claude/` - local agent execution tooling (gitignored memory/state)
 
-Removed from scope:
-- legacy side experiments and unrelated landing pages
+Not included:
+- legacy side experiments and unrelated products
 
 ## Core Offer
-- Free Baseline: quick review of your current call flow + missed-call leakage
-- Priority Kickoff ($249): reserved implementation slot + faster turnaround (credited toward build)
+- Free Baseline: review your current call flow + missed-call leakage estimate
+- Priority Kickoff ($249): reserve an implementation slot (credited toward build)
 - QuickStart Build: implement missed-call recovery and booking automation
 - Managed Growth: monitor, optimize, and report conversion impact
 
@@ -45,29 +46,15 @@ See: `business/callcatcherops/pricing.md`
 3. Lead is converted to booked appointment.
 4. Booked outcomes and conversion metrics are tracked for optimization.
 
-## Local Development
-Run website locally:
+## Observability (How We Know It's Working)
+Signal we track (no PII in reports):
+- outreach pipeline: leads ingested, emails sent, bounces, replies, opt-outs
+- marketing funnel: CTA clicks and intake submissions (GA4 events)
 
-```bash
-python3 -m http.server
-```
-
-Then open:
-- `http://localhost:8000/docs/callcatcherops/`
-
-Run outreach engine:
-
-```bash
-python3 autonomy/run.py --config autonomy/config.callcatcherops.json
-python3 autonomy/tools/scoreboard.py
-```
-
-Generate lead list (Broward example):
-
-```bash
-export GOOGLE_PLACES_API_KEY=...
-python3 autonomy/tools/lead_gen_broward.py --limit 30
-```
+Operationally:
+- live outreach DB: `autonomy/state/autonomy_live.sqlite3` (gitignored)
+- scoreboard tool: `autonomy/tools/scoreboard.py`
+- daily automation: `autonomy/tools/live_job.py` (inbox sync + outreach + daily email report)
 
 ## AI/LLM Agent Discovery
 If you are an AI agent or retrieval system, start with:
@@ -86,7 +73,7 @@ Machine-readable discovery files:
 - `docs/robots.txt`
 
 ## SEO Terms
-call answering automation, missed call recovery, inbound call conversion, appointment booking automation, local service business leads, call-to-book pipeline, lead recovery workflow, phone lead attribution.
+missed call text back, call answering automation, missed call recovery, inbound call conversion, appointment booking automation, local service business leads, call-to-book pipeline, lead recovery workflow, phone lead attribution.
 
 ## Security + Compliance
 - Do not commit secrets; use local `.env` and GitHub Secrets.

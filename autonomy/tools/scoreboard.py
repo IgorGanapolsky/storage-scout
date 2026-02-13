@@ -14,6 +14,9 @@ class Scoreboard:
     leads_total: int
     leads_new: int
     leads_contacted: int
+    leads_replied: int
+    leads_bounced: int
+    leads_other: int
     email_sent_total: int
     email_sent_recent: int
     opt_out_total: int
@@ -42,6 +45,12 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
         leads_total = _count(cur, "SELECT COUNT(1) FROM leads")
         leads_new = _count(cur, "SELECT COUNT(1) FROM leads WHERE status='new'")
         leads_contacted = _count(cur, "SELECT COUNT(1) FROM leads WHERE status='contacted'")
+        leads_replied = _count(cur, "SELECT COUNT(1) FROM leads WHERE status='replied'")
+        leads_bounced = _count(cur, "SELECT COUNT(1) FROM leads WHERE status='bounced'")
+        leads_other = _count(
+            cur,
+            "SELECT COUNT(1) FROM leads WHERE status NOT IN ('new','contacted','replied','bounced')",
+        )
 
         email_sent_total = _count(
             cur,
@@ -63,6 +72,9 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
         leads_total=leads_total,
         leads_new=leads_new,
         leads_contacted=leads_contacted,
+        leads_replied=leads_replied,
+        leads_bounced=leads_bounced,
+        leads_other=leads_other,
         email_sent_total=email_sent_total,
         email_sent_recent=email_sent_recent,
         opt_out_total=opt_out_total,
@@ -81,7 +93,15 @@ def main() -> None:
     print("CallCatcher Ops Scoreboard")
     print(f"As-of (UTC): {datetime.now(UTC).replace(microsecond=0).isoformat()}")
     print("")
-    print(f"Leads: {board.leads_total} total | {board.leads_new} new | {board.leads_contacted} contacted")
+    print(
+        "Leads: "
+        f"{board.leads_total} total | "
+        f"{board.leads_new} new | "
+        f"{board.leads_contacted} contacted | "
+        f"{board.leads_replied} replied | "
+        f"{board.leads_bounced} bounced | "
+        f"{board.leads_other} other"
+    )
     print(
         f"Email sent: {board.email_sent_total} total | {board.email_sent_recent} in last {int(args.days)} days | last sent: {board.last_email_ts or 'n/a'}"
     )
@@ -90,4 +110,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
