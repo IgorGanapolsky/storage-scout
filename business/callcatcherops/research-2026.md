@@ -74,15 +74,21 @@ Why this structure is correct:
 ## 6) Why We Have Not Made Money Yet (Honest Diagnosis)
 
 As-of 2026-02-13, our repo shows:
-- We have sent 27 cold outreach emails (2026-02-10) via the outreach engine audit log.
-- We have no integrated way to verify Stripe payments or Calendly bookings from the repo.
+- We have sent 33 initial cold outreach emails (last send: 2026-02-13T17:27Z) via the live outreach DB.
+- Bounce suppression is now measured: 24/33 addresses bounced (invalid inboxes), leaving 9 deliverable leads eligible for follow-ups.
+- We currently see 0 positive replies and 0 intake submissions (inbox-based signals).
+- We still do not have API-level Stripe or Calendly telemetry; instead we rely on email notifications + funnel events until API credentials are wired.
 
 This usually means one (or more) of:
-- Not enough volume (27 is not enough).
+- Not enough volume (33 is not enough).
 - Weak distribution channel (cold email to generic inboxes has low hit rate).
 - Offer is not specific enough to a vertical (message says "home service" but we emailed med spas).
 - No proof (case study, demo, baseline example).
 - Follow-up sequence missing.
+
+What changed (so we can stop guessing):
+- A daily automation job runs inbox sync + outreach + scoreboard and emails the report automatically.
+- Follow-ups are enabled and scheduled to begin after the configured 2-day delay.
 
 ## 7) 30-Day Execution Plan (With Gates)
 
@@ -135,4 +141,3 @@ Target unit economics:
 - 1 Managed Growth retainer per 2-3 QuickStarts.
 
 These are hypotheses until we measure them with our own data.
-
