@@ -2,11 +2,13 @@ import argparse
 import csv
 import json
 import os
+import re
 import time
+from html import unescape
 from pathlib import Path
 from random import SystemRandom
 from typing import Dict, List, Optional, Set, Tuple
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_CATEGORIES = [
@@ -27,6 +29,34 @@ DEFAULT_CITY_FILE = DATA_DIR / "broward_cities.json"
 STATE_DIR = Path(__file__).resolve().parents[1] / "state"
 CITY_INDEX_FILE = STATE_DIR / "broward_city_index.json"
 RNG = SystemRandom()
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+
+MAX_HTML_BYTES = 512_000
+WEB_TIMEOUT_SECS = 12
+
+CONTACT_HINTS = (
+    "contact",
+    "contact-us",
+    "about",
+    "team",
+    "staff",
+    "support",
+    "appointments",
+    "booking",
+    "schedule",
+    "location",
+    "locations",
+)
+
+EXCLUDED_EMAIL_DOMAINS = {
+    "example.com",
+    "email.com",
+    "domain.com",
+    "yourdomain.com",
+    "sentry.io",
+}
 
 
 def get_api_key() -> str:
@@ -89,6 +119,145 @@ def guess_email(domain: str) -> str:
     if not domain:
         return ""
     return f"info@{domain}"
+
+
+def normalize_url(url: str) -> str:
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if url.startswith("//"):
+        return "https:" + url
+    if not url.startswith("http"):
+        return "https://" + url
+    return url
+
+
+def fetch_html(url: str) -> str:
+    url = normalize_url(url)
+    if not url:
+        return ""
+    try:
+        req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.1"})
+        with urlopen(req, timeout=WEB_TIMEOUT_SECS) as resp:
+            content_type = (resp.headers.get("Content-Type") or "").lower()
+            if "text/html" not in content_type:
+                return ""
+            raw = resp.read(MAX_HTML_BYTES)
+            return raw.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def extract_emails(html_text: str) -> Set[str]:
+    html_text = unescape(html_text or "")
+    out: Set[str] = set()
+    for m in EMAIL_RE.finditer(html_text):
+        out.add(m.group(0).strip().lower())
+    # Mailto links sometimes don't render as plain text.
+    for m in re.finditer(r"mailto:([^?\"'>]+)", html_text, re.IGNORECASE):
+        val = m.group(1).strip().lower()
+        if EMAIL_RE.fullmatch(val):
+            out.add(val)
+    return out
+
+
+def candidate_pages(base_url: str, html_text: str, domain: str) -> List[str]:
+    base_url = normalize_url(base_url)
+    if not base_url:
+        return []
+
+    candidates: List[str] = []
+    # Common contact-like paths as a fast fallback.
+    for hint in CONTACT_HINTS:
+        candidates.append(urljoin(base_url, f"/{hint}"))
+
+    html_text = html_text or ""
+    for m in HREF_RE.finditer(html_text):
+        href = (m.group(1) or "").strip()
+        if not href:
+            continue
+        href_l = href.lower()
+        if href_l.startswith("mailto:"):
+            continue
+        if any(h in href_l for h in CONTACT_HINTS):
+            full = urljoin(base_url, href)
+            candidates.append(full)
+
+    # Keep only same-site URLs and de-dupe.
+    seen: Set[str] = set()
+    out: List[str] = []
+    for url in candidates:
+        url = normalize_url(url)
+        if not url:
+            continue
+        netloc = domain_from_url(url)
+        if domain and netloc and domain.lower() != netloc.lower():
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append(url)
+    return out
+
+
+def choose_best_email(candidates: Set[str], website_domain: str) -> str:
+    website_domain = (website_domain or "").lower()
+
+    def score(email: str) -> int:
+        email = (email or "").strip().lower()
+        if not email or "@" not in email:
+            return -10_000
+        local, _, domain = email.partition("@")
+        if not local or not domain:
+            return -10_000
+        if domain in EXCLUDED_EMAIL_DOMAINS:
+            return -10_000
+        if local in {"noreply", "no-reply", "donotreply", "do-not-reply"}:
+            return -500
+
+        s = 0
+        if website_domain and domain == website_domain:
+            s += 100
+        if local in {"info", "contact", "hello", "office", "support", "appointments", "booking"}:
+            s += 20
+        if domain.endswith(".gov") or domain.endswith(".edu"):
+            s -= 10
+        return s
+
+    filtered = [e for e in candidates if e]
+    if not filtered:
+        return guess_email(website_domain)
+
+    filtered.sort(key=score, reverse=True)
+    best = filtered[0].strip().lower()
+    if score(best) < -1000:
+        return guess_email(website_domain)
+    return best
+
+
+def discover_best_email(website: str, domain: str) -> Tuple[str, str]:
+    website = normalize_url(website)
+    domain = (domain or "").strip().lower()
+    if not website or not domain:
+        return guess_email(domain), "guess"
+
+    html_home = fetch_html(website)
+    emails: Set[str] = set()
+    emails |= extract_emails(html_home)
+
+    # Crawl a few likely contact pages. Keep it bounded.
+    for url in candidate_pages(website, html_home, domain)[:6]:
+        if len(emails) >= 5:
+            break
+        html_page = fetch_html(url)
+        if not html_page:
+            continue
+        emails |= extract_emails(html_page)
+
+    best = choose_best_email(emails, domain)
+    if best and best in emails:
+        return best, "scrape"
+    return best, "guess"
 
 
 def request_json(url: str) -> Dict:
@@ -175,7 +344,7 @@ def build_lead_from_place(
     phone = details.get("formatted_phone_number") or ""
     website = details.get("website") or ""
     domain = domain_from_url(website)
-    email = guess_email(domain)
+    email, email_method = discover_best_email(website, domain)
 
     if not email:
         return None
@@ -200,7 +369,7 @@ def build_lead_from_place(
         "city": city,
         "state": "FL",
         "website": website,
-        "notes": f"source=google_places; category={category}; place_id={place_id}",
+        "notes": f"source=google_places; category={category}; place_id={place_id}; email={email_method}",
     }
 
     existing_emails.add(email_key)
