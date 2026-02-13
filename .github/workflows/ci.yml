@@ -71,7 +71,6 @@ jobs:
       - name: Run tests with coverage.xml (for SonarCloud Quality Gate)
         run: |
           python -m pytest -q --cov=autonomy --cov-report=xml:coverage.xml --cov-report=term-missing
-
       - name: SonarCloud Scan
         if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v7
