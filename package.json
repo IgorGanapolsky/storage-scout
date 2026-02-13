@@ -1,7 +1,7 @@
 {
-  "name": "storage",
+  "name": "callcatcherops",
   "version": "1.0.0",
-  "description": "CallCatcher Ops marketing site, outreach automation, and digital product assets.",
+  "description": "CallCatcher Ops missed-call recovery platform for local service businesses: marketing site, intake flow, and outreach automation.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -13,7 +13,16 @@
     "type": "git",
     "url": "git+https://github.com/IgorGanapolsky/storage-scout.git"
   },
-  "keywords": [],
+  "keywords": [
+    "callcatcherops",
+    "missed-call-recovery",
+    "appointment-booking",
+    "local-service-business",
+    "call-tracking",
+    "lead-conversion",
+    "sms-automation",
+    "voice-ai"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",

@@ -77,7 +77,6 @@ jobs:
             Context: This repo hosts CallCatcher Ops assets and automation:
             - Marketing site in `docs/callcatcherops/`
             - Outreach engine in `autonomy/`
-            - Optional tools rental experiments in `tools_rental/`
 
             Respond helpfully to their request. If they're asking for code changes,
             explain what needs to be done and where. Be specific with file paths.
