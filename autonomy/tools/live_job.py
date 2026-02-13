@@ -241,25 +241,22 @@ def main() -> None:
     # Backward compat: older runs wrote last_sent_sha1.
     last_sent_sha1 = state.get("last_summary_sha1") or state.get("last_sent_sha1")
 
-    significant_change = any(
+    # If we already sent a report today, only resend when something truly urgent happens.
+    # (Outbound send counts are not urgent; they can be reviewed in tomorrow's report.)
+    urgent_change = any(
         [
-            int(engine_result.get("sent_initial") or 0) > 0,
-            int(engine_result.get("sent_followup") or 0) > 0,
             int(inbox_result.new_replies or 0) > 0,
-            int(inbox_result.new_opt_outs or 0) > 0,
-            int(inbox_result.new_bounces or 0) > 0,
             int(inbox_result.intake_submissions or 0) > 0,
             int(inbox_result.calendly_bookings or 0) > 0,
             int(inbox_result.stripe_payments or 0) > 0,
-            int(leadgen_new or 0) > 0,
         ]
     )
 
     should_send = False
     if last_sent_date != today_utc:
         should_send = True  # daily heartbeat
-    elif summary_sha1 != last_sent_sha1 and significant_change:
-        should_send = True  # meaningful update the same day
+    elif summary_sha1 != last_sent_sha1 and urgent_change:
+        should_send = True  # urgent update the same day
 
     if should_send:
         subject = f"CallCatcher Ops Daily Report ({today_utc})"

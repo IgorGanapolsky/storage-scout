@@ -35,9 +35,6 @@ def _plist_content(*, python_exe: str, repo_root: Path) -> str:
     <string>30</string>
   </array>
 
-  <key>RunAtLoad</key>
-  <true/>
-
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -70,9 +67,6 @@ def main() -> None:
     subprocess.run(["launchctl", "bootout", domain, str(plist_path)], check=False, capture_output=True, text=True)
     subprocess.run(["launchctl", "bootstrap", domain, str(plist_path)], check=True)
     subprocess.run(["launchctl", "enable", f"{domain}/{LABEL}"], check=False, capture_output=True, text=True)
-
-    # Start immediately so we can confirm it runs.
-    subprocess.run(["launchctl", "kickstart", "-k", f"{domain}/{LABEL}"], check=False, capture_output=True, text=True)
 
     print(f"Installed and loaded LaunchAgent: {LABEL}")
     print(f"Plist: {plist_path}")
