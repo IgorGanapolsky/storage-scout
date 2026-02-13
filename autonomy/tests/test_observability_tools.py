@@ -119,7 +119,13 @@ def test_live_job_report_formatting() -> None:
         opt_out_total=0,
         last_email_ts="2026-02-13T00:00:00+00:00",
     )
-    report = _format_report(engine_result={"sent_initial": 0, "sent_followup": 0}, inbox_result=inbox, scoreboard=board, scoreboard_days=30)
+    report = _format_report(
+        leadgen_new=0,
+        engine_result={"sent_initial": 0, "sent_followup": 0},
+        inbox_result=inbox,
+        scoreboard=board,
+        scoreboard_days=30,
+    )
     assert "CallCatcher Ops Daily Report" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
