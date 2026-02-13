@@ -25,7 +25,7 @@
   "lead_sources": [
     {
       "type": "csv",
-      "path": "autonomy/data/leads_callcatcherops.csv",
+      "path": "autonomy/state/leads_callcatcherops_real.csv",
       "source": "manual"
     }
   ],

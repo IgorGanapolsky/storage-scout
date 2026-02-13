@@ -19,6 +19,7 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/config.example.json` - configuration template
 - `autonomy/config.callcatcherops.json` - CallCatcher Ops config (dry-run default)
 - `autonomy/data/leads_callcatcherops.csv` - sample lead list
+- `autonomy/state/leads_callcatcherops_real.csv` - real lead list (gitignored; do not commit)
 - `autonomy/run.py` - entrypoint
 - `autonomy/engine.py` - orchestration logic
 - `autonomy/context_store.py` - SQLite context store
