@@ -1,11 +1,16 @@
 import json
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
 from .agents import LeadScorer, OutreachWriter
 from .context_store import ContextStore, Lead
 from .providers import EmailConfig, EmailSender, LeadSourceCSV
+
+
+UTC = timezone.utc
+
 
 @dataclass
 class EngineConfig:
@@ -17,6 +22,7 @@ class EngineConfig:
     compliance: Dict[str, str]
     storage: Dict[str, str]
 
+
 class Engine:
     def __init__(self, config: EngineConfig) -> None:
         self.config = config
@@ -27,6 +33,7 @@ class Engine:
         self.scorer = LeadScorer()
         self.writer = OutreachWriter(
             company_name=config.company["name"],
+            intake_url=config.company.get("intake_url", ""),
             mailing_address=config.company["mailing_address"],
             signature=config.company["signature"],
             unsubscribe_url=config.compliance["unsubscribe_url"],
@@ -48,7 +55,7 @@ class Engine:
                     lead.score = self.scorer.score(lead)
                     self.store.upsert_lead(lead)
 
-    def run_outreach(self) -> int:
+    def run_initial_outreach(self) -> int:
         outreach_cfg = self.config.agents["outreach"]
         min_score = int(outreach_cfg["min_score"])
         limit = int(outreach_cfg["daily_send_limit"])
@@ -76,25 +83,103 @@ class Engine:
                 body=msg["body"],
                 status=status,
             )
-            self.store.mark_contacted(lead.id)
+            if status == "sent":
+                self.store.mark_contacted(lead.id)
             self.store.log_action(
                 agent_id=agent_id,
                 action_type="email.send",
                 trace_id=trace_id,
                 payload={
+                    "kind": "initial",
                     "lead_id": lead.id,
                     "email": lead.email,
                     "status": status,
                     "mode": self.config.mode,
                 },
             )
-            sent += 1
+            if status == "sent":
+                sent += 1
+        return sent
+
+    def run_followups(self) -> int:
+        outreach_cfg = self.config.agents["outreach"]
+        follow_cfg = outreach_cfg.get("followup") or {}
+        if not follow_cfg.get("enabled", False):
+            return 0
+
+        min_score = int(outreach_cfg["min_score"])
+        limit = int(follow_cfg.get("daily_send_limit", 0))
+        if limit <= 0:
+            return 0
+
+        agent_id = outreach_cfg["agent_id"]
+        max_emails = int(follow_cfg.get("max_emails_per_lead", 3))
+        min_days = int(follow_cfg.get("min_days_since_last_email", 2))
+        cutoff_ts = (datetime.now(UTC) - timedelta(days=min_days)).isoformat()
+
+        sent = 0
+        for row in self.store.get_followup_leads(
+            min_score=min_score,
+            limit=limit,
+            max_emails_per_lead=max_emails,
+            cutoff_ts=cutoff_ts,
+        ):
+            lead = Lead(
+                id=row["id"],
+                name=row["name"],
+                company=row["company"],
+                email=row["email"],
+                phone=row["phone"],
+                service=row["service"],
+                city=row["city"],
+                state=row["state"],
+                source=row["source"],
+                score=row["score"],
+                status=row["status"],
+            )
+            if self.store.is_opted_out(lead.email):
+                continue
+
+            sent_count = int(row["email_message_count"] or 0)
+            step = sent_count + 1
+
+            trace_id = str(uuid.uuid4())
+            msg = self.writer.render_followup(lead, step=step)
+            status = self.sender.send(
+                to_email=lead.email,
+                subject=msg["subject"],
+                body=msg["body"],
+                reply_to=self.config.company["reply_to"],
+            )
+
+            self.store.add_message(
+                lead_id=lead.id,
+                channel="email",
+                subject=msg["subject"],
+                body=msg["body"],
+                status=status,
+            )
+            self.store.log_action(
+                agent_id=agent_id,
+                action_type="email.send",
+                trace_id=trace_id,
+                payload={
+                    "kind": f"followup_{step}",
+                    "lead_id": lead.id,
+                    "email": lead.email,
+                    "status": status,
+                    "mode": self.config.mode,
+                },
+            )
+            if status == "sent":
+                sent += 1
         return sent
 
     def run(self) -> Dict[str, int]:
         self.ingest_leads()
-        sent = self.run_outreach()
-        return {"sent": sent}
+        sent_initial = self.run_initial_outreach()
+        sent_followup = self.run_followups()
+        return {"sent_initial": sent_initial, "sent_followup": sent_followup}
 
 
 def load_config(path: str) -> EngineConfig:

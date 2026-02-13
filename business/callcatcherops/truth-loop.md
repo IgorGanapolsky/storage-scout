@@ -9,9 +9,12 @@ Use this loop for strategic questions about money, viability, and execution.
 
 ## Command
 ```bash
+# IMPORTANT: if your response includes money like "$0" or "$249", do NOT pass it
+# directly as a double-quoted CLI arg (shells expand $0 -> your shell path).
+# Use files instead to avoid accidental expansion.
 python3 .claude/scripts/feedback/strategy_truth_loop.py \
-  --question "USER_QUESTION" \
-  --response "ASSISTANT_RESPONSE" \
+  --question-file .claude/tmp/strategy-question.txt \
+  --response-file .claude/tmp/strategy-response.txt \
   --source "EVIDENCE_LINK_OR_NOTES"
 ```
 

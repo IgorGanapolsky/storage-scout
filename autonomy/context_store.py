@@ -27,8 +27,10 @@ def _resolve_under_state_dir(raw_path: str) -> Path:
 
     return resolved
 
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
 
 @dataclass
 class Lead:
@@ -43,6 +45,7 @@ class Lead:
     source: str
     score: int = 0
     status: str = "new"
+
 
 class ContextStore:
     def __init__(self, sqlite_path: str, audit_log: str) -> None:
@@ -126,7 +129,6 @@ class ContextStore:
               state=excluded.state,
               source=excluded.source,
               score=excluded.score,
-              status=excluded.status,
               updated_at=excluded.updated_at
             """,
             (
@@ -161,6 +163,49 @@ class ContextStore:
         )
         return cur.fetchall()
 
+    def get_followup_leads(
+        self,
+        min_score: int,
+        limit: int,
+        max_emails_per_lead: int,
+        cutoff_ts: str,
+    ) -> Iterable[sqlite3.Row]:
+        """Return contacted leads eligible for an email follow-up."""
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT
+              l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status,
+              COALESCE((
+                SELECT COUNT(1)
+                FROM messages m
+                WHERE m.lead_id = l.id AND m.channel = 'email' AND m.status = 'sent'
+              ), 0) AS email_message_count,
+              COALESCE((
+                SELECT MAX(m.ts)
+                FROM messages m
+                WHERE m.lead_id = l.id AND m.channel = 'email' AND m.status = 'sent'
+              ), '') AS last_email_ts
+            FROM leads l
+            WHERE l.status = 'contacted'
+              AND l.score >= ?
+              AND COALESCE((
+                SELECT COUNT(1)
+                FROM messages m
+                WHERE m.lead_id = l.id AND m.channel = 'email' AND m.status = 'sent'
+              ), 0) < ?
+              AND COALESCE((
+                SELECT MAX(m.ts)
+                FROM messages m
+                WHERE m.lead_id = l.id AND m.channel = 'email' AND m.status = 'sent'
+              ), '') <= ?
+            ORDER BY last_email_ts ASC
+            LIMIT ?
+            """,
+            (min_score, max_emails_per_lead, cutoff_ts, limit),
+        )
+        return cur.fetchall()
+
     def mark_contacted(self, lead_id: str) -> None:
         cur = self.conn.cursor()
         cur.execute(
@@ -177,9 +222,23 @@ class ContextStore:
         )
         self.conn.commit()
 
-    def is_opted_out(self, email: str) -> bool:
+    def add_opt_out(self, email: str) -> None:
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return
         cur = self.conn.cursor()
-        cur.execute("SELECT 1 FROM opt_outs WHERE email=?", (email,))
+        cur.execute(
+            "INSERT OR REPLACE INTO opt_outs (email, ts) VALUES (?, ?)",
+            (normalized, now_iso()),
+        )
+        self.conn.commit()
+
+    def is_opted_out(self, email: str) -> bool:
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return False
+        cur = self.conn.cursor()
+        cur.execute("SELECT 1 FROM opt_outs WHERE email=?", (normalized,))
         return cur.fetchone() is not None
 
     def log_action(self, agent_id: str, action_type: str, trace_id: str, payload: Dict[str, Any]) -> None:

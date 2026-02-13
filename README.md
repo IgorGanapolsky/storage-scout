@@ -26,7 +26,8 @@ Removed from scope:
 - legacy side experiments and unrelated landing pages
 
 ## Core Offer
-- Recovery Audit: map lead leakage and estimate recoverable bookings
+- Free Baseline: quick review of your current call flow + missed-call leakage
+- Priority Kickoff ($249): reserved implementation slot + faster turnaround (credited toward build)
 - QuickStart Build: implement missed-call recovery and booking automation
 - Managed Growth: monitor, optimize, and report conversion impact
 
@@ -57,7 +58,8 @@ Then open:
 Run outreach engine:
 
 ```bash
-python3 autonomy/run.py
+python3 autonomy/run.py --config autonomy/config.callcatcherops.json
+python3 autonomy/tools/scoreboard.py
 ```
 
 Generate lead list (Broward example):

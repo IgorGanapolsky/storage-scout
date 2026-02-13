@@ -175,6 +175,15 @@
       };
       trackCta('cta-pay', 'pay_249');
       trackCta('cta-book', 'book_baseline');
+
+      // Fire a conversion event when the thanks page is reached via the intake form redirect.
+      (() => {
+        if (typeof gtag !== 'function') return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('src') === 'intake') {
+          gtag('event', 'intake_submit', { event_category: 'funnel', event_label: 'baseline_intake' });
+        }
+      })();
     </script>
   </body>
 </html>
