@@ -3,8 +3,6 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-import pytest
-
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.fastmail_inbox_sync import _extract_failed_recipients, _is_bounce, InboxSyncResult
 from autonomy.tools.live_job import _format_report
