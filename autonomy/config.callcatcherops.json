@@ -31,7 +31,7 @@
   },
   "compliance": {
     "include_unsubscribe": true,
-    "unsubscribe_url": "https://callcatcherops.com/unsubscribe?email={{email}}",
+    "unsubscribe_url": "https://callcatcherops.com/unsubscribe.html?email={{email}}",
     "can_spam_required": true
   },
   "storage": {
