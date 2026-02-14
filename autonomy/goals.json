@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "updated_at": "2026-02-14",
+  "objectives": [
+    {
+      "id": "revenue-first-client",
+      "priority": 1,
+      "category": "revenue",
+      "goal": "Land first paying CallCatcher client within 30 days",
+      "metrics": ["paid_client_count >= 1"],
+      "task_types": ["lead_gen", "outreach", "content"]
+    },
+    {
+      "id": "pipeline-20-leads",
+      "priority": 2,
+      "category": "pipeline",
+      "goal": "Build pipeline of 20 qualified leads (med spas, dental, HVAC in South Florida)",
+      "metrics": ["qualified_leads >= 20"],
+      "task_types": ["lead_gen", "research"]
+    },
+    {
+      "id": "book-5-audits",
+      "priority": 3,
+      "category": "conversion",
+      "goal": "Get 5 free audits booked via intake form",
+      "metrics": ["intake_submissions >= 5"],
+      "task_types": ["outreach", "content", "landing_page"]
+    },
+    {
+      "id": "linkedin-500",
+      "priority": 4,
+      "category": "brand",
+      "goal": "Grow LinkedIn to 500 connections in local business space",
+      "metrics": ["linkedin_connections >= 500"],
+      "task_types": ["content", "social"]
+    },
+    {
+      "id": "vertical-pages",
+      "priority": 5,
+      "category": "marketing",
+      "goal": "Ship 3 vertical-specific landing pages (med spa, dental, HVAC)",
+      "metrics": ["landing_pages_shipped >= 3"],
+      "task_types": ["landing_page", "content"]
+    },
+    {
+      "id": "lead-scoring-automation",
+      "priority": 6,
+      "category": "automation",
+      "goal": "Automate lead scoring from intake form submissions",
+      "metrics": ["auto_score_enabled == true"],
+      "task_types": ["automation"]
+    }
+  ]
+}

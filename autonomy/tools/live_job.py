@@ -5,6 +5,7 @@ import json
 import os
 import smtplib
 import sys
+import urllib.request
 from dataclasses import asdict
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -25,6 +26,7 @@ from autonomy.tools.lead_gen_broward import (
     write_leads,
 )
 from autonomy.tools.fastmail_inbox_sync import load_dotenv, sync_fastmail_inbox
+from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.scoreboard import load_scoreboard
 
 
@@ -58,7 +60,66 @@ def _send_email(*, smtp_user: str, smtp_password: str, to_email: str, subject: s
         server.send_message(msg)
 
 
-def _format_report(*, leadgen_new: int, engine_result: dict, inbox_result, scoreboard, scoreboard_days: int) -> str:
+def _iter_ntfy_topics(raw: str) -> list[str]:
+    return [t.strip() for t in (raw or "").split(",") if t.strip()]
+
+
+def _send_ntfy(
+    *,
+    server: str,
+    topics: list[str],
+    token: str,
+    title: str,
+    body: str,
+    priority: int = 3,
+    tags: str = "",
+) -> bool:
+    """
+    Send a push notification via ntfy.sh (or self-hosted ntfy).
+
+    Returns True if at least one topic was successfully notified.
+    """
+    server = (server or "").strip().rstrip("/")
+    if not server or not topics:
+        return False
+
+    payload = (body or "").encode("utf-8")
+    ok = False
+    for topic in topics:
+        url = f"{server}/{topic}"
+        headers = {
+            "User-Agent": "callcatcherops-live-job/1.0",
+            "Title": title,
+            "Priority": str(int(priority)),
+        }
+        if tags:
+            headers["Tags"] = tags
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        try:
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                # Best-effort: drain a tiny response body so the request completes cleanly.
+                resp.read(64)
+            ok = True
+        except Exception as exc:
+            print(f"ntfy send failed for topic={topic!r}: {exc}", file=sys.stderr)
+            continue
+
+    return ok
+
+
+def _format_report(
+    *,
+    leadgen_new: int,
+    engine_result: dict,
+    inbox_result,
+    scoreboard,
+    scoreboard_days: int,
+    funnel_result: FunnelWatchdogResult | None = None,
+    goal_tasks: dict | None = None,
+) -> str:
     now_utc = datetime.now(UTC).replace(microsecond=0).isoformat()
     lines: list[str] = []
     lines.append("CallCatcher Ops Daily Report")
@@ -74,6 +135,21 @@ def _format_report(*, leadgen_new: int, engine_result: dict, inbox_result, score
     lines.append("Inbox sync (Fastmail)")
     for k, v in asdict(inbox_result).items():
         lines.append(f"- {k}: {v}")
+
+    if funnel_result is not None:
+        lines.append("")
+        lines.append("Funnel watchdog")
+        lines.append(f"- healthy: {bool(funnel_result.is_healthy)}")
+        lines.append(f"- checks: {int(funnel_result.checks_ok)}/{int(funnel_result.checks_total)}")
+        if funnel_result.issues:
+            for issue in funnel_result.issues:
+                lines.append(f"- issue_{issue.name}: {issue.detail} ({issue.url})")
+    if goal_tasks is not None:
+        lines.append("")
+        lines.append("Goal-driven tasks")
+        lines.append(f"- generated: {int(goal_tasks.get('generated', 0))}")
+        lines.append(f"- done: {int(goal_tasks.get('done', 0))}")
+        lines.append(f"- failed: {int(goal_tasks.get('failed', 0))}")
     lines.append("")
     lines.append(f"Scoreboard (last {int(scoreboard_days)} days)")
     lines.append(
@@ -176,6 +252,16 @@ def main() -> None:
     dotenv_path = (repo_root / args.dotenv).resolve()
     env = load_dotenv(dotenv_path)
 
+    report_delivery = (env.get("REPORT_DELIVERY") or "email").strip().lower()
+    if report_delivery not in {"email", "ntfy", "both", "none"}:
+        report_delivery = "email"
+    send_report_email = report_delivery in {"email", "both"}
+    send_report_ntfy = report_delivery in {"ntfy", "both"}
+
+    ntfy_server = (env.get("NTFY_SERVER") or "https://ntfy.sh").strip()
+    ntfy_topics = _iter_ntfy_topics(env.get("NTFY_TOPIC", ""))
+    ntfy_token = (env.get("NTFY_TOKEN") or "").strip()
+
     fastmail_user = env.get("FASTMAIL_USER", "")
     smtp_password = env.get("SMTP_PASSWORD", "")
     report_to = args.report_to.strip() or env.get("FASTMAIL_FORWARD_TO", "").strip()
@@ -184,8 +270,10 @@ def main() -> None:
         raise SystemExit("Missing FASTMAIL_USER in .env")
     if not smtp_password:
         raise SystemExit("Missing SMTP_PASSWORD in .env")
-    if not report_to:
-        raise SystemExit("Missing FASTMAIL_FORWARD_TO or --report-to")
+    if send_report_email and not report_to:
+        raise SystemExit("Missing FASTMAIL_FORWARD_TO or --report-to (required for REPORT_DELIVERY=email/both)")
+    if send_report_ntfy and not ntfy_topics:
+        raise SystemExit("Missing NTFY_TOPIC (required for REPORT_DELIVERY=ntfy/both)")
 
     # Ensure the outreach engine can read SMTP_PASSWORD via config.email.smtp_password_env.
     os.environ.setdefault("SMTP_PASSWORD", smtp_password)
@@ -209,14 +297,34 @@ def main() -> None:
     engine = Engine(cfg)
     engine_result = engine.run()
 
-    # 3) Scoreboard + email report.
+    funnel_enabled = (env.get("FUNNEL_WATCHDOG") or "1").strip().lower() not in {"0", "false", "no", "off"}
+    funnel_result: FunnelWatchdogResult | None = None
+    if funnel_enabled:
+        try:
+            funnel_result = run_funnel_watchdog(
+                repo_root=repo_root,
+                intake_url=cfg.company.get("intake_url", ""),
+                unsubscribe_url_template=(cfg.compliance or {}).get("unsubscribe_url", ""),
+            )
+        except Exception as exc:
+            funnel_result = FunnelWatchdogResult(as_of_utc=datetime.now(UTC).replace(microsecond=0).isoformat())
+            funnel_result.add_issue(name="watchdog_error", url=cfg.company.get("intake_url", ""), detail=str(exc))
+
+    # 3) Scoreboard + report.
     board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
+    goal_task_data = {
+        "generated": engine_result.get("goal_tasks_generated", 0),
+        "done": engine_result.get("goal_tasks_done", 0),
+        "failed": engine_result.get("goal_tasks_failed", 0),
+    }
     report = _format_report(
         leadgen_new=leadgen_new,
         engine_result=engine_result,
         inbox_result=inbox_result,
         scoreboard=board,
         scoreboard_days=int(args.scoreboard_days),
+        funnel_result=funnel_result,
+        goal_tasks=goal_task_data,
     )
 
     report_path = (repo_root / args.report_path).resolve()
@@ -232,6 +340,7 @@ def main() -> None:
         "leadgen_new": int(leadgen_new),
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
+        "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "scoreboard_days": int(args.scoreboard_days),
         "scoreboard": asdict(board),
     }
@@ -251,6 +360,8 @@ def main() -> None:
             int(inbox_result.stripe_payments or 0) > 0,
         ]
     )
+    if funnel_result is not None and not funnel_result.is_healthy:
+        urgent_change = True
 
     should_send = False
     if last_sent_date != today_utc:
@@ -259,22 +370,52 @@ def main() -> None:
         should_send = True  # urgent update the same day
 
     if should_send:
-        subject = f"CallCatcher Ops Daily Report ({today_utc})"
-        _send_email(
-            smtp_user=cfg.email["smtp_user"],
-            smtp_password=smtp_password,
-            to_email=report_to,
-            subject=subject,
-            body=report,
-        )
-        _write_json(
-            report_state_path,
-            {
-                "last_sent_date_utc": today_utc,
-                "last_summary_sha1": summary_sha1,
-                "sent_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
-            },
-        )
+        is_urgent_update = last_sent_date == today_utc and urgent_change
+        subject = f"CallCatcher Ops {'Urgent Update' if is_urgent_update else 'Daily Report'} ({today_utc})"
+        tags = "callcatcherops"
+        priority = 5 if is_urgent_update else 3
+        if urgent_change:
+            tags += ",urgent"
+
+        sent_any = False
+        if send_report_email:
+            try:
+                _send_email(
+                    smtp_user=cfg.email["smtp_user"],
+                    smtp_password=smtp_password,
+                    to_email=report_to,
+                    subject=subject,
+                    body=report,
+                )
+                sent_any = True
+            except Exception as exc:
+                print(f"email report send failed: {exc}", file=sys.stderr)
+
+        if send_report_ntfy:
+            sent_any = (
+                _send_ntfy(
+                    server=ntfy_server,
+                    topics=ntfy_topics,
+                    token=ntfy_token,
+                    title=subject,
+                    body=report,
+                    priority=priority,
+                    tags=tags,
+                )
+                or sent_any
+            )
+
+        if not sent_any:
+            print("warning: report not delivered (REPORT_DELIVERY=none or all sinks failed)", file=sys.stderr)
+        else:
+            _write_json(
+                report_state_path,
+                {
+                    "last_sent_date_utc": today_utc,
+                    "last_summary_sha1": summary_sha1,
+                    "sent_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+                },
+            )
 
     # Helpful for launchd logs.
     print(report)
