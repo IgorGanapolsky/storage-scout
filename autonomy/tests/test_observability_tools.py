@@ -5,7 +5,7 @@ from pathlib import Path
 
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.fastmail_inbox_sync import _extract_failed_recipients, _is_bounce, InboxSyncResult
-from autonomy.tools.live_job import _format_report
+from autonomy.tools.live_job import _format_report, _parse_categories
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
 
 
@@ -129,3 +129,8 @@ def test_live_job_report_formatting() -> None:
     assert "CallCatcher Ops Daily Report" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
+
+
+def test_leadgen_category_parsing() -> None:
+    assert _parse_categories("") == []
+    assert _parse_categories("  med spa, plumbing ,, Clinics  ") == ["med spa", "plumbing", "clinics"]

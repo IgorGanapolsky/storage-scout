@@ -13,15 +13,14 @@ from urllib.request import Request, urlopen
 
 DEFAULT_CATEGORIES = [
     "med spa",
-    "dentist",
-    "chiropractor",
-    "urgent care",
     "plumber",
-    "electrician",
+    "dentist",
     "hvac",
     "roofing",
+    "electrician",
+    "chiropractor",
+    "urgent care",
     "pest control",
-    "locksmith",
 ]
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -56,6 +55,12 @@ EXCLUDED_EMAIL_DOMAINS = {
     "domain.com",
     "yourdomain.com",
     "sentry.io",
+    "sentry.wixpress.com",
+    "sentry-next.wixpress.com",
+    "wixpress.com",
+    "squarespace.com",
+    "weebly.com",
+    "godaddy.com",
 }
 
 
@@ -116,6 +121,7 @@ def domain_from_url(url: str) -> str:
 
 
 def guess_email(domain: str) -> str:
+    """Fallback when no email is found on the website."""
     if not domain:
         return ""
     return f"info@{domain}"
@@ -210,16 +216,24 @@ def choose_best_email(candidates: Set[str], website_domain: str) -> str:
         local, _, domain = email.partition("@")
         if not local or not domain:
             return -10_000
+        if "%" in local or " " in local:
+            return -10_000
         if domain in EXCLUDED_EMAIL_DOMAINS:
             return -10_000
         if local in {"noreply", "no-reply", "donotreply", "do-not-reply"}:
             return -500
 
         s = 0
+        # Prefer same-domain emails
         if website_domain and domain == website_domain:
             s += 100
-        if local in {"info", "contact", "hello", "office", "support", "appointments", "booking"}:
-            s += 20
+        # Deprioritize generic inboxes — these go unread
+        generic = {"info", "contact", "hello", "office", "support", "appointments", "booking", "admin", "service"}
+        if local in generic:
+            s -= 30
+        # Prefer personal-looking emails (contain a name)
+        if local not in generic and not local.isdigit() and len(local) > 2:
+            s += 50
         if domain.endswith(".gov") or domain.endswith(".edu"):
             s -= 10
         return s
@@ -347,6 +361,9 @@ def build_lead_from_place(
     email, email_method = discover_best_email(website, domain)
 
     if not email:
+        return None
+
+    if "%" in email or " " in email or "@sentry" in email:
         return None
 
     email_key = email.lower()

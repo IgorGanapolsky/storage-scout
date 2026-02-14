@@ -64,6 +64,11 @@ def _iter_ntfy_topics(raw: str) -> list[str]:
     return [t.strip() for t in (raw or "").split(",") if t.strip()]
 
 
+def _parse_categories(raw: str) -> list[str]:
+    parts = [p.strip().lower() for p in (raw or "").split(",")]
+    return [p for p in parts if p]
+
+
 def _send_ntfy(
     *,
     server: str,
@@ -209,7 +214,11 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
         cities = load_cities(None)
     except SystemExit:
         return 0
-    categories = DEFAULT_CATEGORIES[:]
+    categories_raw = (
+        (env.get("DAILY_LEADGEN_CATEGORIES") or "").strip()
+        or (env.get("LEADGEN_CATEGORIES") or "").strip()
+    )
+    categories = _parse_categories(categories_raw) or DEFAULT_CATEGORIES[:]
 
     existing_emails, existing_domains, existing_phones = load_existing(output_path)
     try:

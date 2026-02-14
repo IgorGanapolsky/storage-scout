@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -8,6 +7,14 @@ from typing import Dict, List
 from .agents import LeadScorer, OutreachWriter
 from .ai_writer import AIOutreachWriter
 from .context_store import ContextStore, Lead
+from .outreach_policy import (
+    DEFAULT_ALLOWED_EMAIL_METHODS,
+    DEFAULT_BLOCKED_LOCAL_PARTS,
+    email_local_part,
+    is_sane_outreach_email,
+    normalize_str_list,
+    service_matches,
+)
 from .observer import Observer, ObserverConfig, Reflector
 from .goal_planner import GoalPlanner
 from .goal_executor import GoalExecutor
@@ -15,32 +22,17 @@ from .providers import EmailConfig, EmailSender, LeadSourceCSV
 
 
 UTC = timezone.utc
-_HEX_LOCAL_RE = re.compile(r"[0-9a-f]{24,}", re.IGNORECASE)
 
 
-def _email_local_part(email: str) -> str:
-    return (email or "").strip().lower().split("@", 1)[0]
-
-
-def _is_sane_outreach_email(email: str) -> bool:
-    """Heuristics to avoid obvious bad scraped addresses (tracking tokens, URL-encoded locals, etc)."""
-    local = _email_local_part(email)
-    if not local:
-        return False
-    if "%20" in local or " " in local:
-        return False
-    if _HEX_LOCAL_RE.fullmatch(local):
-        return False
-    return True
-
-
-def _service_matches(lead_service: str, targets: set[str]) -> bool:
-    if not targets:
-        return True
-    raw = (lead_service or "").strip().lower()
-    if not raw:
-        return False
-    return raw in targets
+@dataclass(frozen=True)
+class OutreachPolicy:
+    email_methods_filter: list[str] | None
+    blocked_local_parts: set[str]
+    target_services: set[str]
+    bounce_pause_enabled: bool
+    bounce_pause_window_days: int
+    bounce_pause_threshold: float
+    bounce_pause_min_emailed: int
 
 
 @dataclass
@@ -71,6 +63,7 @@ class Engine:
                 signature=config.company["signature"],
                 unsubscribe_url=config.compliance["unsubscribe_url"],
                 booking_url=config.company.get("booking_url", ""),
+                baseline_example_url=config.company.get("baseline_example_url", ""),
                 model=ai_cfg.get("model", "gpt-4o"),
                 store=self.store,
             )
@@ -82,6 +75,7 @@ class Engine:
                 signature=config.company["signature"],
                 unsubscribe_url=config.compliance["unsubscribe_url"],
                 booking_url=config.company.get("booking_url", ""),
+                baseline_example_url=config.company.get("baseline_example_url", ""),
             )
         email_cfg = EmailConfig(
             provider=config.email["provider"],
@@ -106,64 +100,92 @@ class Engine:
                     lead.score = self.scorer.score(lead)
                     self.store.upsert_lead(lead)
 
+    def _build_outreach_policy(self, outreach_cfg: dict) -> OutreachPolicy:
+        allowed = normalize_str_list(outreach_cfg.get("allowed_email_methods"))
+        if not allowed:
+            allowed = DEFAULT_ALLOWED_EMAIL_METHODS[:]
+        email_methods_filter = allowed or None
+
+        blocked = set(normalize_str_list(outreach_cfg.get("blocked_local_parts")))
+        if not blocked:
+            blocked = set(DEFAULT_BLOCKED_LOCAL_PARTS)
+
+        target_services_set = set(normalize_str_list(outreach_cfg.get("target_services")))
+
+        bounce_pause = outreach_cfg.get("bounce_pause") or {}
+        enabled = bool(bounce_pause.get("enabled", True))
+        window_days = int(bounce_pause.get("window_days", 7) or 7)
+        threshold = float(bounce_pause.get("threshold", 0.25) or 0.25)
+        min_emailed = int(bounce_pause.get("min_emailed", 20) or 20)
+
+        return OutreachPolicy(
+            email_methods_filter=email_methods_filter,
+            blocked_local_parts=blocked,
+            target_services=target_services_set,
+            bounce_pause_enabled=enabled,
+            bounce_pause_window_days=window_days,
+            bounce_pause_threshold=threshold,
+            bounce_pause_min_emailed=min_emailed,
+        )
+
+    def _should_pause_outreach(self, *, policy: OutreachPolicy, agent_id: str) -> bool:
+        if not policy.bounce_pause_enabled:
+            return False
+        deliverability = self.store.email_deliverability(
+            days=policy.bounce_pause_window_days,
+            email_methods=policy.email_methods_filter,
+        )
+        if int(deliverability["emailed"] or 0) < policy.bounce_pause_min_emailed:
+            return False
+        if float(deliverability["bounce_rate"] or 0.0) < policy.bounce_pause_threshold:
+            return False
+
+        self.store.log_action(
+            agent_id=agent_id,
+            action_type="outreach.paused",
+            trace_id=str(uuid.uuid4()),
+            payload={
+                "reason": "bounce_rate_threshold",
+                "threshold": policy.bounce_pause_threshold,
+                "min_emailed": policy.bounce_pause_min_emailed,
+                "window_days": policy.bounce_pause_window_days,
+                "deliverability": deliverability,
+                "email_methods_filter": policy.email_methods_filter,
+            },
+        )
+        return True
+
+    def _lead_passes_outreach_policy(self, lead: Lead, policy: OutreachPolicy) -> bool:
+        if not service_matches(lead.service, policy.target_services):
+            return False
+        local = email_local_part(lead.email)
+        if local in policy.blocked_local_parts:
+            return False
+        if not is_sane_outreach_email(lead.email):
+            return False
+        return True
+
     def run_initial_outreach(self) -> int:
         outreach_cfg = self.config.agents["outreach"]
         min_score = int(outreach_cfg["min_score"])
         limit = int(outreach_cfg["daily_send_limit"])
         agent_id = outreach_cfg["agent_id"]
 
-        allowed_email_methods = outreach_cfg.get("allowed_email_methods") or []
-        if isinstance(allowed_email_methods, str):
-            allowed_email_methods = [s.strip() for s in allowed_email_methods.split(",") if s.strip()]
-        allowed_email_methods = [str(m).strip().lower() for m in (allowed_email_methods or []) if str(m).strip()]
-        email_methods_filter = allowed_email_methods or None
-
-        blocked_local_parts = outreach_cfg.get("blocked_local_parts") or []
-        if isinstance(blocked_local_parts, str):
-            blocked_local_parts = [s.strip() for s in blocked_local_parts.split(",") if s.strip()]
-        blocked_local_parts = {str(v).strip().lower() for v in (blocked_local_parts or []) if str(v).strip()}
-
-        target_services = outreach_cfg.get("target_services") or []
-        if isinstance(target_services, str):
-            target_services = [s.strip() for s in target_services.split(",") if s.strip()]
-        target_services_set = {str(v).strip().lower() for v in (target_services or []) if str(v).strip()}
-
-        bounce_pause = outreach_cfg.get("bounce_pause") or {}
-        paused = False
-        if bool(bounce_pause.get("enabled", False)):
-            window_days = int(bounce_pause.get("window_days", 7) or 7)
-            threshold = float(bounce_pause.get("threshold", 0.25) or 0.25)
-            min_emailed = int(bounce_pause.get("min_emailed", 20) or 20)
-            deliverability = self.store.email_deliverability(days=window_days, email_methods=email_methods_filter)
-            if int(deliverability["emailed"] or 0) >= min_emailed and float(deliverability["bounce_rate"] or 0.0) >= threshold:
-                paused = True
-                self.store.log_action(
-                    agent_id=agent_id,
-                    action_type="outreach.paused",
-                    trace_id=str(uuid.uuid4()),
-                    payload={
-                        "reason": "bounce_rate_threshold",
-                        "threshold": threshold,
-                        "min_emailed": min_emailed,
-                        "window_days": window_days,
-                        "deliverability": deliverability,
-                        "email_methods_filter": email_methods_filter,
-                    },
-                )
-        if paused:
+        policy = self._build_outreach_policy(outreach_cfg)
+        if self._should_pause_outreach(policy=policy, agent_id=agent_id):
             return 0
 
         sent = 0
         # Fetch extra rows because policy filters can discard many leads (e.g. role inboxes).
-        for row in self.store.get_unsent_leads(min_score=min_score, limit=max(limit * 6, 50), email_methods=email_methods_filter):
+        for row in self.store.get_unsent_leads(
+            min_score=min_score,
+            limit=max(limit * 6, 50),
+            email_methods=policy.email_methods_filter,
+        ):
             lead = Lead(**row)
             if self.store.is_opted_out(lead.email):
                 continue
-            if not _service_matches(lead.service, target_services_set):
-                continue
-            if blocked_local_parts and _email_local_part(lead.email) in blocked_local_parts:
-                continue
-            if not _is_sane_outreach_email(lead.email):
+            if not self._lead_passes_outreach_policy(lead, policy):
                 continue
 
             trace_id = str(uuid.uuid4())
@@ -218,45 +240,8 @@ class Engine:
         min_days = int(follow_cfg.get("min_days_since_last_email", 2))
         cutoff_ts = (datetime.now(UTC) - timedelta(days=min_days)).isoformat()
 
-        allowed_email_methods = outreach_cfg.get("allowed_email_methods") or []
-        if isinstance(allowed_email_methods, str):
-            allowed_email_methods = [s.strip() for s in allowed_email_methods.split(",") if s.strip()]
-        allowed_email_methods = [str(m).strip().lower() for m in (allowed_email_methods or []) if str(m).strip()]
-        email_methods_filter = allowed_email_methods or None
-
-        blocked_local_parts = outreach_cfg.get("blocked_local_parts") or []
-        if isinstance(blocked_local_parts, str):
-            blocked_local_parts = [s.strip() for s in blocked_local_parts.split(",") if s.strip()]
-        blocked_local_parts = {str(v).strip().lower() for v in (blocked_local_parts or []) if str(v).strip()}
-
-        target_services = outreach_cfg.get("target_services") or []
-        if isinstance(target_services, str):
-            target_services = [s.strip() for s in target_services.split(",") if s.strip()]
-        target_services_set = {str(v).strip().lower() for v in (target_services or []) if str(v).strip()}
-
-        bounce_pause = outreach_cfg.get("bounce_pause") or {}
-        paused = False
-        if bool(bounce_pause.get("enabled", False)):
-            window_days = int(bounce_pause.get("window_days", 7) or 7)
-            threshold = float(bounce_pause.get("threshold", 0.25) or 0.25)
-            min_emailed = int(bounce_pause.get("min_emailed", 20) or 20)
-            deliverability = self.store.email_deliverability(days=window_days, email_methods=email_methods_filter)
-            if int(deliverability["emailed"] or 0) >= min_emailed and float(deliverability["bounce_rate"] or 0.0) >= threshold:
-                paused = True
-                self.store.log_action(
-                    agent_id=agent_id,
-                    action_type="outreach.paused",
-                    trace_id=str(uuid.uuid4()),
-                    payload={
-                        "reason": "bounce_rate_threshold",
-                        "threshold": threshold,
-                        "min_emailed": min_emailed,
-                        "window_days": window_days,
-                        "deliverability": deliverability,
-                        "email_methods_filter": email_methods_filter,
-                    },
-                )
-        if paused:
+        policy = self._build_outreach_policy(outreach_cfg)
+        if self._should_pause_outreach(policy=policy, agent_id=agent_id):
             return 0
 
         sent = 0
@@ -265,7 +250,7 @@ class Engine:
             limit=max(limit * 6, 50),
             max_emails_per_lead=max_emails,
             cutoff_ts=cutoff_ts,
-            email_methods=email_methods_filter,
+            email_methods=policy.email_methods_filter,
         ):
             lead = Lead(
                 id=row["id"],
@@ -279,14 +264,11 @@ class Engine:
                 source=row["source"],
                 score=row["score"],
                 status=row["status"],
+                email_method=row["email_method"],
             )
             if self.store.is_opted_out(lead.email):
                 continue
-            if not _service_matches(lead.service, target_services_set):
-                continue
-            if blocked_local_parts and _email_local_part(lead.email) in blocked_local_parts:
-                continue
-            if not _is_sane_outreach_email(lead.email):
+            if not self._lead_passes_outreach_policy(lead, policy):
                 continue
 
             sent_count = int(row["email_message_count"] or 0)

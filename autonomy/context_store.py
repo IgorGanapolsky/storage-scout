@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
@@ -45,6 +45,7 @@ class Lead:
     source: str
     score: int = 0
     status: str = "new"
+    email_method: str = "unknown"  # scrape|guess|unknown
 
 
 class ContextStore:
@@ -73,6 +74,7 @@ class ContextStore:
               source TEXT,
               score INTEGER,
               status TEXT,
+              email_method TEXT,
               created_at TEXT,
               updated_at TEXT
             )
@@ -111,14 +113,41 @@ class ContextStore:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS observations (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lead_id TEXT NOT NULL,
+              content TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+        try:
+            cur.execute("ALTER TABLE actions ADD COLUMN observed INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        self.conn.commit()
+        self._migrate_leads_email_method()
+
+    def _migrate_leads_email_method(self) -> None:
+        """Ensure leads.email_method exists and is normalized.
+
+        This lets the outreach engine enforce a safe deliverability policy.
+        """
+        cur = self.conn.cursor()
+        cols = {str(r[1]) for r in cur.execute("PRAGMA table_info(leads)").fetchall()}
+        if "email_method" not in cols:
+            cur.execute("ALTER TABLE leads ADD COLUMN email_method TEXT")
+        cur.execute("UPDATE leads SET email_method='unknown' WHERE email_method IS NULL OR email_method=''")
         self.conn.commit()
 
     def upsert_lead(self, lead: Lead) -> None:
         cur = self.conn.cursor()
         cur.execute(
             """
-            INSERT INTO leads (id, name, company, email, phone, service, city, state, source, score, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO leads (id, name, company, email, phone, service, city, state, source, score, status, email_method, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               name=excluded.name,
               company=excluded.company,
@@ -129,6 +158,7 @@ class ContextStore:
               state=excluded.state,
               source=excluded.source,
               score=excluded.score,
+              email_method=excluded.email_method,
               updated_at=excluded.updated_at
             """,
             (
@@ -143,24 +173,38 @@ class ContextStore:
                 lead.source,
                 lead.score,
                 lead.status,
+                (lead.email_method or "unknown"),
                 now_iso(),
                 now_iso(),
             ),
         )
         self.conn.commit()
 
-    def get_unsent_leads(self, min_score: int, limit: int) -> Iterable[sqlite3.Row]:
+    def get_unsent_leads(
+        self,
+        min_score: int,
+        limit: int,
+        *,
+        email_methods: list[str] | None = None,
+    ) -> Iterable[sqlite3.Row]:
         cur = self.conn.cursor()
-        cur.execute(
-            """
-            SELECT id, name, company, email, phone, service, city, state, source, score, status
+
+        sql = """
+            SELECT id, name, company, email, phone, service, city, state, source, score, status, email_method
             FROM leads
             WHERE status = 'new' AND score >= ?
+        """
+        params: list[object] = [int(min_score)]
+        if email_methods:
+            placeholders = ",".join(["?"] * len(email_methods))
+            sql += f" AND COALESCE(email_method,'unknown') IN ({placeholders})"
+            params.extend([(m or "unknown") for m in email_methods])
+        sql += """
             ORDER BY score DESC
             LIMIT ?
-            """,
-            (min_score, limit),
-        )
+        """
+        params.append(int(limit))
+        cur.execute(sql, tuple(params))
         return cur.fetchall()
 
     def get_followup_leads(
@@ -169,13 +213,14 @@ class ContextStore:
         limit: int,
         max_emails_per_lead: int,
         cutoff_ts: str,
+        *,
+        email_methods: list[str] | None = None,
     ) -> Iterable[sqlite3.Row]:
         """Return contacted leads eligible for an email follow-up."""
         cur = self.conn.cursor()
-        cur.execute(
-            """
+        sql = """
             SELECT
-              l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status,
+              l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status, l.email_method,
               COALESCE((
                 SELECT COUNT(1)
                 FROM messages m
@@ -199,11 +244,18 @@ class ContextStore:
                 FROM messages m
                 WHERE m.lead_id = l.id AND m.channel = 'email' AND m.status = 'sent'
               ), '') <= ?
+        """
+        params: list[object] = [int(min_score), int(max_emails_per_lead), str(cutoff_ts)]
+        if email_methods:
+            placeholders = ",".join(["?"] * len(email_methods))
+            sql += f" AND COALESCE(l.email_method,'unknown') IN ({placeholders})"
+            params.extend([(m or "unknown") for m in email_methods])
+        sql += """
             ORDER BY last_email_ts ASC
             LIMIT ?
-            """,
-            (min_score, max_emails_per_lead, cutoff_ts, limit),
-        )
+        """
+        params.append(int(limit))
+        cur.execute(sql, tuple(params))
         return cur.fetchall()
 
     def mark_contacted(self, lead_id: str) -> None:
@@ -282,3 +334,130 @@ class ContextStore:
             (record["ts"], agent_id, action_type, trace_id, json.dumps(payload)),
         )
         self.conn.commit()
+
+    def get_unobserved_actions(self, lead_id: str) -> list[sqlite3.Row]:
+        """Return actions for a lead that haven't been compressed into observations yet."""
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT id, ts, agent_id, action_type, trace_id, payload_json
+            FROM actions
+            WHERE observed = 0
+              AND json_extract(payload_json, '$.lead_id') = ?
+            ORDER BY ts ASC
+            """,
+            (lead_id,),
+        )
+        return cur.fetchall()
+
+    def mark_actions_observed(self, action_ids: list[int]) -> None:
+        """Mark actions as compressed into observations."""
+        if not action_ids:
+            return
+        placeholders = ",".join("?" for _ in action_ids)
+        cur = self.conn.cursor()
+        cur.execute(
+            f"UPDATE actions SET observed = 1 WHERE id IN ({placeholders})",
+            action_ids,
+        )
+        self.conn.commit()
+
+    def add_observation(self, lead_id: str, content: str) -> None:
+        """Store a compressed observation for a lead."""
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT INTO observations (lead_id, content, created_at) VALUES (?, ?, ?)",
+            (lead_id, content, now_iso()),
+        )
+        self.conn.commit()
+
+    def get_observations(self, lead_id: str) -> list[sqlite3.Row]:
+        """Return all observations for a lead, oldest first."""
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT id, lead_id, content, created_at FROM observations WHERE lead_id = ? ORDER BY created_at ASC",
+            (lead_id,),
+        )
+        return cur.fetchall()
+
+    def replace_observations(self, lead_id: str, condensed_content: str) -> None:
+        """Replace all observations for a lead with a single condensed observation (Reflector)."""
+        cur = self.conn.cursor()
+        cur.execute("DELETE FROM observations WHERE lead_id = ?", (lead_id,))
+        cur.execute(
+            "INSERT INTO observations (lead_id, content, created_at) VALUES (?, ?, ?)",
+            (lead_id, condensed_content, now_iso()),
+        )
+        self.conn.commit()
+
+    def get_leads_with_unobserved_actions(self) -> list[str]:
+        """Return distinct lead IDs that have unobserved actions."""
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT json_extract(payload_json, '$.lead_id')
+            FROM actions
+            WHERE observed = 0
+              AND json_extract(payload_json, '$.lead_id') IS NOT NULL
+            """,
+        )
+        return [row[0] for row in cur.fetchall()]
+
+    def get_message_history(self, lead_id: str) -> list[sqlite3.Row]:
+        """Return all messages for a lead, oldest first."""
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT id, lead_id, channel, subject, status, ts FROM messages WHERE lead_id = ? ORDER BY ts ASC",
+            (lead_id,),
+        )
+        return cur.fetchall()
+
+    def email_deliverability(self, *, days: int, email_methods: list[str] | None = None) -> Dict[str, object]:
+        """Compute bounce rate for leads emailed in the last N days.
+
+        Denominator is distinct leads emailed (messages.status='sent').
+        Numerator is those leads whose current status is 'bounced'.
+        """
+        cutoff = (datetime.now(UTC) - timedelta(days=int(days))).isoformat()
+        cur = self.conn.cursor()
+
+        where = ""
+        params: list[object] = [cutoff]
+        if email_methods:
+            placeholders = ",".join(["?"] * len(email_methods))
+            where = f" AND COALESCE(l.email_method,'unknown') IN ({placeholders})"
+            params.extend([(m or "unknown") for m in email_methods])
+
+        emailed = int(
+            cur.execute(
+                f"""
+                SELECT COUNT(DISTINCT m.lead_id)
+                FROM messages m
+                JOIN leads l ON l.id = m.lead_id
+                WHERE m.channel='email' AND m.status='sent' AND m.ts >= ?{where}
+                """,
+                tuple(params),
+            ).fetchone()[0]
+            or 0
+        )
+        bounced = int(
+            cur.execute(
+                f"""
+                SELECT COUNT(DISTINCT m.lead_id)
+                FROM messages m
+                JOIN leads l ON l.id = m.lead_id
+                WHERE m.channel='email' AND m.status='sent' AND m.ts >= ?{where}
+                  AND l.status='bounced'
+                """,
+                tuple(params),
+            ).fetchone()[0]
+            or 0
+        )
+
+        bounce_rate = float(bounced) / float(emailed) if emailed else 0.0
+        return {
+            "days": int(days),
+            "emailed": emailed,
+            "bounced": bounced,
+            "bounce_rate": bounce_rate,
+        }

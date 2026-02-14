@@ -16,6 +16,8 @@ class AIOutreachWriter:
     mailing_address: str
     signature: str
     unsubscribe_url: str
+    booking_url: str = ""
+    baseline_example_url: str = ""
     model: str = "gpt-4o"
     store: Optional["ContextStore"] = None
 
@@ -28,6 +30,8 @@ class AIOutreachWriter:
             mailing_address=self.mailing_address,
             signature=self.signature,
             unsubscribe_url=self.unsubscribe_url,
+            booking_url=self.booking_url,
+            baseline_example_url=self.baseline_example_url,
         )
 
     def _get_api_key(self) -> Optional[str]:
