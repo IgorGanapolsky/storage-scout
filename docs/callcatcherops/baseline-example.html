@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CallCatcher Ops — Example Missed-Call Baseline (Med Spa)</title>
-    <meta name="description" content="Example 1-page missed-call baseline for a med spa: estimated missed consults and recovered revenue." />
+    <title>CallCatcher Ops — Example Missed-Call Baseline</title>
+    <meta name="description" content="Example 1-page missed-call baseline: estimated missed appointments and recovered revenue from fast text-back + call-back." />
     <link rel="canonical" href="https://callcatcherops.com/callcatcherops/baseline-example.html" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -33,7 +33,7 @@
 
       @page {
         size: letter;
-        margin: 0.6in;
+        margin: 0.5in;
       }
 
       .wrap {
@@ -75,13 +75,13 @@
 
       h1 {
         font-family: "Space Grotesk", sans-serif;
-        font-size: 2rem;
-        margin: 8px 0 6px;
+        font-size: 1.85rem;
+        margin: 6px 0 4px;
         line-height: 1.15;
       }
 
       .subhead {
-        margin: 0 0 16px;
+        margin: 0 0 12px;
         color: var(--muted);
         font-size: 1.02rem;
       }
@@ -89,26 +89,26 @@
       .grid {
         display: grid;
         grid-template-columns: 1.2fr 0.8fr;
-        gap: 16px;
-        margin-top: 14px;
+        gap: 12px;
+        margin-top: 10px;
       }
 
       .panel {
         border-radius: var(--radius);
         border: 1px solid rgba(15, 28, 27, 0.12);
-        padding: 16px 18px;
+        padding: 14px 16px;
         box-shadow: 0 18px 40px var(--shadow);
       }
 
       .numbers {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
+        gap: 10px;
       }
 
       .kpi {
         border-radius: 14px;
-        padding: 12px 14px;
+        padding: 10px 12px;
         background: linear-gradient(140deg, rgba(92, 164, 169, 0.14), rgba(191, 230, 194, 0.18));
         border: 1px solid rgba(15, 28, 27, 0.08);
       }
@@ -123,14 +123,14 @@
       .kpi .value {
         font-family: "Space Grotesk", sans-serif;
         font-weight: 700;
-        font-size: 1.5rem;
-        margin-top: 6px;
+        font-size: 1.4rem;
+        margin-top: 4px;
       }
 
       .kpi .small {
         color: var(--muted);
-        margin-top: 4px;
-        font-size: 0.92rem;
+        margin-top: 3px;
+        font-size: 0.88rem;
       }
 
       h2 {
@@ -144,12 +144,12 @@
         padding-left: 18px;
       }
 
-      li { margin-bottom: 8px; }
+      li { margin-bottom: 6px; }
 
       .callout {
-        margin-top: 14px;
+        margin-top: 10px;
         border-left: 4px solid var(--ember);
-        padding: 10px 12px;
+        padding: 9px 11px;
         background: rgba(255, 122, 89, 0.07);
         border-radius: 12px;
       }
@@ -159,8 +159,8 @@
       }
 
       .footer {
-        margin-top: 18px;
-        padding-top: 12px;
+        margin-top: 14px;
+        padding-top: 10px;
         border-top: 1px solid rgba(15, 28, 27, 0.12);
         display: flex;
         justify-content: space-between;
@@ -183,8 +183,8 @@
           <div>CallCatcher Ops</div>
         </div>
         <div class="meta">
-          Example baseline (Med Spa)<br />
-          <span class="mono">As-of: 2026-02-14</span>
+          Example baseline (generic)<br />
+          <span class="mono">As-of: 2026-02-15</span>
         </div>
       </header>
 
@@ -200,12 +200,12 @@
           <div class="kpi">
             <div class="label">Inbound calls / day</div>
             <div class="value">40</div>
-            <div class="small">typical for an established med spa</div>
+            <div class="small">example only</div>
           </div>
           <div class="kpi">
             <div class="label">Missed-call rate</div>
             <div class="value">25%</div>
-            <div class="small">after-hours + treatment-time overlap</div>
+            <div class="small">after-hours + busy-hours overlap</div>
           </div>
           <div class="kpi">
             <div class="label">Missed calls / day</div>
@@ -215,7 +215,7 @@
           <div class="kpi">
             <div class="label">Recovered revenue / day</div>
             <div class="value">$2,000</div>
-            <div class="small">10 × $200 avg booking</div>
+            <div class="small">10 × $200 avg appointment</div>
           </div>
         </div>
 
@@ -229,8 +229,8 @@
         <div class="panel">
           <h2>Assumptions (example)</h2>
           <ul>
-            <li>Calls peak during treatments and after 5pm; voicemail response is delayed.</li>
-            <li>Average booking value $200 (mix of consults + services).</li>
+            <li>Calls peak during lunch/busy hours and after-hours; voicemail response is delayed.</li>
+            <li>Average appointment value $200 (varies widely).</li>
             <li>Missed-call rate 25% (varies widely by staffing and hours).</li>
             <li>Recovery rate 30% (fast text-back, call-back routing, booking link).</li>
           </ul>
@@ -259,4 +259,3 @@
     </div>
   </body>
 </html>
-

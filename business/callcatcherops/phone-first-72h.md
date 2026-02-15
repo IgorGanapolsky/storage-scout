@@ -6,15 +6,16 @@ Goal: book baseline calls and close 1 pilot. Email is supporting only.
 
 ## Assets (Send These Every Time)
 - Baseline example (PDF): https://callcatcherops.com/callcatcherops/baseline-example.pdf
+- Dentist page: https://callcatcherops.com/callcatcherops/dentist.html
 - Baseline intake: https://callcatcherops.com/callcatcherops/intake.html
 - Book baseline call: https://calendly.com/igorganapolsky/audit-call
 
-## Call List (Med Spas With Phone Numbers)
+## Call List (One Vertical With Phone Numbers)
 Generate a call list CSV (gitignored):
 ```bash
 python3 autonomy/tools/call_list.py \
   --sqlite autonomy/state/autonomy_live.sqlite3 \
-  --services "med spa" \
+  --services "Dentist" \
   --limit 200
 ```
 
@@ -41,11 +42,15 @@ python3 autonomy/tools/log_call.py --email "lead@example.com" --outcome voicemai
 1. Permission + context
    “Hey, is this the front desk? Quick question. I’m Igor with CallCatcher Ops.”
 
-2. Problem (specific to med spa)
+2. Problem (pick the vertical)
+   Dentist:
+   “When a new patient calls during lunch or after-hours and hits voicemail, many just call the next office. They don’t leave a voicemail.”
+
+   Med spa:
    “When a new client calls after-hours or while your team is in treatment rooms, they usually don’t leave a voicemail. They call the next med spa.”
 
 3. Offer (low friction)
-   “I can run a free 1-page baseline for your med spa: where calls are falling through and what recovery would look like.”
+   “I can run a free 1-page baseline: where calls are falling through and what recovery would look like.”
 
 4. Close (one simple next step)
    “Do you want me to send the example baseline and book 15 minutes?”
