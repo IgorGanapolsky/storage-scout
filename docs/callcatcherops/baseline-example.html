@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CallCatcher Ops — Example Missed-Call Baseline (Med Spa)</title>
+    <meta name="description" content="Example 1-page missed-call baseline for a med spa: estimated missed consults and recovered revenue." />
+    <link rel="canonical" href="https://callcatcherops.com/callcatcherops/baseline-example.html" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #0f1c1b;
+        --muted: #3b504d;
+        --mist: #f4f2ed;
+        --sand: #f5d7b2;
+        --sage: #bfe6c2;
+        --sea: #5ca4a9;
+        --ember: #ff7a59;
+        --shadow: rgba(15, 28, 27, 0.14);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "Spectral", serif;
+        color: var(--ink);
+        background: #ffffff;
+      }
+
+      @page {
+        size: letter;
+        margin: 0.6in;
+      }
+
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+      }
+
+      .badge {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: linear-gradient(140deg, var(--sea), var(--sage));
+        box-shadow: 0 10px 24px rgba(92, 164, 169, 0.25);
+      }
+
+      .meta {
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--muted);
+        font-size: 0.95rem;
+        text-align: right;
+      }
+
+      h1 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 2rem;
+        margin: 8px 0 6px;
+        line-height: 1.15;
+      }
+
+      .subhead {
+        margin: 0 0 16px;
+        color: var(--muted);
+        font-size: 1.02rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+        margin-top: 14px;
+      }
+
+      .panel {
+        border-radius: var(--radius);
+        border: 1px solid rgba(15, 28, 27, 0.12);
+        padding: 16px 18px;
+        box-shadow: 0 18px 40px var(--shadow);
+      }
+
+      .numbers {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .kpi {
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: linear-gradient(140deg, rgba(92, 164, 169, 0.14), rgba(191, 230, 194, 0.18));
+        border: 1px solid rgba(15, 28, 27, 0.08);
+      }
+
+      .kpi .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .kpi .value {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 700;
+        font-size: 1.5rem;
+        margin-top: 6px;
+      }
+
+      .kpi .small {
+        color: var(--muted);
+        margin-top: 4px;
+        font-size: 0.92rem;
+      }
+
+      h2 {
+        font-family: "Space Grotesk", sans-serif;
+        margin: 0 0 10px;
+        font-size: 1.08rem;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li { margin-bottom: 8px; }
+
+      .callout {
+        margin-top: 14px;
+        border-left: 4px solid var(--ember);
+        padding: 10px 12px;
+        background: rgba(255, 122, 89, 0.07);
+        border-radius: 12px;
+      }
+
+      .callout strong {
+        font-family: "Space Grotesk", sans-serif;
+      }
+
+      .footer {
+        margin-top: 18px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(15, 28, 27, 0.12);
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.92rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="badge" aria-hidden="true"></div>
+          <div>CallCatcher Ops</div>
+        </div>
+        <div class="meta">
+          Example baseline (Med Spa)<br />
+          <span class="mono">As-of: 2026-02-14</span>
+        </div>
+      </header>
+
+      <h1>Missed-Call Baseline (Example)</h1>
+      <p class="subhead">
+        A 1-page estimate of missed-call leakage and recovered revenue from missed-call text-back + booking.
+        This is an example. Your actual baseline uses your call routing, hours, and booking value.
+      </p>
+
+      <div class="panel">
+        <h2>Topline estimate</h2>
+        <div class="numbers">
+          <div class="kpi">
+            <div class="label">Inbound calls / day</div>
+            <div class="value">40</div>
+            <div class="small">typical for an established med spa</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Missed-call rate</div>
+            <div class="value">25%</div>
+            <div class="small">after-hours + treatment-time overlap</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Missed calls / day</div>
+            <div class="value">10</div>
+            <div class="small">40 × 25% = 10</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Recovered revenue / day</div>
+            <div class="value">$2,000</div>
+            <div class="small">10 × $200 avg booking</div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <strong>Opportunity:</strong> If even 30% of missed calls convert via fast text-back + booking, this example
+          recovers ~3 bookings/day (~$600/day) without changing ad spend.
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Assumptions (example)</h2>
+          <ul>
+            <li>Calls peak during treatments and after 5pm; voicemail response is delayed.</li>
+            <li>Average booking value $200 (mix of consults + services).</li>
+            <li>Missed-call rate 25% (varies widely by staffing and hours).</li>
+            <li>Recovery rate 30% (fast text-back, call-back routing, booking link).</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>What we install</h2>
+          <ul>
+            <li>Missed-call text-back within 60 seconds</li>
+            <li>After-hours routing and call-back schedule</li>
+            <li>Booking link and simple qualification prompts</li>
+            <li>Owner alerts for high-intent callers</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>
+          Next step: book a 15-min baseline call<br />
+          <span class="mono">https://callcatcherops.com/callcatcherops/intake.html</span>
+        </div>
+        <div>
+          Email: <span class="mono">hello@callcatcherops.com</span><br />
+          Coral Springs, FL
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
