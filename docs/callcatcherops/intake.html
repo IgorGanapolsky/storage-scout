@@ -65,6 +65,15 @@
         text-decoration: none;
       }
 
+      a.inline-link {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      a.inline-link:hover {
+        opacity: 0.85;
+      }
+
       .wrap {
         max-width: 980px;
         margin: 0 auto;
@@ -243,6 +252,10 @@
 
       <h1>Get your free missed-call baseline</h1>
       <p class="subhead">Share your call flow details and we will respond within one business day with a baseline recovery estimate and next steps.</p>
+      <p class="note" style="margin-top: 12px;">
+        Want to see what the deliverable looks like?
+        <a class="inline-link" data-cta="intake_baseline_example" href="./baseline-example.pdf">Example baseline (PDF)</a>
+      </p>
 
       <div class="grid-2" style="margin-bottom: 24px;">
         <div class="step-card">

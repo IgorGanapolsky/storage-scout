@@ -9,6 +9,7 @@
 - https://callcatcherops.com/callcatcherops/
 - https://callcatcherops.com/callcatcherops/intake.html
 - https://callcatcherops.com/callcatcherops/thanks.html
+- https://callcatcherops.com/callcatcherops/baseline-example.pdf
 - https://callcatcherops.com/unsubscribe.html
 
 ## Service Definition

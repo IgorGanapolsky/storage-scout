@@ -73,6 +73,15 @@
         text-decoration: none;
       }
 
+      a.inline-link {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      a.inline-link:hover {
+        opacity: 0.85;
+      }
+
       .wrap {
         max-width: 1120px;
         margin: 0 auto;
@@ -350,7 +359,10 @@
             <a class="button primary" data-cta="hero_baseline" href="./intake.html">Get a free baseline</a>
             <a class="button secondary" data-cta="hero_pricing" href="#pricing">See pricing ladder</a>
           </div>
-          <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">2-minute intake, baseline within one business day.</p>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">
+            2-minute intake, baseline within one business day.
+            <a class="inline-link" data-cta="hero_baseline_example" href="./baseline-example.pdf">See an example baseline (PDF)</a>
+          </p>
           <p style="margin-top: 18px; font-size: 0.95rem; color: #5a6f6c;">Designed for med spas, home services, clinics, and local franchises.</p>
         </div>
         <div class="hero-card">
