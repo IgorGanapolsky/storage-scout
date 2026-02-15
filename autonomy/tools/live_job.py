@@ -182,6 +182,17 @@ def _format_report(
         f"{scoreboard.email_sent_recent} in last {int(scoreboard_days)} days | "
         f"last sent: {scoreboard.last_email_ts or 'n/a'}"
     )
+    lines.append(
+        "Deliverability: "
+        f"{int(scoreboard.bounced_leads_recent)}/{int(scoreboard.emailed_leads_recent)} bounced leads in last {int(scoreboard_days)} days "
+        f"({float(scoreboard.bounce_rate_recent or 0.0):.0%})"
+    )
+    lines.append(
+        "Calls: "
+        f"{int(scoreboard.call_attempts_total)} total | "
+        f"{int(scoreboard.call_attempts_recent)} in last {int(scoreboard_days)} days | "
+        f"booked: {int(scoreboard.call_booked_total)} total ({int(scoreboard.call_booked_recent)} recent)"
+    )
     lines.append(f"Opt-outs recorded: {scoreboard.opt_out_total}")
     return "\n".join(lines).strip() + "\n"
 

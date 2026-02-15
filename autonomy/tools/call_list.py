@@ -56,6 +56,20 @@ class CallListRow:
     notes: str = ""
 
 
+def _now_utc_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _default_sqlite_path() -> Path:
+    for candidate in (
+        Path("autonomy/state/autonomy_live.sqlite3"),
+        Path("autonomy/state/autonomy.sqlite3"),
+    ):
+        if candidate.exists():
+            return candidate
+    return Path("autonomy/state/autonomy_live.sqlite3")
+
+
 def _email_local_part(email: str) -> str:
     return (email or "").strip().lower().split("@", 1)[0]
 
@@ -93,12 +107,14 @@ def generate_call_list(
     require_phone: bool = True,
     include_opt_outs: bool = False,
     source_csv: Path | None = None,
+    statuses: list[str] | None = None,
 ) -> list[CallListRow]:
     if not sqlite_path.exists():
         raise SystemExit(f"Missing sqlite DB: {sqlite_path}")
 
     website_by_email = _load_website_map(source_csv)
     services_norm = [s.strip().lower() for s in services if s.strip()]
+    statuses_norm = [s.strip().lower() for s in (statuses or []) if s.strip()]
 
     clauses: list[str] = []
     params: list[object] = []
@@ -106,6 +122,10 @@ def generate_call_list(
         placeholders = ",".join(["?"] * len(services_norm))
         clauses.append(f"LOWER(COALESCE(service,'')) IN ({placeholders})")
         params.extend(services_norm)
+    if statuses_norm:
+        placeholders = ",".join(["?"] * len(statuses_norm))
+        clauses.append(f"LOWER(COALESCE(status,'')) IN ({placeholders})")
+        params.extend(statuses_norm)
     if require_phone:
         clauses.append("TRIM(COALESCE(phone,'')) <> ''")
     if not include_opt_outs:
@@ -203,11 +223,16 @@ def write_call_list(path: Path, rows: list[CallListRow]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a phone-first call list from the outreach SQLite DB.")
-    parser.add_argument("--sqlite", default="autonomy/state/autonomy_live.sqlite3", help="Path to sqlite DB.")
+    parser.add_argument("--sqlite", default=str(_default_sqlite_path()), help="Path to sqlite DB.")
     parser.add_argument(
         "--services",
         default="med spa",
         help="Comma-separated services to include (exact match on lead.service, lowercased).",
+    )
+    parser.add_argument(
+        "--statuses",
+        default="",
+        help="Optional comma-separated lead statuses to include (e.g. 'new,contacted').",
     )
     parser.add_argument("--limit", type=int, default=200, help="Max rows to output.")
     parser.add_argument("--include-opt-outs", action="store_true", help="Include leads that opted out (not recommended).")
@@ -226,6 +251,7 @@ def main() -> None:
 
     sqlite_path = Path(args.sqlite)
     services = [s.strip() for s in (args.services or "").split(",") if s.strip()]
+    statuses = [s.strip() for s in (args.statuses or "").split(",") if s.strip()]
     today = datetime.now(UTC).date().isoformat()
     services_slug = "-".join([s.lower().replace(" ", "_") for s in services]) or "all"
     output = args.output or f"autonomy/state/call_list_{services_slug}_{today}.csv"
@@ -233,14 +259,17 @@ def main() -> None:
     rows = generate_call_list(
         sqlite_path=sqlite_path,
         services=services,
+        statuses=statuses or None,
         limit=int(args.limit),
         require_phone=not bool(args.no_require_phone),
         include_opt_outs=bool(args.include_opt_outs),
         source_csv=Path(args.source_csv) if args.source_csv else None,
     )
     write_call_list(Path(output), rows)
+    print(f"As-of (UTC): {_now_utc_iso()}")
     print(f"Wrote {len(rows)} rows -> {output}")
 
 
 if __name__ == "__main__":
     main()
+
