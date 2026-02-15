@@ -16,6 +16,7 @@ if __package__ is None:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from autonomy.engine import Engine, load_config
+from autonomy.tools.call_list import generate_call_list, write_call_list
 from autonomy.tools.lead_gen_broward import (
     DEFAULT_CATEGORIES,
     build_leads,
@@ -118,6 +119,7 @@ def _send_ntfy(
 def _format_report(
     *,
     leadgen_new: int,
+    call_list: dict | None = None,
     engine_result: dict,
     inbox_result,
     scoreboard,
@@ -132,6 +134,14 @@ def _format_report(
     lines.append("")
     lines.append("Lead gen")
     lines.append(f"- new_leads_generated: {int(leadgen_new)}")
+    if call_list is not None:
+        lines.append("")
+        lines.append("Call list (phone-first)")
+        services = call_list.get("services") or []
+        services_str = ",".join([str(s) for s in services]) if services else "n/a"
+        lines.append(f"- services: {services_str}")
+        lines.append(f"- rows: {int(call_list.get('rows') or 0)}")
+        lines.append(f"- path: {call_list.get('path') or ''}")
     lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
@@ -244,6 +254,57 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
     return len(leads)
 
 
+def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
+    raw_services = (env.get("DAILY_CALL_LIST_SERVICES") or "").strip()
+    if not raw_services:
+        return None
+
+    services = [s.strip() for s in raw_services.split(",") if s.strip()]
+    if not services:
+        return None
+
+    limit_raw = (env.get("DAILY_CALL_LIST_LIMIT") or "").strip()
+    limit = 25
+    if limit_raw:
+        try:
+            limit = int(limit_raw)
+        except Exception:
+            limit = 25
+    if limit <= 0:
+        return None
+
+    output_rel = (env.get("DAILY_CALL_LIST_OUTPUT") or "").strip()
+    if not output_rel:
+        today_utc = datetime.now(UTC).date().isoformat()
+        slug = "-".join([s.lower().replace(" ", "_") for s in services]) or "all"
+        output_rel = f"autonomy/state/call_list_{slug}_{today_utc}.csv"
+
+    # Pull website URLs from the first configured CSV lead source, if available.
+    source_csv_path: Path | None = None
+    for src in (cfg.lead_sources or []):
+        if (src.get("type") or "").lower() == "csv":
+            rel = str(src.get("path") or "").strip()
+            if rel:
+                source_csv_path = (repo_root / rel).resolve()
+            break
+
+    sqlite_path_raw = Path(cfg.storage["sqlite_path"])
+    sqlite_path = sqlite_path_raw if sqlite_path_raw.is_absolute() else (repo_root / sqlite_path_raw).resolve()
+
+    rows = generate_call_list(
+        sqlite_path=sqlite_path,
+        services=services,
+        limit=limit,
+        require_phone=True,
+        include_opt_outs=False,
+        source_csv=source_csv_path,
+    )
+    output_path = (repo_root / output_rel).resolve()
+    write_call_list(output_path, rows)
+
+    return {"services": services, "rows": len(rows), "path": str(output_rel)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="CallCatcher Ops live daily job: inbox sync + outreach + report.")
     parser.add_argument("--config", default="autonomy/state/config.callcatcherops.live.json", help="Live config path.")
@@ -321,6 +382,7 @@ def main() -> None:
 
     # 3) Scoreboard + report.
     board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
+    call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
     goal_task_data = {
         "generated": engine_result.get("goal_tasks_generated", 0),
         "done": engine_result.get("goal_tasks_done", 0),
@@ -328,6 +390,7 @@ def main() -> None:
     }
     report = _format_report(
         leadgen_new=leadgen_new,
+        call_list=call_list,
         engine_result=engine_result,
         inbox_result=inbox_result,
         scoreboard=board,

@@ -109,8 +109,13 @@ class GoalExecutor:
             if not api_key:
                 return ExecutionResult(task_id=task.id, success=False, output="No Google API key in environment")
 
+            categories = (os.environ.get("DAILY_LEADGEN_CATEGORIES") or os.environ.get("LEADGEN_CATEGORIES") or "").strip()
+            cmd = ["python3", str(script), "--limit", "10"]
+            if categories:
+                cmd.extend(["--categories", categories])
+
             result = subprocess.run(
-                ["python3", str(script), "--limit", "10"],
+                cmd,
                 capture_output=True, text=True, timeout=120,
                 cwd=str(REPO_ROOT),
             )
