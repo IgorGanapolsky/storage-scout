@@ -85,12 +85,17 @@ class Engine:
             smtp_password_env=config.email["smtp_password_env"],
         )
         self.sender = EmailSender(email_cfg, dry_run=(config.mode == "dry-run"))
+
+        observer_raw = config.agents.get("observer", {}) or {}
+        self.observer_enabled = bool(observer_raw.get("enabled", False))
+        self.goals_enabled = bool((config.agents.get("goals", {}) or {}).get("enabled", False))
+
         observer_cfg = ObserverConfig(
-            observe_threshold=int(config.agents.get("observer", {}).get("observe_threshold", 3)),
-            reflect_threshold=int(config.agents.get("observer", {}).get("reflect_threshold", 5)),
+            observe_threshold=int(observer_raw.get("observe_threshold", 3)),
+            reflect_threshold=int(observer_raw.get("reflect_threshold", 5)),
         )
-        self.observer = Observer(self.store, observer_cfg)
-        self.reflector = Reflector(self.store, observer_cfg)
+        self.observer = Observer(self.store, observer_cfg) if self.observer_enabled else None
+        self.reflector = Reflector(self.store, observer_cfg) if self.observer_enabled else None
 
     def ingest_leads(self) -> None:
         for src in self.config.lead_sources:
@@ -312,18 +317,25 @@ class Engine:
 
     def run(self) -> Dict[str, int]:
         self.ingest_leads()
-        observed = self.observer.observe_all()
-        reflected = self.reflector.reflect_all()
+        observed = 0
+        reflected = 0
+        if self.observer_enabled and self.observer is not None and self.reflector is not None:
+            observed = self.observer.observe_all()
+            reflected = self.reflector.reflect_all()
         sent_initial = self.run_initial_outreach()
         sent_followup = self.run_followups()
 
         # Goal-driven autonomous tasks
-        planner = GoalPlanner(self.store)
-        tasks = planner.generate_daily_tasks()
-        executor = GoalExecutor(self.store)
-        results = executor.execute_all_pending()
-        tasks_done = sum(1 for r in results if r.success)
-        tasks_failed = sum(1 for r in results if not r.success)
+        tasks = []
+        tasks_done = 0
+        tasks_failed = 0
+        if self.goals_enabled:
+            planner = GoalPlanner(self.store)
+            tasks = planner.generate_daily_tasks()
+            executor = GoalExecutor(self.store)
+            results = executor.execute_all_pending()
+            tasks_done = sum(1 for r in results if r.success)
+            tasks_failed = sum(1 for r in results if not r.success)
 
         return {
             "observed": observed,

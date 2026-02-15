@@ -5,6 +5,7 @@ import json
 import os
 import smtplib
 import sys
+import time
 import urllib.request
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -34,6 +35,15 @@ from autonomy.tools.scoreboard import load_scoreboard
 UTC = timezone.utc
 
 
+def _truthy_env(raw: str | None, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    val = str(raw).strip().lower()
+    if not val:
+        return default
+    return val not in {"0", "false", "no", "off"}
+
+
 def _read_json(path: Path) -> dict:
     try:
         if not path.exists():
@@ -59,6 +69,32 @@ def _send_email(*, smtp_user: str, smtp_password: str, to_email: str, subject: s
         server.starttls()
         server.login(smtp_user, smtp_password)
         server.send_message(msg)
+
+
+def _acquire_lock(lock_path: Path) -> object | None:
+    """Best-effort single-instance lock (prevents double-runs and duplicate reports)."""
+    try:
+        import fcntl  # unix-only
+    except Exception:  # pragma: no cover
+        return None
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = lock_path.open("w", encoding="utf-8")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        try:
+            fh.close()
+        except Exception:
+            pass
+        return None
+
+    try:
+        fh.write(str(os.getpid()))
+        fh.flush()
+    except Exception:
+        pass
+    return fh
 
 
 def _iter_ntfy_topics(raw: str) -> list[str]:
@@ -333,6 +369,16 @@ def main() -> None:
     dotenv_path = (repo_root / args.dotenv).resolve()
     env = load_dotenv(dotenv_path)
 
+    lock_enabled = _truthy_env(env.get("LIVE_JOB_LOCK"), default=True)
+    lock_fh = None
+    if lock_enabled:
+        lock_fh = _acquire_lock(repo_root / "autonomy" / "state" / "live_job.lock")
+        if lock_fh is None:
+            print("live_job: another instance appears to be running; exiting", file=sys.stderr)
+            return
+
+    t0 = time.monotonic()
+
     report_delivery = (env.get("REPORT_DELIVERY") or "email").strip().lower()
     if report_delivery not in {"email", "ntfy", "both", "none"}:
         report_delivery = "email"
@@ -364,6 +410,7 @@ def main() -> None:
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
+    print(f"live_job: leadgen_new={leadgen_new} (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     # 1) Sync inbox first so bounces/replies suppress follow-ups.
     fastmail_state_path = repo_root / "autonomy" / "state" / "fastmail_sync_state.json"
@@ -389,10 +436,12 @@ def main() -> None:
             stripe_payments=0,
             last_uid=prior_uid,
         )
+    print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     # 2) Run outreach (initial + follow-ups) using live config.
     engine = Engine(cfg)
     engine_result = engine.run()
+    print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     funnel_enabled = (env.get("FUNNEL_WATCHDOG") or "1").strip().lower() not in {"0", "false", "no", "off"}
     funnel_result: FunnelWatchdogResult | None = None
@@ -406,6 +455,7 @@ def main() -> None:
         except Exception as exc:
             funnel_result = FunnelWatchdogResult(as_of_utc=datetime.now(UTC).replace(microsecond=0).isoformat())
             funnel_result.add_issue(name="watchdog_error", url=cfg.company.get("intake_url", ""), detail=str(exc))
+    print(f"live_job: funnel_watchdog done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     # 3) Scoreboard + report.
     board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
@@ -515,9 +565,15 @@ def main() -> None:
                     "sent_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
                 },
             )
+    print(f"live_job: report done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     # Helpful for launchd logs.
     print(report)
+    try:
+        if lock_fh is not None:
+            lock_fh.close()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

@@ -116,8 +116,16 @@ def test_live_job_report_formatting() -> None:
         leads_other=0,
         email_sent_total=7,
         email_sent_recent=7,
+        emailed_leads_recent=7,
+        bounced_leads_recent=2,
+        bounce_rate_recent=2 / 7,
         opt_out_total=0,
         last_email_ts="2026-02-13T00:00:00+00:00",
+        call_attempts_total=0,
+        call_attempts_recent=0,
+        call_booked_total=0,
+        call_booked_recent=0,
+        last_call_ts="",
     )
     report = _format_report(
         leadgen_new=0,
