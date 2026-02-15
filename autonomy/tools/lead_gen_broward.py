@@ -469,7 +469,8 @@ def write_leads(path: Path, leads: List[Dict], replace: bool) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate Broward County leads via Google Places.")
     parser.add_argument("--limit", type=int, default=30, help="Number of leads to generate.")
-    parser.add_argument("--output", type=Path, default=DATA_DIR / "leads_callcatcherops.csv")
+    # Default to autonomy/state to avoid accidentally committing real lead data.
+    parser.add_argument("--output", type=Path, default=STATE_DIR / "leads_callcatcherops_real.csv")
     parser.add_argument("--replace", action="store_true", help="Replace output file instead of appending.")
     parser.add_argument(
         "--categories",

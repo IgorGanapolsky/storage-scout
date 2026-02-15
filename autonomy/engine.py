@@ -169,6 +169,8 @@ class Engine:
         outreach_cfg = self.config.agents["outreach"]
         min_score = int(outreach_cfg["min_score"])
         limit = int(outreach_cfg["daily_send_limit"])
+        if limit <= 0:
+            return 0
         agent_id = outreach_cfg["agent_id"]
 
         policy = self._build_outreach_policy(outreach_cfg)
