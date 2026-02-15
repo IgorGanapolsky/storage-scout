@@ -26,7 +26,7 @@ from autonomy.tools.lead_gen_broward import (
     save_city_index,
     write_leads,
 )
-from autonomy.tools.fastmail_inbox_sync import load_dotenv, sync_fastmail_inbox
+from autonomy.tools.fastmail_inbox_sync import InboxSyncResult, load_dotenv, sync_fastmail_inbox
 from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.scoreboard import load_scoreboard
 
@@ -355,13 +355,29 @@ def main() -> None:
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
 
     # 1) Sync inbox first so bounces/replies suppress follow-ups.
-    inbox_result = sync_fastmail_inbox(
-        sqlite_path=Path(cfg.storage["sqlite_path"]),
-        audit_log=Path(cfg.storage["audit_log"]),
-        fastmail_user=fastmail_user,
-        fastmail_password=smtp_password,
-        state_path=repo_root / "autonomy" / "state" / "fastmail_sync_state.json",
-    )
+    fastmail_state_path = repo_root / "autonomy" / "state" / "fastmail_sync_state.json"
+    try:
+        inbox_result = sync_fastmail_inbox(
+            sqlite_path=Path(cfg.storage["sqlite_path"]),
+            audit_log=Path(cfg.storage["audit_log"]),
+            fastmail_user=fastmail_user,
+            fastmail_password=smtp_password,
+            state_path=fastmail_state_path,
+        )
+    except Exception as exc:
+        # Never block the daily job if IMAP is flaky.
+        print(f"inbox sync failed: {exc}", file=sys.stderr)
+        prior_uid = int((_read_json(fastmail_state_path).get("last_uid") or 0) or 0)
+        inbox_result = InboxSyncResult(
+            processed_messages=0,
+            new_bounces=0,
+            new_replies=0,
+            new_opt_outs=0,
+            intake_submissions=0,
+            calendly_bookings=0,
+            stripe_payments=0,
+            last_uid=prior_uid,
+        )
 
     # 2) Run outreach (initial + follow-ups) using live config.
     engine = Engine(cfg)
