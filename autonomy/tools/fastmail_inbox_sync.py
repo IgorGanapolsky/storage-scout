@@ -23,6 +23,8 @@ BOUNCE_SUBJECT_RE = re.compile(
 )
 OPT_OUT_RE = re.compile(r"\b(unsubscribe|opt\s*out|remove me)\b", re.IGNORECASE)
 
+IMAP_TIMEOUT_SECS = 20
+
 
 @dataclass
 class InboxSyncResult:
@@ -156,7 +158,12 @@ def sync_fastmail_inbox(
     stripe_payments = 0
     max_uid_seen = last_uid
 
-    imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993)
+    # Ensure the daily job can't hang indefinitely on IMAP network issues.
+    try:
+        imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993, timeout=IMAP_TIMEOUT_SECS)
+    except TypeError:
+        # Older Python versions may not support the timeout kwarg.
+        imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993)
     try:
         imap.login(fastmail_user, fastmail_password)
         imap.select(mailbox)

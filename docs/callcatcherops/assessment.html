@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Free Missed Call Assessment | CallCatcher Ops</title>
+    <meta name="description" content="Calculate how much revenue your business leaks from missed calls. Free 2-minute assessment reveals your estimated monthly and annual revenue loss — and how much you can recover." />
+    <meta name="keywords" content="missed call assessment, revenue leak calculator, missed call recovery, local business phone leads, call tracking ROI" />
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <link rel="canonical" href="https://callcatcherops.com/callcatcherops/assessment.html" />
+    <meta property="og:title" content="Free Missed Call Assessment | CallCatcher Ops" />
+    <meta property="og:description" content="Calculate how much revenue your business leaks from missed calls. Free 2-minute assessment with personalized recovery estimate." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://callcatcherops.com/callcatcherops/assessment.html" />
+    <meta property="og:site_name" content="CallCatcher Ops" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Free Missed Call Assessment | CallCatcher Ops" />
+    <meta name="twitter:description" content="Calculate how much revenue your business leaks from missed calls. Free 2-minute assessment." />
+    <meta name="theme-color" content="#0F1C1B" />
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W8E0EKB7W4"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-W8E0EKB7W4');
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #0f1c1b;
+        --mist: #f4f2ed;
+        --sand: #f5d7b2;
+        --sage: #bfe6c2;
+        --sea: #5ca4a9;
+        --ember: #ff7a59;
+        --steel: #2a3d3a;
+        --shadow: rgba(15, 28, 27, 0.16);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "Spectral", serif;
+        color: var(--ink);
+        background: radial-gradient(1200px 800px at 10% -10%, #fff9f1 0%, #f5efe5 35%, #f1f6f2 80%);
+        min-height: 100vh;
+      }
+
+      a { color: inherit; text-decoration: none; }
+
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 24px 96px;
+      }
+
+      header {
+        padding: 40px 0 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      .brand-badge {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: linear-gradient(140deg, var(--sea), var(--sage));
+        box-shadow: 0 10px 30px rgba(92, 164, 169, 0.3);
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px 22px;
+        border-radius: 999px;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        font-size: 1rem;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .button.primary {
+        background: var(--ink);
+        color: #fff;
+        box-shadow: 0 18px 30px rgba(15, 28, 27, 0.2);
+      }
+
+      .button.secondary {
+        border: 1px solid var(--ink);
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.6);
+      }
+
+      .button:hover { transform: translateY(-2px); }
+      .button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      /* Progress bar */
+      .progress-wrap {
+        margin: 0 0 40px;
+      }
+
+      .progress-label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.82rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #536b68;
+        margin-bottom: 10px;
+      }
+
+      .progress-track {
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(15, 28, 27, 0.08);
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, var(--sea), var(--sage));
+        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Step card */
+      .step-card {
+        background: #fff;
+        border-radius: var(--radius);
+        padding: 36px 32px;
+        box-shadow: 0 24px 50px var(--shadow);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .step-card::after {
+        content: "";
+        position: absolute;
+        inset: -20% -10% auto auto;
+        width: 220px;
+        height: 220px;
+        background: radial-gradient(circle, rgba(255, 122, 89, 0.12), transparent 65%);
+        pointer-events: none;
+      }
+
+      .step { display: none; }
+      .step.active { display: block; animation: fadeIn 0.35s ease; }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .step h2 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.5rem;
+        margin: 0 0 6px;
+      }
+
+      .step .subtitle {
+        color: #536b68;
+        font-size: 0.95rem;
+        margin: 0 0 28px;
+      }
+
+      /* Radio / Checkbox options */
+      .option-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .option-list label {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px;
+        border-radius: 12px;
+        border: 1.5px solid rgba(15, 28, 27, 0.1);
+        cursor: pointer;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 500;
+        transition: border-color 0.2s, background 0.2s;
+      }
+
+      .option-list label:hover {
+        border-color: var(--sea);
+        background: rgba(92, 164, 169, 0.04);
+      }
+
+      .option-list input[type="radio"],
+      .option-list input[type="checkbox"] {
+        accent-color: var(--sea);
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+
+      .option-list input:checked + span {
+        color: var(--ink);
+      }
+
+      .option-list label:has(input:checked) {
+        border-color: var(--sea);
+        background: rgba(92, 164, 169, 0.08);
+      }
+
+      .other-input {
+        margin-top: 8px;
+        padding: 10px 14px;
+        border: 1.5px solid rgba(15, 28, 27, 0.15);
+        border-radius: 10px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.95rem;
+        width: 100%;
+        display: none;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      .other-input:focus {
+        border-color: var(--sea);
+      }
+
+      .other-input.visible { display: block; }
+
+      /* Nav buttons */
+      .step-nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .step-nav .back-btn {
+        background: none;
+        border: none;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #536b68;
+        cursor: pointer;
+        padding: 14px 4px;
+        transition: color 0.2s;
+      }
+
+      .step-nav .back-btn:hover { color: var(--ink); }
+
+      /* Results */
+      .results-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+
+      .result-tile {
+        background: linear-gradient(150deg, rgba(255, 255, 255, 0.9), rgba(245, 215, 178, 0.2));
+        border: 1px solid rgba(15, 28, 27, 0.08);
+        border-radius: 14px;
+        padding: 20px;
+      }
+
+      .result-tile .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #536b68;
+        margin: 0 0 6px;
+      }
+
+      .result-tile .value {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--ink);
+        margin: 0;
+      }
+
+      .result-tile.highlight {
+        background: linear-gradient(150deg, rgba(191, 230, 194, 0.3), rgba(92, 164, 169, 0.15));
+        border-color: rgba(92, 164, 169, 0.25);
+      }
+
+      .result-tile.highlight .value {
+        color: #1a6b4a;
+      }
+
+      .result-tile.full {
+        grid-column: 1 / -1;
+      }
+
+      .result-note {
+        color: #536b68;
+        font-size: 0.92rem;
+        margin: 0 0 32px;
+        line-height: 1.55;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      .footer {
+        margin-top: 72px;
+        padding-top: 32px;
+        border-top: 1px solid rgba(15, 28, 27, 0.1);
+        color: #536b68;
+        font-size: 0.95rem;
+      }
+
+      .pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: "Space Grotesk", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.78rem;
+        color: #30504d;
+        margin-bottom: 16px;
+      }
+
+      .pulse::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--ember);
+        box-shadow: 0 0 0 0 rgba(255, 122, 89, 0.6);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255, 122, 89, 0.6); }
+        70% { box-shadow: 0 0 0 12px rgba(255, 122, 89, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 122, 89, 0); }
+      }
+
+      @media (max-width: 600px) {
+        .wrap { padding: 0 16px 64px; }
+        .step-card { padding: 28px 20px; }
+        .results-grid { grid-template-columns: 1fr; }
+        .result-tile .value { font-size: 1.5rem; }
+        header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a href="./" class="brand">
+          <div class="brand-badge"></div>
+          CallCatcher Ops
+        </a>
+        <a class="button secondary" href="./intake.html">Get a free baseline</a>
+      </header>
+
+      <div class="pulse">2-minute assessment</div>
+
+      <div class="progress-wrap">
+        <div class="progress-label">Step <span id="step-num">1</span> of 4</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill" style="width: 25%"></div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <!-- Step 1: Business Type -->
+        <div class="step active" id="step-1">
+          <h2>What type of business do you run?</h2>
+          <p class="subtitle">This helps us estimate your industry's typical missed-call rate.</p>
+          <ul class="option-list">
+            <li><label><input type="radio" name="bizType" value="medspa" /><span>Med Spa / Aesthetics</span></label></li>
+            <li><label><input type="radio" name="bizType" value="dental" /><span>Dental / Medical Office</span></label></li>
+            <li><label><input type="radio" name="bizType" value="home" /><span>Home Services (Plumbing, HVAC, Electrical)</span></label></li>
+            <li><label><input type="radio" name="bizType" value="legal" /><span>Legal / Professional Services</span></label></li>
+            <li><label><input type="radio" name="bizType" value="other" /><span>Other</span></label></li>
+          </ul>
+          <input type="text" class="other-input" id="other-biz" placeholder="Tell us your business type" />
+          <div class="step-nav">
+            <div></div>
+            <button class="button primary" id="next-1" disabled>Continue</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Call Volume -->
+        <div class="step" id="step-2">
+          <h2>How many inbound calls do you get per month?</h2>
+          <p class="subtitle">Your best estimate is fine — we'll refine this in your audit.</p>
+          <ul class="option-list">
+            <li><label><input type="radio" name="callVol" value="25" /><span>Under 50 calls/month</span></label></li>
+            <li><label><input type="radio" name="callVol" value="75" /><span>50–100 calls/month</span></label></li>
+            <li><label><input type="radio" name="callVol" value="150" /><span>100–200 calls/month</span></label></li>
+            <li><label><input type="radio" name="callVol" value="350" /><span>200–500 calls/month</span></label></li>
+            <li><label><input type="radio" name="callVol" value="650" /><span>500+ calls/month</span></label></li>
+          </ul>
+          <div class="step-nav">
+            <button class="back-btn" data-back="1">← Back</button>
+            <button class="button primary" id="next-2" disabled>Continue</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Current Pain -->
+        <div class="step" id="step-3">
+          <h2>What call challenges do you face?</h2>
+          <p class="subtitle">Select all that apply.</p>
+          <ul class="option-list">
+            <li><label><input type="checkbox" name="pain" value="peak" /><span>We miss calls during peak hours</span></label></li>
+            <li><label><input type="checkbox" name="pain" value="afterhours" /><span>We miss calls after hours / weekends</span></label></li>
+            <li><label><input type="checkbox" name="pain" value="unknown" /><span>We don't know how many calls we miss</span></label></li>
+            <li><label><input type="checkbox" name="pain" value="novm" /><span>Callers don't leave voicemails</span></label></li>
+            <li><label><input type="checkbox" name="pain" value="expensive" /><span>We've tried an answering service but it's expensive</span></label></li>
+            <li><label><input type="checkbox" name="pain" value="competitors" /><span>We lose leads to competitors who answer first</span></label></li>
+          </ul>
+          <div class="step-nav">
+            <button class="back-btn" data-back="2">← Back</button>
+            <button class="button primary" id="next-3" disabled>Continue</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Average Job Value -->
+        <div class="step" id="step-4">
+          <h2>What's your average job or appointment value?</h2>
+          <p class="subtitle">This lets us estimate how much each missed call costs you.</p>
+          <ul class="option-list">
+            <li><label><input type="radio" name="jobVal" value="75" /><span>Under $100</span></label></li>
+            <li><label><input type="radio" name="jobVal" value="300" /><span>$100–$500</span></label></li>
+            <li><label><input type="radio" name="jobVal" value="750" /><span>$500–$1,000</span></label></li>
+            <li><label><input type="radio" name="jobVal" value="3000" /><span>$1,000–$5,000</span></label></li>
+            <li><label><input type="radio" name="jobVal" value="7500" /><span>$5,000+</span></label></li>
+          </ul>
+          <div class="step-nav">
+            <button class="back-btn" data-back="3">← Back</button>
+            <button class="button primary" id="next-4" disabled>See my results</button>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div class="step" id="step-results">
+          <h2>Your Missed Call Revenue Leak</h2>
+          <p class="subtitle" id="results-subtitle"></p>
+
+          <div class="results-grid">
+            <div class="result-tile">
+              <p class="label">Est. Missed Calls / Month</p>
+              <p class="value" id="r-missed"></p>
+            </div>
+            <div class="result-tile">
+              <p class="label">Monthly Revenue Leak</p>
+              <p class="value" id="r-monthly"></p>
+            </div>
+            <div class="result-tile">
+              <p class="label">Annual Revenue Leak</p>
+              <p class="value" id="r-annual"></p>
+            </div>
+            <div class="result-tile highlight">
+              <p class="label">Recoverable with CallCatcher</p>
+              <p class="value" id="r-recovery"></p>
+            </div>
+          </div>
+
+          <p class="result-note">
+            Based on industry averages for your business type and call volume. A personalized audit with your actual call data will give you an exact number.
+          </p>
+
+          <div class="cta-row">
+            <a class="button primary" data-cta="assessment_audit" href="./intake.html">Get Your Free Personalized Audit</a>
+            <a class="button secondary" data-cta="assessment_talk" href="mailto:igor@callcatcherops.com">Talk to Igor</a>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <button class="back-btn" id="restart-btn" style="font-size: 0.88rem;">← Retake assessment</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>CallCatcher Ops · Coral Springs, FL</div>
+        <div>hello@callcatcherops.com</div>
+        <div style="margin-top: 8px;">© 2026 CallCatcher Ops. All rights reserved.</div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        const MISS_RATES = {
+          medspa: 0.30,
+          dental: 0.25,
+          home: 0.35,
+          legal: 0.28,
+          other: 0.27
+        };
+        const BOOKING_RATE = 0.35;
+        const RECOVERY_RATE = 0.60;
+
+        let current = 1;
+        const totalSteps = 4;
+
+        const $ = (s) => document.querySelector(s);
+        const $$ = (s) => document.querySelectorAll(s);
+
+        function showStep(n) {
+          $$('.step').forEach(s => s.classList.remove('active'));
+          if (n <= totalSteps) {
+            $(`#step-${n}`).classList.add('active');
+            $('#step-num').textContent = n;
+            $('#progress-fill').style.width = `${(n / totalSteps) * 100}%`;
+          } else {
+            $('#step-results').classList.add('active');
+            $('#step-num').textContent = '✓';
+            $('#progress-fill').style.width = '100%';
+            $('.progress-label').textContent = 'Assessment complete';
+          }
+          current = n;
+        }
+
+        // Step 1: Business Type
+        const bizRadios = $$('input[name="bizType"]');
+        const otherInput = $('#other-biz');
+        bizRadios.forEach(r => r.addEventListener('change', () => {
+          $('#next-1').disabled = false;
+          otherInput.classList.toggle('visible', r.value === 'other' && r.checked);
+        }));
+
+        $('#next-1').addEventListener('click', () => showStep(2));
+
+        // Step 2: Call Volume
+        $$('input[name="callVol"]').forEach(r => r.addEventListener('change', () => {
+          $('#next-2').disabled = false;
+        }));
+        $('#next-2').addEventListener('click', () => showStep(3));
+
+        // Step 3: Pain Points
+        $$('input[name="pain"]').forEach(cb => cb.addEventListener('change', () => {
+          const any = [...$$('input[name="pain"]')].some(c => c.checked);
+          $('#next-3').disabled = !any;
+        }));
+        $('#next-3').addEventListener('click', () => showStep(4));
+
+        // Step 4: Job Value
+        $$('input[name="jobVal"]').forEach(r => r.addEventListener('change', () => {
+          $('#next-4').disabled = false;
+        }));
+        $('#next-4').addEventListener('click', () => {
+          calculateResults();
+          showStep(5);
+        });
+
+        // Back buttons
+        $$('.back-btn[data-back]').forEach(btn => {
+          btn.addEventListener('click', () => showStep(parseInt(btn.dataset.back)));
+        });
+
+        // Restart
+        $('#restart-btn').addEventListener('click', () => {
+          $$('input[type="radio"], input[type="checkbox"]').forEach(i => i.checked = false);
+          otherInput.value = '';
+          otherInput.classList.remove('visible');
+          $$('.button.primary[id^="next-"]').forEach(b => b.disabled = true);
+          showStep(1);
+        });
+
+        function fmt(n) {
+          return '$' + Math.round(n).toLocaleString('en-US');
+        }
+
+        function calculateResults() {
+          const bizType = document.querySelector('input[name="bizType"]:checked')?.value || 'other';
+          const callVol = parseInt(document.querySelector('input[name="callVol"]:checked')?.value || '75');
+          const jobVal = parseInt(document.querySelector('input[name="jobVal"]:checked')?.value || '300');
+
+          const missRate = MISS_RATES[bizType] || 0.27;
+          const missedCalls = Math.round(callVol * missRate);
+          const missedBookings = missedCalls * BOOKING_RATE;
+          const monthlyLeak = missedBookings * jobVal;
+          const annualLeak = monthlyLeak * 12;
+          const recoverable = annualLeak * RECOVERY_RATE;
+
+          const bizLabels = {
+            medspa: 'med spas',
+            dental: 'dental & medical offices',
+            home: 'home service businesses',
+            legal: 'legal & professional services',
+            other: 'businesses like yours'
+          };
+
+          $('#results-subtitle').textContent =
+            `Industry data shows ${bizLabels[bizType]} miss roughly ${Math.round(missRate * 100)}% of inbound calls.`;
+
+          $('#r-missed').textContent = `~${missedCalls}`;
+          $('#r-monthly').textContent = fmt(monthlyLeak);
+          $('#r-annual').textContent = fmt(annualLeak);
+          $('#r-recovery').textContent = `${fmt(recoverable)}/yr`;
+
+          if (typeof gtag === 'function') {
+            gtag('event', 'assessment_complete', {
+              event_category: 'assessment',
+              event_label: bizType,
+              value: Math.round(annualLeak)
+            });
+          }
+        }
+
+        // CTA tracking
+        if (typeof gtag === 'function') {
+          $$('[data-cta]').forEach(el => {
+            el.addEventListener('click', () => {
+              gtag('event', 'cta_click', {
+                event_category: 'assessment',
+                event_label: el.getAttribute('data-cta')
+              });
+            });
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

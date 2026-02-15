@@ -14,6 +14,9 @@
       "permissions": ["lead.read", "lead.write", "email.send"],
       "daily_send_limit": 30,
       "min_score": 50,
+      "allowed_email_methods": ["direct", "scrape"],
+      "blocked_local_parts": ["info", "contact", "hello", "office", "support", "sales", "service", "team", "admin"],
+      "bounce_pause": { "enabled": true, "window_days": 7, "threshold": 0.25, "min_emailed": 20 },
       "followup": {
         "enabled": true,
         "min_days_since_last_email": 2,
