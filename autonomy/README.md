@@ -50,6 +50,12 @@ Configure in `agents.outreach`:
 
 In your lead CSV, you can optionally include `email_method` (e.g. `apollo`, `linkedin`, `direct`, `scrape`). If omitted, it's inferred from `notes` and the email local-part.
 
+## Fastmail Safety Brake
+If you point SMTP at Fastmail (`smtp_host` ends with `fastmail.com`), outbound outreach is blocked by default to reduce account risk.
+
+Override (not recommended) by setting:
+- `ALLOW_FASTMAIL_OUTREACH=1`
+
 ## Lead Generation (Broward County)
 `autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
 

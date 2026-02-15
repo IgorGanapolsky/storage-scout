@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import sqlite3
 import uuid
 from pathlib import Path
@@ -99,6 +100,9 @@ def test_lead_source_csv_infers_email_method(tmp_path: Path) -> None:
 
 
 def _make_engine(*, sqlite_path: str, audit_log: str, outreach_cfg: dict) -> Engine:
+    # Preflight checks require a non-empty SMTP password env var.
+    os.environ.setdefault("SMTP_PASSWORD", "test-password")
+
     cfg = EngineConfig(
         mode="live",
         company={
@@ -113,7 +117,7 @@ def _make_engine(*, sqlite_path: str, audit_log: str, outreach_cfg: dict) -> Eng
         lead_sources=[],
         email={
             "provider": "smtp",
-            "smtp_host": "smtp.fastmail.com",
+            "smtp_host": "smtp.example.com",
             "smtp_port": 587,
             "smtp_user": "hello@callcatcherops.com",
             "smtp_password_env": "SMTP_PASSWORD",

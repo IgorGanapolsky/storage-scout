@@ -136,13 +136,22 @@ class Engine:
     def _should_pause_outreach(self, *, policy: OutreachPolicy, agent_id: str) -> bool:
         if not policy.bounce_pause_enabled:
             return False
-        deliverability = self.store.email_deliverability(
+
+        overall = self.store.email_deliverability(days=policy.bounce_pause_window_days, email_methods=None)
+        filtered = self.store.email_deliverability(
             days=policy.bounce_pause_window_days,
             email_methods=policy.email_methods_filter,
         )
-        if int(deliverability["emailed"] or 0) < policy.bounce_pause_min_emailed:
-            return False
-        if float(deliverability["bounce_rate"] or 0.0) < policy.bounce_pause_threshold:
+
+        def _over_threshold(d: dict[str, object]) -> bool:
+            if int(d.get("emailed") or 0) < policy.bounce_pause_min_emailed:
+                return False
+            return float(d.get("bounce_rate") or 0.0) >= policy.bounce_pause_threshold
+
+        overall_bad = _over_threshold(overall)
+        filtered_bad = _over_threshold(filtered) if policy.email_methods_filter else False
+
+        if not (overall_bad or filtered_bad):
             return False
 
         self.store.log_action(
@@ -151,10 +160,12 @@ class Engine:
             trace_id=str(uuid.uuid4()),
             payload={
                 "reason": "bounce_rate_threshold",
+                "trigger": "overall" if overall_bad else "filtered",
                 "threshold": policy.bounce_pause_threshold,
                 "min_emailed": policy.bounce_pause_min_emailed,
                 "window_days": policy.bounce_pause_window_days,
-                "deliverability": deliverability,
+                "deliverability_overall": overall,
+                "deliverability_filtered": filtered,
                 "email_methods_filter": policy.email_methods_filter,
             },
         )
@@ -177,6 +188,16 @@ class Engine:
         if limit <= 0:
             return 0
         agent_id = outreach_cfg["agent_id"]
+
+        preflight = self.sender.preflight()
+        if not bool(preflight.get("ok", False)):
+            self.store.log_action(
+                agent_id=agent_id,
+                action_type="outreach.blocked",
+                trace_id=str(uuid.uuid4()),
+                payload={"kind": "initial", **preflight},
+            )
+            return 0
 
         policy = self._build_outreach_policy(outreach_cfg)
         if self._should_pause_outreach(policy=policy, agent_id=agent_id):
@@ -246,6 +267,16 @@ class Engine:
         max_emails = int(follow_cfg.get("max_emails_per_lead", 3))
         min_days = int(follow_cfg.get("min_days_since_last_email", 2))
         cutoff_ts = (datetime.now(UTC) - timedelta(days=min_days)).isoformat()
+
+        preflight = self.sender.preflight()
+        if not bool(preflight.get("ok", False)):
+            self.store.log_action(
+                agent_id=agent_id,
+                action_type="outreach.blocked",
+                trace_id=str(uuid.uuid4()),
+                payload={"kind": "followup", **preflight},
+            )
+            return 0
 
         policy = self._build_outreach_policy(outreach_cfg)
         if self._should_pause_outreach(policy=policy, agent_id=agent_id):

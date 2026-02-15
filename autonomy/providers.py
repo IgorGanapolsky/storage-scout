@@ -9,6 +9,16 @@ from typing import List
 from .context_store import Lead
 from .outreach_policy import infer_email_method
 
+
+def _truthy_env(val: str) -> bool:
+    return (val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_fastmail_smtp_host(host: str) -> bool:
+    host_l = (host or "").strip().lower()
+    return host_l.endswith("fastmail.com")
+
+
 @dataclass
 class LeadSourceCSV:
     path: str
@@ -64,6 +74,31 @@ class EmailSender:
     def __init__(self, config: EmailConfig, dry_run: bool) -> None:
         self.config = config
         self.dry_run = dry_run
+
+    def preflight(self) -> dict[str, object]:
+        """Validate outbound email config before iterating through leads.
+
+        This prevents burning through leads when config is missing (e.g. SMTP password)
+        and adds a safety brake for Fastmail programmatic outreach.
+        """
+        if self.dry_run:
+            return {"ok": True, "reason": "dry-run"}
+
+        password_env = self.config.smtp_password_env
+        password = os.getenv(password_env, "")
+        if not password:
+            return {"ok": False, "reason": "missing-smtp-password", "smtp_password_env": password_env}
+
+        host = self.config.smtp_host
+        if _is_fastmail_smtp_host(host) and not _truthy_env(os.getenv("ALLOW_FASTMAIL_OUTREACH", "")):
+            return {
+                "ok": False,
+                "reason": "blocked-fastmail-outreach",
+                "smtp_host": host,
+                "override_env": "ALLOW_FASTMAIL_OUTREACH",
+            }
+
+        return {"ok": True, "reason": "ok"}
 
     def send(self, to_email: str, subject: str, body: str, reply_to: str) -> str:
         if self.dry_run:
