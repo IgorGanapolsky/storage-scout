@@ -15,8 +15,10 @@ def _truthy_env(val: str) -> bool:
 
 
 def _is_fastmail_smtp_host(host: str) -> bool:
-    host_l = (host or "").strip().lower()
-    return host_l.endswith("fastmail.com")
+    host_l = (host or "").strip().lower().rstrip(".")
+    # IMPORTANT: Use a dot-boundary check to avoid matching lookalike domains
+    # such as "evilfastmail.com".
+    return host_l == "fastmail.com" or host_l.endswith(".fastmail.com")
 
 
 @dataclass
