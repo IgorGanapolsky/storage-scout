@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, List
+from typing import Iterable
 
 
 # Default "role inboxes" that almost never convert in cold outreach.
@@ -95,4 +95,3 @@ def service_matches(lead_service: str, targets: set[str]) -> bool:
     if not raw:
         return False
     return raw in targets
-

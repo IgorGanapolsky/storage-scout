@@ -9,9 +9,9 @@ import os
 import subprocess
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict
 
 from .context_store import ContextStore, now_iso
 from .goal_planner import GoalTask, GoalTaskStore

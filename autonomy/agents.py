@@ -92,7 +92,7 @@ class OutreachWriter:
             return self.render(lead)
 
         company = lead.company or "your team"
-        
+
         if step == 2:
             intake_link = self._render_intake_link()
             if self._is_med_spa(lead):

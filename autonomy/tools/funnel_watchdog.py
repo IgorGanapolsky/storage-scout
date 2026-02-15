@@ -22,7 +22,6 @@ import random
 import re
 import string
 import subprocess
-import sys
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

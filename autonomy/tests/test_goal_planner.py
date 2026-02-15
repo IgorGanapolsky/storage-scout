@@ -16,7 +16,7 @@ from autonomy.goal_planner import (
     TASK_TEMPLATES,
     load_goals,
 )
-from autonomy.goal_executor import GoalExecutor, ExecutionResult
+from autonomy.goal_executor import GoalExecutor
 
 _CLEANUP: list[Path] = []
 
@@ -101,7 +101,7 @@ class TestGoalTaskStore:
 
     def test_schema_creates_table(self) -> None:
         store = _make_store()
-        task_store = GoalTaskStore(store)
+        GoalTaskStore(store)
         cur = store.conn.cursor()
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='goal_tasks'")
         assert cur.fetchone() is not None

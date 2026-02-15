@@ -22,6 +22,8 @@ def test_context_store_migrates_email_method_column_and_normalizes_unknown() -> 
     sqlite_path, audit_log = _tmp_state_paths(tmp)
 
     # Seed a legacy leads table (no email_method column).
+    Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(audit_log).parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(sqlite_path) as conn:
         conn.execute(
             """
@@ -89,7 +91,7 @@ def test_lead_source_csv_infers_email_method(tmp_path: Path) -> None:
             writer.writerow(r)
 
     leads = LeadSourceCSV(path=str(csv_path), source="t").load()
-    by_email = {l.email: l for l in leads}
+    by_email = {lead.email: lead for lead in leads}
     assert by_email["info@example.com"].email_method == "unknown"
     assert by_email["jane.doe@example.com"].email_method == "direct"
     assert by_email["owner@example.com"].email_method == "apollo"
@@ -229,4 +231,3 @@ def test_engine_pauses_outreach_when_bounce_rate_spikes() -> None:
     cur = engine.store.conn.cursor()
     paused = cur.execute("SELECT COUNT(1) FROM actions WHERE action_type='outreach.paused'").fetchone()[0]
     assert int(paused or 0) >= 1
-

@@ -7,7 +7,6 @@ daily tasks that advance the highest-priority unmet objectives.
 import json
 import logging
 import random
-import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

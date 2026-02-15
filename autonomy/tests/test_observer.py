@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import atexit
-import sqlite3
 import uuid
 from pathlib import Path
 from unittest.mock import patch
