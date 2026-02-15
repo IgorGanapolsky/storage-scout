@@ -7,11 +7,20 @@ from pathlib import Path
 from typing import List
 
 from .context_store import Lead
+from .outreach_policy import infer_email_method
 
 @dataclass
 class LeadSourceCSV:
     path: str
     source: str
+
+    @staticmethod
+    def _email_method(row: dict, email: str) -> str:
+        return infer_email_method(
+            email=email,
+            raw_method=str(row.get("email_method") or ""),
+            notes=str(row.get("notes") or ""),
+        )
 
     def load(self) -> List[Lead]:
         leads: List[Lead] = []
@@ -38,6 +47,7 @@ class LeadSourceCSV:
                         city=(row.get("city") or "").strip(),
                         state=(row.get("state") or "").strip(),
                         source=self.source,
+                        email_method=self._email_method(row, email),
                     )
                 )
         return leads

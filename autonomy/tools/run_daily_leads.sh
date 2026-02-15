@@ -20,4 +20,5 @@ if [[ -z "${GOOGLE_PLACES_API_KEY:-}" ]]; then
 fi
 
 LIMIT="${1:-30}"
-python3 "$ROOT/autonomy/tools/lead_gen_broward.py" --limit "$LIMIT"
+CATEGORIES="${LEADGEN_CATEGORIES:-med spa,plumber,dentist,hvac,roofing,electrician,chiropractor,urgent care,pest control}"
+python3 "$ROOT/autonomy/tools/lead_gen_broward.py" --limit "$LIMIT" --categories "$CATEGORIES" --output "$ROOT/autonomy/state/leads_callcatcherops_real.csv"

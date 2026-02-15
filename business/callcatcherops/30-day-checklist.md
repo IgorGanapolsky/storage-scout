@@ -27,3 +27,34 @@
 3. Add additional niche-specific landing page section.
 4. Publish 2 social posts summarizing results.
 5. Create a referral offer for existing clients.
+
+## ChatGPT Ad Platform Preparation (Priestley Framework)
+
+### Week 1: Foundation
+- [ ] Calculate allowable cost per lead: $75 (conservative) to $150 (aggressive) based on $7,500 LTV at 10% close rate
+- [ ] Build "Missed Call Revenue Leak Calculator" Custom GPT and publish to GPT Store
+- [ ] Write 6 ad creatives (pain hooks, prize hooks, vertical-specific) — see `chatgpt-ad-creatives.md`
+- [ ] Deploy assessment quiz at callcatcherops.com/callcatcherops/assessment.html
+
+### Week 2: Personal Brand Launch
+- [ ] Start LinkedIn content plan (3 posts/week) — see `linkedin-content-plan.md`
+- [ ] Update LinkedIn profile headline to position as missed-call recovery expert
+- [ ] Share Custom GPT calculator link on LinkedIn as first credibility post
+
+### Week 3: CTA Testing
+- [ ] Test 3 CTA variants: Free Audit, Calculator GPT, Talk to Igor
+- [ ] Track which CTA drives most intake submissions
+- [ ] Refine ad creatives based on LinkedIn engagement data
+
+### Week 4: Ready for Launch
+- [ ] All ad creatives finalized with winning CTA
+- [ ] Assessment funnel tested and converting
+- [ ] Custom GPT live and driving intake traffic
+- [ ] Monitor ChatGPT ad platform announcements — be day-one advertiser
+
+### Ongoing Metrics to Track
+- Cost per lead (target: ≤$75)
+- Intake form submissions per week
+- Lead → QuickStart Build conversion rate
+- Custom GPT sessions → intake click-through rate
+- LinkedIn post impressions and profile views

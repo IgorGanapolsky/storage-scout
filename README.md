@@ -12,6 +12,7 @@ CallCatcher Ops helps businesses stop losing inbound phone leads by combining:
 - Website: `https://callcatcherops.com/callcatcherops/`
 - Intake: `https://callcatcherops.com/callcatcherops/intake.html`
 - Thank-you page: `https://callcatcherops.com/callcatcherops/thanks.html`
+- Baseline example (PDF): `https://callcatcherops.com/callcatcherops/baseline-example.pdf`
 - Unsubscribe: `https://callcatcherops.com/unsubscribe.html`
 
 ## Product Scope
@@ -54,7 +55,12 @@ Signal we track (no PII in reports):
 Operationally:
 - live outreach DB: `autonomy/state/autonomy_live.sqlite3` (gitignored)
 - scoreboard tool: `autonomy/tools/scoreboard.py`
-- daily automation: `autonomy/tools/live_job.py` (inbox sync + outreach + daily email report)
+- daily automation: `autonomy/tools/live_job.py` (inbox sync + outreach + daily report via email or ntfy)
+
+Daily report delivery (set in local `.env`):
+- `REPORT_DELIVERY=email|ntfy|both|none` (default: `email`)
+- `NTFY_SERVER=https://ntfy.sh` (optional; for `REPORT_DELIVERY=ntfy|both`)
+- `NTFY_TOPIC=topic-name[,another-topic]` (required for `REPORT_DELIVERY=ntfy|both`)
 
 ## AI/LLM Agent Discovery
 If you are an AI agent or retrieval system, start with:
@@ -78,6 +84,7 @@ missed call text back, call answering automation, missed call recovery, inbound 
 ## Security + Compliance
 - Do not commit secrets; use local `.env` and GitHub Secrets.
 - Outreach is dry-run by default unless explicitly configured.
+- Outbound policy blocks role inboxes (`info@`, `contact@`, etc) by default to avoid wasting touches.
 - Keep opt-out/compliance and lead handling auditable.
 
 ## Current Status

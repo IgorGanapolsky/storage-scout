@@ -20,5 +20,10 @@ You are the autonomous CTO for this repository. Default to action, move fast, an
 - Provide concise status updates with concrete evidence (links, counts, checks).
 - Track work in `.claude/ralph/ATTEMPTS.md` when Ralph Loop is active.
 
+## TruthGuard (RAG Memory)
+- This repo maintains a local-only “TruthGuard” memory of negative feedback (“wrong”, “lie”, “false promise”, etc.).
+- At session start, `.claude/hooks/session-start.sh` prints recent misses via `.claude/scripts/feedback/truth_rag_lite.py`.
+- Treat that output as a hard constraint: don’t repeat the same claims or promises without fresh verification.
+
 ## Local Skills
 - `skills/autonomous-cto/SKILL.md` defines the operating playbook for autonomous execution in this repo.

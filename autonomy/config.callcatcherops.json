@@ -6,7 +6,9 @@
     "intake_url": "https://callcatcherops.com/callcatcherops/intake.html",
     "reply_to": "hello@callcatcherops.com",
     "mailing_address": "Coral Springs, FL",
-    "signature": "— CallCatcher Ops"
+    "signature": "— CallCatcher Ops",
+    "booking_url": "https://calendly.com/igorganapolsky/audit-call",
+    "baseline_example_url": "https://callcatcherops.com/callcatcherops/baseline-example.pdf"
   },
   "agents": {
     "outreach": {
@@ -14,12 +16,25 @@
       "permissions": ["lead.read", "lead.write", "email.send"],
       "daily_send_limit": 30,
       "min_score": 60,
+      "target_services": ["med spa"],
+      "allowed_email_methods": ["direct", "scrape"],
+      "blocked_local_parts": ["info", "contact", "hello", "office", "support", "sales", "service", "team", "admin", "appointments", "booking", "inquiries"],
+      "bounce_pause": { "enabled": true, "window_days": 7, "threshold": 0.25, "min_emailed": 20 },
       "followup": {
         "enabled": true,
         "min_days_since_last_email": 2,
         "max_emails_per_lead": 3,
         "daily_send_limit": 15
       }
+    },
+    "ai_writer": {
+      "enabled": false,
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "observer": {
+      "observe_threshold": 3,
+      "reflect_threshold": 5
     }
   },
   "lead_sources": [
