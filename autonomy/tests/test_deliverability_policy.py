@@ -135,54 +135,45 @@ def _make_engine(*, sqlite_path: str, audit_log: str, outreach_cfg: dict) -> Eng
     return engine
 
 
+def _mk_lead(
+    *,
+    email: str,
+    company: str,
+    name: str = "",
+    service: str = "med spa",
+    status: str = "new",
+    email_method: str = "direct",
+    score: int = 80,
+) -> Lead:
+    return Lead(
+        id=email,
+        name=name,
+        company=company,
+        email=email,
+        phone="",
+        service=service,
+        city="Miami",
+        state="FL",
+        source="t",
+        score=score,
+        status=status,
+        email_method=email_method,
+    )
+
+
 def test_engine_blocks_fastmail_outreach_by_default(monkeypatch) -> None:
     tmp = f"test_{uuid.uuid4().hex}"
     sqlite_path, audit_log = _tmp_state_paths(tmp)
 
-    monkeypatch.setenv("SMTP_PASSWORD", "test-password")
     monkeypatch.delenv("ALLOW_FASTMAIL_OUTREACH", raising=False)
 
-    cfg = EngineConfig(
-        mode="live",
-        company={
-            "name": "CallCatcher Ops",
-            "website": "https://callcatcherops.com",
-            "intake_url": "https://callcatcherops.com/callcatcherops/intake.html",
-            "reply_to": "hello@callcatcherops.com",
-            "mailing_address": "Test Address",
-            "signature": "— CallCatcher Ops",
-        },
-        agents={"outreach": {"agent_id": "agent.outreach.v1", "daily_send_limit": 10, "min_score": 0, "followup": {"enabled": False}}},
-        lead_sources=[],
-        email={
-            "provider": "smtp",
-            "smtp_host": "smtp.fastmail.com",
-            "smtp_port": 587,
-            "smtp_user": "hello@callcatcherops.com",
-            "smtp_password_env": "SMTP_PASSWORD",
-        },
-        compliance={"include_unsubscribe": True, "unsubscribe_url": "x", "can_spam_required": True},
-        storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
+    engine = _make_engine(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        outreach_cfg={"agent_id": "agent.outreach.v1", "daily_send_limit": 10, "min_score": 0, "followup": {"enabled": False}},
     )
-    engine = Engine(cfg)
-    engine.sender.send = MagicMock(return_value="sent")
-
-    engine.store.upsert_lead(
-        Lead(
-            id="jane.doe@example.com",
-            name="Jane",
-            company="Jane Co",
-            email="jane.doe@example.com",
-            phone="",
-            service="med spa",
-            city="Miami",
-            state="FL",
-            source="t",
-            score=80,
-            status="new",
-            email_method="direct",
-        )
-    )
+    engine.sender.config.smtp_host = "smtp.fastmail.com"
+    engine.store.upsert_lead(_mk_lead(email="jane.doe@example.com", name="Jane", company="Jane Co"))
 
     sent = engine.run_initial_outreach()
     assert sent == 0
@@ -212,38 +203,8 @@ def test_engine_blocks_role_inboxes_by_default() -> None:
         },
     )
 
-    engine.store.upsert_lead(
-        Lead(
-            id="info@example.com",
-            name="",
-            company="Info Co",
-            email="info@example.com",
-            phone="",
-            service="med spa",
-            city="Miami",
-            state="FL",
-            source="t",
-            score=80,
-            status="new",
-            email_method="direct",
-        )
-    )
-    engine.store.upsert_lead(
-        Lead(
-            id="jane.doe@example.com",
-            name="Jane",
-            company="Jane Co",
-            email="jane.doe@example.com",
-            phone="",
-            service="med spa",
-            city="Miami",
-            state="FL",
-            source="t",
-            score=80,
-            status="new",
-            email_method="direct",
-        )
-    )
+    engine.store.upsert_lead(_mk_lead(email="info@example.com", company="Info Co"))
+    engine.store.upsert_lead(_mk_lead(email="jane.doe@example.com", name="Jane", company="Jane Co"))
 
     sent = engine.run_initial_outreach()
     assert sent == 1
@@ -272,22 +233,7 @@ def test_engine_pauses_outreach_when_bounce_rate_spikes() -> None:
     # Seed 20 recently-emailed leads that are now marked bounced.
     for i in range(20):
         email = f"person{i}@example.com"
-        engine.store.upsert_lead(
-            Lead(
-                id=email,
-                name="",
-                company=f"C{i}",
-                email=email,
-                phone="",
-                service="med spa",
-                city="Miami",
-                state="FL",
-                source="t",
-                score=80,
-                status="contacted",
-                email_method="direct",
-            )
-        )
+        engine.store.upsert_lead(_mk_lead(email=email, company=f"C{i}", status="contacted"))
         engine.store.add_message(lead_id=email, channel="email", subject="s", body="b", status="sent")
         engine.store.mark_status_by_email(email, "bounced")
 
@@ -328,22 +274,7 @@ def test_engine_pauses_outreach_when_filtered_bounce_rate_spikes_even_if_overall
     # Seed 20 direct emailed leads, 10 bounced.
     for i in range(20):
         email = f"direct{i}@example.com"
-        engine.store.upsert_lead(
-            Lead(
-                id=email,
-                name="",
-                company=f"D{i}",
-                email=email,
-                phone="",
-                service="med spa",
-                city="Miami",
-                state="FL",
-                source="t",
-                score=80,
-                status="contacted",
-                email_method="direct",
-            )
-        )
+        engine.store.upsert_lead(_mk_lead(email=email, company=f"D{i}", status="contacted"))
         engine.store.add_message(lead_id=email, channel="email", subject="s", body="b", status="sent")
         if i < 10:
             engine.store.mark_status_by_email(email, "bounced")
@@ -351,22 +282,7 @@ def test_engine_pauses_outreach_when_filtered_bounce_rate_spikes_even_if_overall
     # Add 40 other emailed leads that are not bounced to keep overall bounce rate under threshold.
     for i in range(40):
         email = f"other{i}@example.com"
-        engine.store.upsert_lead(
-            Lead(
-                id=email,
-                name="",
-                company=f"O{i}",
-                email=email,
-                phone="",
-                service="med spa",
-                city="Miami",
-                state="FL",
-                source="t",
-                score=80,
-                status="contacted",
-                email_method="scrape",
-            )
-        )
+        engine.store.upsert_lead(_mk_lead(email=email, company=f"O{i}", status="contacted", email_method="scrape"))
         engine.store.add_message(lead_id=email, channel="email", subject="s", body="b", status="sent")
 
     sent = engine.run_initial_outreach()
