@@ -1,6 +1,6 @@
 # Why CallCatcher Ops Has Made $0 (So Far) — Honest Autopsy
 
-As-of: 2026-02-15 (UTC)
+As-of: 2026-02-15T18:12Z (UTC)
 
 Data source (local): `autonomy/state/autonomy_live.sqlite3`
 
@@ -8,12 +8,13 @@ Data source (local): `autonomy/state/autonomy_live.sqlite3`
 
 | Metric | Your Data | Notes |
 | --- | --- | --- |
-| Leads contacted | 65 | `SELECT COUNT(1) FROM leads;` |
+| Leads in DB | 118 | `SELECT COUNT(1) FROM leads;` |
+| Leads contacted | 30 | `SELECT COUNT(1) FROM leads WHERE status='contacted';` |
 | Email messages marked `sent` | 65 | SMTP accepted, not the same as inbox placement |
 | SMTP failures (missing password) | 20 | Occurred on 2026-02-13, then re-sent successfully |
-| Bounced | 26 (40%) | `26 / 65` |
-| Not bounced | 39 (60%) | `SELECT COUNT(1) FROM leads WHERE status='contacted';` |
+| Bounced | 35 (54%) | `35 / 65` contacted-or-bounced leads |
 | Replies | 0 | `SELECT COUNT(1) FROM leads WHERE status='replied';` |
+| Opt-outs recorded | 6 | `SELECT COUNT(1) FROM opt_outs;` |
 | Bookings | 0 | Not tracked in DB yet |
 | Revenue | $0 | No paying clients as-of 2026-02-15 |
 
@@ -24,41 +25,40 @@ Send window observed in DB:
 
 ## 7 Reasons You Haven't Made Money (Ordered by Severity)
 
-1. Volume is statistically insufficient.
-   You can’t expect meetings from 2 days of clean sending. At typical 1-2% booking rates, you need hundreds of quality touches to expect a meeting.
+1. You’re mostly emailing role inboxes and low-confidence addresses.
+   In your DB, 80% of touched leads were role inboxes (e.g. `info@`) and your `email_method` mix is dominated by `scrape/guess/unknown`. That’s near-zero conversion territory.
 
-2. Bounce rate is catastrophic (40%).
+2. Bounce rate is catastrophic (54%).
    Anything over ~5% is a red flag. This likely damaged sender reputation and makes “good” batches perform worse.
 
 3. You burned 20 sends on an avoidable SMTP misconfig.
    That slowed momentum and created noisy early metrics.
 
-4. Risk: using a consumer mailbox provider for programmatic cold outreach.
+4. The channel mix is wrong for local services (early-stage, no proof).
+   Phone converts better than cold email for this buyer. Email should support calls, not replace them.
+
+5. Risk: using a consumer mailbox provider for programmatic cold outreach.
    Even at low daily volume, account termination risk is real if a provider flags “unsolicited bulk/programmatic outreach.” Treat `hello@callcatcherops.com` as production infrastructure.
 
-5. Proof asset was broken (baseline example URL).
+6. Proof asset was broken (baseline example URL).
    If prospects click and get a broken link, trust drops to zero instantly.
 
-6. No proof, no trust.
+7. No proof, no trust.
    Pricing without testimonials/case study makes a $1,500 ask from cold outreach unrealistic.
-
-7. Email-only is the weakest channel for SMB local services.
-   Phone + Loom + LinkedIn/FB tends to outperform pure email for this buyer, especially early (no brand, no proof).
 
 ## What Would Actually Make Money (Action Plan)
 
 1. Fix funnel leaks first.
    Baseline example URL must be live and linked from the website + templates.
 
-2. Call the non-bounced “contacted” dentists.
-   Phone converts better than email for local services. Start with the 18 dentists in `autonomy_live.sqlite3` that are `service='Dentist' AND status='contacted'`.
+2. Go phone-first on *one* vertical (med spas).
+   Start with med spas that have phone numbers. Ask the front desk for the owner/manager name and the best direct email for “a quick missed-call baseline.”
 
 3. Get 1 free client (fast) for a real case study + testimonial.
    You need one proof artifact that is *real* and *specific*.
 
-4. If you keep cold email: use a dedicated cold email stack + secondary domain(s).
-   The math doesn’t work at 20/day from a single mailbox, and the risk profile is bad.
+4. If you keep cold email: only send to `email_method=direct` until bounce rate is <5%.
+   Don’t guess emails. Don’t send to role inboxes. Build a direct-email list from Apollo/LinkedIn/phone collection.
 
 5. Add multi-channel follow-up into the outreach workflow.
    Email becomes a “supporting touch,” not the primary conversion path.
-

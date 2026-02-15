@@ -3,8 +3,14 @@
 .vscode/
 *.iml
 
+# Node
+node_modules/
+
 # macOS
 .DS_Store
+
+# Local git worktrees
+.worktrees/
 
 # Secrets (if you use .env)
 .env

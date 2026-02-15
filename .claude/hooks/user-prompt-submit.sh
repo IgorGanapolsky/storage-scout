@@ -19,6 +19,7 @@ infer_domain() {
   local ctx="$1"
   local lower=$(echo "$ctx" | tr '[:upper:]' '[:lower:]')
 
+  [[ "$lower" =~ (callcatcher|fastmail|imap|launchd|stripe|calendly|outreach|lead|leads|bounce|bounces|reply|replies|booking|bookings|daily[[:space:]]report) ]] && echo "callcatcherops" && return
   [[ "$lower" =~ (sonar|snyk|codeql|security|ci|workflow) ]] && echo "ci" && return
   [[ "$lower" =~ (git|commit|push|pr|merge|branch) ]] && echo "github" && return
   [[ "$lower" =~ (api|http|request|endpoint) ]] && echo "api" && return
@@ -61,8 +62,16 @@ if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*up|👍|\+1|good\s*job|great\s*w
 fi
 
 # Detect thumbs down
-if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad|mistake|error|failed|broken|bug|issue|problem)'; then
+if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad|mistake|error|failed|broken|bug|issue|problem|lie|lies|lying|dishonest|false\s*promise|false\s*promises|hallucinat|made\s*up)'; then
   queue_feedback "negative" "$USER_MESSAGE"
+
+  # Local-only RLHF + lessons (powers lightweight RAG at session start).
+  # Best-effort: never fail the hook.
+  if command -v node >/dev/null 2>&1; then
+    MSG_ONE_LINE="$(echo "$USER_MESSAGE" | tr '\n' ' ' | head -c 500)"
+    node "$SCRIPT_DIR/../scripts/feedback/capture-feedback.js" down "$MSG_ONE_LINE" >/dev/null 2>&1 || true
+    node "$SCRIPT_DIR/../scripts/feedback/auto-lesson-creator.js" process >/dev/null 2>&1 || true
+  fi
 fi
 
 # Ralph Mode detection (kept - useful for autonomous execution)
