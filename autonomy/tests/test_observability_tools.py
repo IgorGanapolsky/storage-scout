@@ -10,6 +10,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     _is_bounce,
 )
 from autonomy.tools.live_job import (
+    _count_actions_today,
     _evaluate_paid_stop_loss,
     _format_report,
     _parse_categories,
@@ -212,3 +213,35 @@ def test_stop_loss_blocks_and_resets(tmp_path: Path) -> None:
 def test_leadgen_category_parsing() -> None:
     assert _parse_categories("") == []
     assert _parse_categories("  med spa, plumbing ,, Clinics  ") == ["med spa", "plumbing", "clinics"]
+
+
+def test_count_actions_today_paid_scope_filters_non_billable() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    # Non-Twilio/manual style call action should not count as billable.
+    store.log_action(
+        agent_id="agent.manual",
+        action_type="call.attempt",
+        trace_id="manual-call",
+        payload={"lead_id": "a@example.com", "outcome": "spoke"},
+    )
+    # Twilio call with SID should count as billable.
+    store.log_action(
+        agent_id="agent.autocall.twilio.v1",
+        action_type="call.attempt",
+        trace_id="twilio-call",
+        payload={"lead_id": "b@example.com", "twilio": {"sid": "CA123"}},
+    )
+    # Twilio SMS with SID should count as billable.
+    store.log_action(
+        agent_id="agent.sms.twilio.v1",
+        action_type="sms.attempt",
+        trace_id="twilio-sms",
+        payload={"lead_id": "c@example.com", "twilio": {"sid": "SM123"}},
+    )
+
+    assert _count_actions_today(store, action_type="call.attempt") == 2
+    assert _count_actions_today(store, action_type="call.attempt", paid_only=True) == 1
+    assert _count_actions_today(store, action_type="sms.attempt", paid_only=True) == 1

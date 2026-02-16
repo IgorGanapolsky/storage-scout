@@ -27,87 +27,45 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.utils import UTC, normalize_us_phone, now_utc_iso, state_tz, truthy
 
-UTC = timezone.utc
-
-_US_PHONE_RE = re.compile(r"\D+")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-_STATE_TZ: dict[str, str] = {
-    "AL": "America/Chicago",
-    "AK": "America/Anchorage",
-    "AZ": "America/Phoenix",
-    "AR": "America/Chicago",
-    "CA": "America/Los_Angeles",
-    "CO": "America/Denver",
-    "CT": "America/New_York",
-    "DC": "America/New_York",
-    "DE": "America/New_York",
-    "FL": "America/New_York",
-    "GA": "America/New_York",
-    "HI": "Pacific/Honolulu",
-    "IA": "America/Chicago",
-    "ID": "America/Denver",
-    "IL": "America/Chicago",
-    "IN": "America/Indiana/Indianapolis",
-    "KS": "America/Chicago",
-    "KY": "America/New_York",
-    "LA": "America/Chicago",
-    "MA": "America/New_York",
-    "MD": "America/New_York",
-    "ME": "America/New_York",
-    "MI": "America/New_York",
-    "MN": "America/Chicago",
-    "MO": "America/Chicago",
-    "MS": "America/Chicago",
-    "MT": "America/Denver",
-    "NC": "America/New_York",
-    "ND": "America/Chicago",
-    "NE": "America/Chicago",
-    "NH": "America/New_York",
-    "NJ": "America/New_York",
-    "NM": "America/Denver",
-    "NV": "America/Los_Angeles",
-    "NY": "America/New_York",
-    "OH": "America/New_York",
-    "OK": "America/Chicago",
-    "OR": "America/Los_Angeles",
-    "PA": "America/New_York",
-    "RI": "America/New_York",
-    "SC": "America/New_York",
-    "SD": "America/Chicago",
-    "TN": "America/Chicago",
-    "TX": "America/Chicago",
-    "UT": "America/Denver",
-    "VA": "America/New_York",
-    "VT": "America/New_York",
-    "WA": "America/Los_Angeles",
-    "WI": "America/Chicago",
-    "WV": "America/New_York",
-    "WY": "America/Denver",
-}
-
-
-def _truthy(val: str) -> bool:
-    return (val or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def normalize_us_phone_e164(raw_phone: str) -> str | None:
     """Normalize common US phone formats into E.164 (e.g. +19546211439)."""
-    raw = (raw_phone or "").strip()
-    if not raw:
-        return None
-    digits = _US_PHONE_RE.sub("", raw)
-    if len(digits) == 11 and digits.startswith("1"):
-        digits = digits[1:]
-    if len(digits) != 10:
-        return None
-    return f"+1{digits}"
+    result = normalize_us_phone(raw_phone)
+    return result or None
+
+
+def _state_tz(state: str) -> str:
+    """Backward-compatible state timezone helper used by tests and callers."""
+    return state_tz(state)
+
+
+def _is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
+    """Local business-hours check that remains monkeypatch-friendly in tests."""
+    try:
+        from zoneinfo import ZoneInfo
+    except Exception:
+        return True
+
+    tz_name = _state_tz(state)
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
+    now_local = datetime.now(tz)
+    if now_local.weekday() >= 5:
+        return False
+    return int(start_hour) <= int(now_local.hour) < int(end_hour)
 
 
 def _default_twiml() -> str:
@@ -192,7 +150,7 @@ def load_twilio_config(env: dict[str, str]) -> TwilioConfig | None:
     ring_timeout = int((env.get("AUTO_CALLS_RING_TIMEOUT_SECS") or "20").strip() or 20)
     poll_timeout = int((env.get("AUTO_CALLS_POLL_TIMEOUT_SECS") or "120").strip() or 120)
     poll_interval = float((env.get("AUTO_CALLS_POLL_INTERVAL_SECS") or "2.0").strip() or 2.0)
-    machine_detection = _truthy(env.get("AUTO_CALLS_MACHINE_DETECTION") or "")
+    machine_detection = truthy(env.get("AUTO_CALLS_MACHINE_DETECTION") or "")
 
     # Basic sanity: Twilio requires E.164 for From numbers.
     if not from_num.startswith("+"):
@@ -310,10 +268,6 @@ class AutoCallResult:
     reason: str
 
 
-def _now_utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
-
-
 def _lead_called_recently(store: ContextStore, *, lead_id: str, cooldown_days: int) -> bool:
     cutoff = (datetime.now(UTC) - timedelta(days=int(cooldown_days))).isoformat()
     row = store.conn.execute(
@@ -331,23 +285,6 @@ def _lead_called_recently(store: ContextStore, *, lead_id: str, cooldown_days: i
     return row is not None
 
 
-def _state_tz(state: str) -> str:
-    st = (state or "").strip().upper()
-    return _STATE_TZ.get(st, "America/New_York")
-
-
-def _is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
-    # Best-effort: infer timezone from US state. This is imperfect for multi-TZ states.
-    try:
-        from zoneinfo import ZoneInfo  # Python 3.9+
-    except Exception:
-        return True
-
-    tz = ZoneInfo(_state_tz(state))
-    now_local = datetime.now(tz)
-    if now_local.weekday() >= 5:
-        return False
-    return int(start_hour) <= int(now_local.hour) < int(end_hour)
 
 
 def run_auto_calls(
@@ -357,7 +294,7 @@ def run_auto_calls(
     env: dict[str, str],
     call_rows: list[dict[str, Any]],
 ) -> AutoCallResult:
-    if not _truthy(env.get("AUTO_CALLS_ENABLED") or ""):
+    if not truthy(env.get("AUTO_CALLS_ENABLED") or ""):
         return AutoCallResult(
             attempted=0,
             completed=0,
@@ -434,7 +371,7 @@ def run_auto_calls(
                 continue
 
             # Place call and wait for terminal status (best-effort).
-            attempted_at = _now_utc_iso()
+            attempted_at = now_utc_iso()
             try:
                 created = create_call(cfg, to_number=to_phone)
                 call_sid = str(created.get("sid") or "")

@@ -80,3 +80,42 @@ def test_call_list_includes_website_and_flags_role_inbox(tmp_path: Path) -> None
     assert r.role_inbox == "yes"
     assert r.email_sent_count == 1
 
+
+def test_call_list_prioritizes_warm_statuses() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    for email, status in (
+        ("new@example.com", "new"),
+        ("contacted@example.com", "contacted"),
+        ("replied@example.com", "replied"),
+    ):
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name="",
+                company=email.split("@", 1)[0],
+                email=email,
+                phone="555-1000",
+                service="med spa",
+                city="Coral Springs",
+                state="FL",
+                source="t",
+                score=80,
+                status=status,
+                email_method="direct",
+            )
+        )
+
+    rows = generate_call_list(
+        sqlite_path=Path(sqlite_path),
+        services=["med spa"],
+        limit=10,
+        require_phone=True,
+        include_opt_outs=False,
+        source_csv=None,
+    )
+
+    ordered = [r.email for r in rows]
+    assert ordered[:3] == ["replied@example.com", "contacted@example.com", "new@example.com"]
