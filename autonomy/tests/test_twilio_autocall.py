@@ -8,23 +8,23 @@ from pathlib import Path
 from uuid import uuid4
 
 from autonomy.context_store import ContextStore, Lead
+from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.call_list import CallListRow
 from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
 from autonomy.tools.scoreboard import Scoreboard
-from autonomy.tools import live_job as live_job_mod
-from autonomy.tools.twilio_sms import SmsResult
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
     _is_business_hours,
-    _lead_called_recently,
     _is_reasonable_email,
+    _lead_called_recently,
     _state_tz,
     load_twilio_config,
     map_twilio_call_to_outcome,
     normalize_us_phone_e164,
     run_auto_calls,
     wait_for_call_terminal_status,
- )
+)
+from autonomy.tools.twilio_sms import SmsResult
 
 
 class _FakeHTTPResponse:
@@ -36,7 +36,7 @@ class _FakeHTTPResponse:
             return self._body
         return self._body[:n]
 
-    def __enter__(self) -> "_FakeHTTPResponse":
+    def __enter__(self) -> _FakeHTTPResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:

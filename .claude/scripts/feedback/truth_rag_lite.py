@@ -27,8 +27,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MEMORY_DIR = REPO_ROOT / ".claude" / "memory"
@@ -48,7 +47,7 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return WORD_RE.findall(text.lower())
 
 
@@ -65,10 +64,10 @@ def _safe_iso_date(ts: str) -> str:
         return ts[:10]
 
 
-def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
         line = line.strip()
         if not line:
@@ -86,7 +85,7 @@ class Doc:
     kind: str  # "feedback" | "lesson"
     ts: str
     text: str
-    tags: List[str]
+    tags: list[str]
     weight: float = 1.0
 
 
@@ -95,13 +94,13 @@ class BM25:
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         self.k1 = k1
         self.b = b
-        self.doc_freqs: Dict[str, int] = {}
-        self.doc_lengths: List[int] = []
+        self.doc_freqs: dict[str, int] = {}
+        self.doc_lengths: list[int] = []
         self.avg_doc_length: float = 0.0
-        self.corpus: List[List[str]] = []
+        self.corpus: list[list[str]] = []
         self.n_docs = 0
 
-    def fit(self, documents: List[str]) -> None:
+    def fit(self, documents: list[str]) -> None:
         self.corpus = [_tokenize(doc) for doc in documents]
         self.n_docs = len(self.corpus)
         self.doc_lengths = [len(doc) for doc in self.corpus]
@@ -129,7 +128,7 @@ class BM25:
         if not doc_terms:
             return 0.0
 
-        tf: Dict[str, int] = {}
+        tf: dict[str, int] = {}
         for t in doc_terms:
             tf[t] = tf.get(t, 0) + 1
 
@@ -143,7 +142,7 @@ class BM25:
             score += idf * (f * (self.k1 + 1.0)) / (denom or 1.0)
         return score
 
-    def search(self, query: str, top_k: int = 10) -> List[Tuple[int, float]]:
+    def search(self, query: str, top_k: int = 10) -> list[tuple[int, float]]:
         scores = [(i, self.score(query, i)) for i in range(self.n_docs)]
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:top_k]
@@ -157,9 +156,7 @@ def _looks_like_machine_context(text: str) -> bool:
         return True
     if "transcript_path" in t:
         return True
-    if t.startswith("{") and ("session_id" in t or "sessionId" in t) and ("cwd" in t or "hook_event" in t or "hookEvent" in t):
-        return True
-    return False
+    return bool(t.startswith("{") and ("session_id" in t or "sessionId" in t) and ("cwd" in t or "hook_event" in t or "hookEvent" in t))
 
 
 def _extract_human_context(raw: Any) -> str:
@@ -190,8 +187,8 @@ def _extract_human_context(raw: Any) -> str:
     return s
 
 
-def _load_feedback_docs() -> List[Doc]:
-    docs: List[Doc] = []
+def _load_feedback_docs() -> list[Doc]:
+    docs: list[Doc] = []
 
     # Preferred: node-based RLHF log with explicit reward.
     for obj in _read_jsonl(FEEDBACK_LOG):
@@ -258,14 +255,14 @@ def _load_feedback_docs() -> List[Doc]:
     return docs
 
 
-def _load_lesson_docs() -> List[Doc]:
+def _load_lesson_docs() -> list[Doc]:
     if not LESSONS_MD.exists():
         return []
     text = LESSONS_MD.read_text(encoding="utf-8", errors="ignore")
     # Very lightweight parsing: split by headings, keep the chunk text.
-    chunks: List[Tuple[str, str]] = []
+    chunks: list[tuple[str, str]] = []
     current_title = "Lessons Learned"
-    buf: List[str] = []
+    buf: list[str] = []
 
     for line in text.splitlines():
         if line.startswith("## "):
@@ -278,7 +275,7 @@ def _load_lesson_docs() -> List[Doc]:
     if buf:
         chunks.append((current_title, "\n".join(buf).strip()))
 
-    docs: List[Doc] = []
+    docs: list[Doc] = []
     for i, (title, chunk) in enumerate(chunks):
         chunk = chunk.strip()
         if not chunk:
@@ -301,11 +298,11 @@ def _load_lesson_docs() -> List[Doc]:
     return docs
 
 
-def _build_corpus() -> List[Doc]:
+def _build_corpus() -> list[Doc]:
     return _load_feedback_docs() + _load_lesson_docs()
 
 
-def _extract_critical_high_lessons(max_per_section: int = 5) -> List[Tuple[str, str]]:
+def _extract_critical_high_lessons(max_per_section: int = 5) -> list[tuple[str, str]]:
     """
     Pull a few lesson titles from the markdown under the Critical/High sections.
     Returns list of (severity, title).
@@ -313,9 +310,9 @@ def _extract_critical_high_lessons(max_per_section: int = 5) -> List[Tuple[str, 
     if not LESSONS_MD.exists():
         return []
 
-    severity: Optional[str] = None
-    out: List[Tuple[str, str]] = []
-    counts: Dict[str, int] = {"critical": 0, "high": 0}
+    severity: str | None = None
+    out: list[tuple[str, str]] = []
+    counts: dict[str, int] = {"critical": 0, "high": 0}
 
     for line in LESSONS_MD.read_text(encoding="utf-8", errors="ignore").splitlines():
         if line.startswith("## "):
@@ -340,13 +337,13 @@ def _extract_critical_high_lessons(max_per_section: int = 5) -> List[Tuple[str, 
     return out
 
 
-def _score_query(docs: List[Doc], query: str, top_k: int = 8) -> List[Tuple[Doc, float]]:
+def _score_query(docs: list[Doc], query: str, top_k: int = 8) -> list[tuple[Doc, float]]:
     if not docs or not query.strip():
         return []
 
     bm25 = BM25()
     bm25.fit([d.text for d in docs])
-    scored: List[Tuple[Doc, float]] = []
+    scored: list[tuple[Doc, float]] = []
     for idx, s in bm25.search(query, top_k=top_k * 2):
         d = docs[idx]
         # Small boost if query is about lies and doc contains lie terms.

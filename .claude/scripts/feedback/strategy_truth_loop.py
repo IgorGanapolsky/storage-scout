@@ -14,15 +14,15 @@ This script is local-memory only (stored under `.claude/memory/`).
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
 import json
 import math
 import re
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = SCRIPT_DIR.parent.parent / "memory"
@@ -82,7 +82,7 @@ def parse_money(raw: str) -> float:
     return float(raw.replace(",", ""))
 
 
-def parse_human_date(month_raw: str, day_raw: str, year_raw: Optional[str]) -> Optional[datetime]:
+def parse_human_date(month_raw: str, day_raw: str, year_raw: str | None) -> datetime | None:
     month = MONTHS.get(month_raw[:3].lower())
     if month is None:
         return None
@@ -98,7 +98,7 @@ def iso_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
-def tokenize(text: str) -> List[str]:
+def tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
@@ -112,13 +112,13 @@ def lexical_similarity(a: str, b: str) -> float:
     return inter / union if union else 0.0
 
 
-def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     if not vec_a or not vec_b or len(vec_a) != len(vec_b):
         return 0.0
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-    for a, b in zip(vec_a, vec_b):
+    for a, b in zip(vec_a, vec_b, strict=False):
         dot += a * b
         norm_a += a * a
         norm_b += b * b
@@ -127,7 +127,7 @@ def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
 
 
-def load_embedder() -> Tuple[Optional[Any], Optional[str]]:
+def load_embedder() -> tuple[Any | None, str | None]:
     try:
         from sentence_transformers import SentenceTransformer
     except Exception:
@@ -138,16 +138,16 @@ def load_embedder() -> Tuple[Optional[Any], Optional[str]]:
     model_name = "all-MiniLM-L6-v2"
     model = SentenceTransformer(model_name, cache_folder=str(cache_dir))
 
-    def _embed(text: str) -> List[float]:
+    def _embed(text: str) -> list[float]:
         return model.encode([text])[0].tolist()
 
     return _embed, model_name
 
 
-def read_jsonl(path: Path) -> List[Dict[str, Any]]:
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line:
@@ -159,19 +159,19 @@ def read_jsonl(path: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def append_jsonl(path: Path, obj: Dict[str, Any]) -> None:
+def append_jsonl(path: Path, obj: dict[str, Any]) -> None:
     with path.open("a") as f:
         f.write(json.dumps(obj) + "\n")
 
 
-def load_pending_question() -> Optional[Dict[str, Any]]:
+def load_pending_question() -> dict[str, Any] | None:
     pending = read_jsonl(PENDING_QUESTIONS_FILE)
     if not pending:
         return None
     return pending[-1]
 
 
-def parse_question_response(args: argparse.Namespace) -> Tuple[str, str]:
+def parse_question_response(args: argparse.Namespace) -> tuple[str, str]:
     question = args.question or ""
     response = args.response or ""
 
@@ -193,7 +193,7 @@ def parse_question_response(args: argparse.Namespace) -> Tuple[str, str]:
     return question.strip(), response.strip()
 
 
-def extract_as_of_date(text: str) -> Optional[str]:
+def extract_as_of_date(text: str) -> str | None:
     as_of_re = re.compile(r"(?i)\bas of\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})")
     match = as_of_re.search(text)
     if not match:
@@ -206,12 +206,12 @@ def extract_as_of_date(text: str) -> Optional[str]:
     return iso_date(dt) if dt else None
 
 
-def extract_metrics(text: str) -> Dict[str, Any]:
-    metrics: Dict[str, Any] = {}
+def extract_metrics(text: str) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
     lowered = text.lower()
 
     # Current revenue (explicit lines about made/revenue/gross/net)
-    revenue_candidates: List[float] = []
+    revenue_candidates: list[float] = []
     for line in text.splitlines():
         line_l = line.lower()
         if any(k in line_l for k in ["made", "revenue", "gross", "net", "earned"]):
@@ -241,9 +241,8 @@ def extract_metrics(text: str) -> Dict[str, Any]:
             metrics["first_dollar_window_end"] = iso_date(end_dt)
 
     # If explicit "$0.00" and revenue keywords exist, keep explicit zero
-    if "0.00" in text and any(x in lowered for x in ["stripe", "gross", "net", "revenue"]):
-        if "current_revenue_usd" not in metrics:
-            metrics["current_revenue_usd"] = 0.0
+    if "0.00" in text and any(x in lowered for x in ["stripe", "gross", "net", "revenue"]) and "current_revenue_usd" not in metrics:
+        metrics["current_revenue_usd"] = 0.0
 
     return metrics
 
@@ -265,7 +264,7 @@ def detect_domain(question: str, response: str) -> str:
     return "general-strategy"
 
 
-def get_sources(args_sources: List[str], response: str) -> List[str]:
+def get_sources(args_sources: list[str], response: str) -> list[str]:
     discovered = URL_RE.findall(response)
     out = list(dict.fromkeys([*args_sources, *discovered]))
     return out
@@ -273,23 +272,23 @@ def get_sources(args_sources: List[str], response: str) -> List[str]:
 
 @dataclass
 class SimilarResult:
-    entry: Dict[str, Any]
+    entry: dict[str, Any]
     score: float
     method: str
 
 
 def retrieve_similar_entries(
-    entries: List[Dict[str, Any]],
+    entries: list[dict[str, Any]],
     question: str,
     response: str,
-    embedder: Optional[Any],
-) -> List[SimilarResult]:
+    embedder: Any | None,
+) -> list[SimilarResult]:
     query_text = f"{question}\n{response}"
-    query_embedding: Optional[List[float]] = None
+    query_embedding: list[float] | None = None
     if embedder:
         query_embedding = embedder(query_text)
 
-    results: List[SimilarResult] = []
+    results: list[SimilarResult] = []
     for entry in entries:
         prev_text = f"{entry.get('question', '')}\n{entry.get('response', '')}"
         score = 0.0
@@ -307,12 +306,12 @@ def retrieve_similar_entries(
 
 
 def compare_truthfulness(
-    new_metrics: Dict[str, Any],
-    new_as_of: Optional[str],
-    similar: List[SimilarResult],
-) -> Tuple[List[str], List[str]]:
-    contradictions: List[str] = []
-    consistency_notes: List[str] = []
+    new_metrics: dict[str, Any],
+    new_as_of: str | None,
+    similar: list[SimilarResult],
+) -> tuple[list[str], list[str]]:
+    contradictions: list[str] = []
+    consistency_notes: list[str] = []
 
     stable_keys = {"current_revenue_usd", "paid_sessions"}
     soft_keys = {"first_dollar_probability_pct", "first_dollar_window_start", "first_dollar_window_end"}
@@ -362,7 +361,7 @@ def compare_truthfulness(
 def score_truthfulness(
     response: str,
     source_count: int,
-    contradictions: List[str],
+    contradictions: list[str],
     similar_count: int,
 ) -> int:
     score = 100
@@ -378,7 +377,7 @@ def score_truthfulness(
     return max(0, min(100, score))
 
 
-def default_callcatcher_plan(metrics: Dict[str, Any]) -> List[str]:
+def default_callcatcher_plan(metrics: dict[str, Any]) -> list[str]:
     today = datetime.now(timezone.utc).date()
     start_72h = today + timedelta(days=3)
     day14 = today + timedelta(days=14)
@@ -400,7 +399,7 @@ def default_callcatcher_plan(metrics: Dict[str, Any]) -> List[str]:
     ]
 
 
-def default_general_plan() -> List[str]:
+def default_general_plan() -> list[str]:
     today = datetime.now(timezone.utc).date()
     return [
         f"Objective: define one measurable business outcome by {(today + timedelta(days=14)).isoformat()}.",
@@ -414,11 +413,11 @@ def default_general_plan() -> List[str]:
 def write_plan_file(
     entry_id: str,
     question: str,
-    metrics: Dict[str, Any],
+    metrics: dict[str, Any],
     truth_score: int,
-    contradictions: List[str],
-    consistency_notes: List[str],
-    similar: List[SimilarResult],
+    contradictions: list[str],
+    consistency_notes: list[str],
+    similar: list[SimilarResult],
     domain: str,
 ) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -470,7 +469,7 @@ def write_plan_file(
     return plan_path
 
 
-def update_summary(entry: Dict[str, Any]) -> None:
+def update_summary(entry: dict[str, Any]) -> None:
     summary = {
         "total_entries": 0,
         "average_truthfulness_score": 0.0,
@@ -479,10 +478,8 @@ def update_summary(entry: Dict[str, Any]) -> None:
         "domain_counts": {},
     }
     if SUMMARY_FILE.exists():
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             summary = json.loads(SUMMARY_FILE.read_text())
-        except json.JSONDecodeError:
-            pass
 
     n = int(summary.get("total_entries", 0))
     prev_avg = float(summary.get("average_truthfulness_score", 0.0))
@@ -540,7 +537,7 @@ def main() -> int:
         similar_count=len(similar),
     )
 
-    digest = hashlib.sha1(f"{question}\n{response}".encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(f"{question}\n{response}".encode()).hexdigest()[:10]
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     entry_id = f"strat_{timestamp}_{digest}"
 
@@ -555,7 +552,7 @@ def main() -> int:
         domain=domain,
     )
 
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "id": entry_id,
         "timestamp": utc_now_iso(),
         "question": question,

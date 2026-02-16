@@ -16,6 +16,7 @@ Safety defaults:
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 import urllib.error
@@ -124,7 +125,7 @@ def _truthy(val: str) -> bool:
 
 
 def _auth_header(cfg: TwilioSmsConfig) -> str:
-    raw = f"{cfg.account_sid}:{cfg.auth_token}".encode("utf-8")
+    raw = f"{cfg.account_sid}:{cfg.auth_token}".encode()
     b64 = base64.b64encode(raw).decode("ascii")
     return f"Basic {b64}"
 
@@ -279,15 +280,11 @@ def run_sms_followup(
             result.delivered += 1
         except urllib.error.HTTPError as exc:
             error_body = ""
-            try:
+            with contextlib.suppress(Exception):
                 error_body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                pass
             error_data: dict[str, Any] = {}
-            try:
+            with contextlib.suppress(Exception):
                 error_data = json.loads(error_body)
-            except Exception:
-                pass
             payload["outcome"] = "failed"
             payload["twilio"] = {
                 "sid": "",
@@ -324,9 +321,7 @@ def run_sms_followup(
             payload=payload,
         )
 
-    try:
+    with contextlib.suppress(Exception):
         store.conn.close()
-    except Exception:
-        pass
 
     return result

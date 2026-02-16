@@ -87,7 +87,7 @@ def test_lead_source_csv_infers_email_method(tmp_path: Path) -> None:
         {"company": "D", "email": "x@example.com", "notes": "source=google_places; email=scrape"},
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=sorted({k for r in rows for k in r.keys()}))
+        writer = csv.DictWriter(f, fieldnames=sorted({k for r in rows for k in r}))
         writer.writeheader()
         for r in rows:
             writer.writerow(r)
