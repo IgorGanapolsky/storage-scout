@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import urllib.error
 from datetime import datetime as real_datetime
 from pathlib import Path
 from uuid import uuid4
@@ -36,6 +38,17 @@ class _FakeHTTPResponse:
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         return False
+
+
+def _build_http_error(*, status: int, payload: dict) -> urllib.error.HTTPError:
+    body = json.dumps(payload).encode("utf-8")
+    return urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json",
+        code=int(status),
+        msg="Bad Request",
+        hdrs=None,
+        fp=io.BytesIO(body),
+    )
 
 
 def test_normalize_us_phone_e164() -> None:
@@ -214,7 +227,7 @@ def test_run_auto_calls_end_to_end(monkeypatch) -> None:
     assert result.reason == "ok"
     assert result.attempted == 2
     assert result.spoke == 1
-    assert result.no_answer == 1
+    assert result.failed == 1
     assert result.skipped == 5
 
 
@@ -288,6 +301,89 @@ def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
     assert result.reason == "ok"
     assert result.attempted == 1
     assert result.spoke == 1
+
+
+def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        email = "trial@example.com"
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name="Trial",
+                company="Co",
+                email=email,
+                phone="9549736161",
+                service="Dentist",
+                city="X",
+                state="FL",
+                source="test",
+                score=100,
+                status="new",
+                email_method="direct",
+            )
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+
+    def fake_urlopen(req, timeout=20):  # noqa: ANN001
+        if req.get_method() == "POST":
+            raise _build_http_error(
+                status=400,
+                payload={
+                    "code": 21219,
+                    "message": "The number +19549736161 is unverified. Trial accounts may only make calls to verified numbers.",
+                    "more_info": "https://www.twilio.com/docs/errors/21219",
+                },
+            )
+        raise AssertionError("GET should not be called when POST fails")
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+
+    result = run_auto_calls(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=env,
+        call_rows=[{"email": "trial@example.com", "phone": "9549736161", "state": "FL"}],
+    )
+    assert result.reason == "ok"
+    assert result.attempted == 1
+    assert result.failed == 1
+
+    store_check = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = store_check.conn.execute(
+            """
+            SELECT
+              json_extract(payload_json, '$.notes') AS notes,
+              json_extract(payload_json, '$.twilio.error_code') AS error_code,
+              json_extract(payload_json, '$.twilio.http_status') AS http_status,
+              json_extract(payload_json, '$.twilio.error_type') AS error_type
+            FROM actions
+            WHERE action_type='call.attempt'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        assert row is not None
+        assert "code=21219" in str(row["notes"] or "")
+        assert int(row["error_code"] or 0) == 21219
+        assert int(row["http_status"] or 0) == 400
+        assert str(row["error_type"] or "") == "HTTPError"
+    finally:
+        store_check.conn.close()
 
 
 def test_live_job_report_includes_auto_calls_section() -> None:
