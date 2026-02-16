@@ -117,6 +117,42 @@ def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bo
     return int(row[0] or 0) if row else 0
 
 
+def _compute_sms_channel_budgets(
+    *,
+    daily_sms_cap: int,
+    sms_today_followup: int,
+    sms_today_nudge: int,
+    interest_reserve: int,
+) -> dict[str, int]:
+    """Compute total and per-channel SMS budgets for this UTC day.
+
+    Reserve is a protected quota for high-intent inbound nudges. Follow-up SMS
+    can only consume capacity beyond the remaining reserve.
+    """
+    cap = max(0, int(daily_sms_cap))
+    reserve = max(0, min(int(interest_reserve), cap))
+    used_followup = max(0, int(sms_today_followup))
+    used_nudge = max(0, int(sms_today_nudge))
+
+    used_total = max(0, used_followup + used_nudge)
+    total_remaining = max(0, cap - used_total)
+
+    # Reserve is consumed by nudge traffic first; remaining reserve is held.
+    reserve_remaining = max(0, reserve - used_nudge)
+    followup_remaining = max(0, total_remaining - reserve_remaining)
+
+    return {
+        "cap": cap,
+        "interest_reserve": reserve,
+        "interest_reserve_remaining": reserve_remaining,
+        "used_followup": used_followup,
+        "used_nudge": used_nudge,
+        "used_total": used_total,
+        "total_remaining": total_remaining,
+        "followup_remaining": followup_remaining,
+    }
+
+
 def _log_guard_block(
     *,
     store: ContextStore,
@@ -726,20 +762,31 @@ def main() -> None:
     guardrails["calls_budget_remaining"] = int(call_budget_remaining)
 
     daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
+    daily_sms_interest_reserve = max(0, _int_env(env.get("PAID_DAILY_SMS_INTEREST_RESERVE"), 3))
     sms_today_followup_all = _count_actions_today(guard_store, action_type="sms.attempt")
     sms_today_nudge_all = _count_actions_today(guard_store, action_type="sms.interest_nudge")
     sms_today_all = int(sms_today_followup_all) + int(sms_today_nudge_all)
     sms_today_followup = _count_actions_today(guard_store, action_type="sms.attempt", paid_only=True)
     sms_today_nudge = _count_actions_today(guard_store, action_type="sms.interest_nudge", paid_only=True)
-    sms_today = int(sms_today_followup) + int(sms_today_nudge)
-    sms_budget_remaining = max(0, int(daily_sms_cap) - int(sms_today))
+    sms_budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=daily_sms_cap,
+        sms_today_followup=sms_today_followup,
+        sms_today_nudge=sms_today_nudge,
+        interest_reserve=daily_sms_interest_reserve,
+    )
+    sms_today = int(sms_budgets["used_total"])
+    sms_budget_remaining = int(sms_budgets["total_remaining"])
+    sms_followup_budget_remaining = int(sms_budgets["followup_remaining"])
     guardrails["sms_daily_cap"] = int(daily_sms_cap)
+    guardrails["sms_interest_reserve"] = int(sms_budgets["interest_reserve"])
+    guardrails["sms_interest_reserve_remaining"] = int(sms_budgets["interest_reserve_remaining"])
     guardrails["sms_today_scope"] = "billable_twilio"
     guardrails["sms_today_all_actions"] = int(sms_today_all)
     guardrails["sms_today_followup_actions"] = int(sms_today_followup_all)
     guardrails["sms_today_interest_nudges"] = int(sms_today_nudge_all)
     guardrails["sms_today"] = int(sms_today)
     guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
+    guardrails["sms_followup_budget_remaining"] = int(sms_followup_budget_remaining)
 
     funnel_enabled = (env.get("FUNNEL_WATCHDOG") or "1").strip().lower() not in {"0", "false", "no", "off"}
     funnel_result: FunnelWatchdogResult | None = None
@@ -790,8 +837,16 @@ def main() -> None:
             booking_url=cfg.company.get("booking_url", ""),
             kickoff_url=cfg.company.get("kickoff_url", ""),
         )
-        sms_budget_remaining = max(0, int(sms_budget_remaining) - int(interest_nudge_result.nudged))
+        sms_budgets = _compute_sms_channel_budgets(
+            daily_sms_cap=daily_sms_cap,
+            sms_today_followup=sms_today_followup,
+            sms_today_nudge=(sms_today_nudge + int(interest_nudge_result.nudged)),
+            interest_reserve=daily_sms_interest_reserve,
+        )
+        sms_budget_remaining = int(sms_budgets["total_remaining"])
+        sms_followup_budget_remaining = int(sms_budgets["followup_remaining"])
         guardrails["sms_budget_remaining_after_nudges"] = int(sms_budget_remaining)
+        guardrails["sms_followup_budget_remaining_after_nudges"] = int(sms_followup_budget_remaining)
 
     # 3) Optional: write a call list and place outbound calls (Twilio) before computing scoreboard.
     call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
@@ -845,8 +900,11 @@ def main() -> None:
             sms_block_reason = "paid_kill_switch"
         elif bool(stop_loss_state.get("blocked", False)):
             sms_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
-        elif sms_budget_remaining <= 0:
-            sms_block_reason = "sms_daily_cap_reached"
+        elif sms_followup_budget_remaining <= 0:
+            if sms_budget_remaining > 0:
+                sms_block_reason = "sms_reserved_for_interest"
+            else:
+                sms_block_reason = "sms_daily_cap_reached"
 
         if sms_block_reason:
             _log_guard_block(
@@ -857,13 +915,16 @@ def main() -> None:
                     "sms_today": int(sms_today),
                     "sms_today_all_actions": int(sms_today_all),
                     "sms_daily_cap": int(daily_sms_cap),
+                    "sms_interest_reserve": int(sms_budgets["interest_reserve"]),
+                    "sms_interest_reserve_remaining": int(sms_budgets["interest_reserve_remaining"]),
+                    "sms_followup_budget_remaining": int(sms_followup_budget_remaining),
                 },
             )
             sms_result = SmsResult(reason=f"blocked:{sms_block_reason}")
         else:
             sms_env = dict(env)
             configured_max_sms = max(1, _int_env(sms_env.get("AUTO_SMS_MAX_PER_RUN"), 20))
-            sms_env["AUTO_SMS_MAX_PER_RUN"] = str(min(configured_max_sms, sms_budget_remaining))
+            sms_env["AUTO_SMS_MAX_PER_RUN"] = str(min(configured_max_sms, sms_followup_budget_remaining))
             sms_result = run_sms_followup(
                 sqlite_path=sqlite_path,
                 audit_log=audit_log,
