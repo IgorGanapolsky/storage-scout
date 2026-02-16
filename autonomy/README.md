@@ -78,6 +78,7 @@ Optional tuning:
 - `AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES=120`
 - `AUTO_INTEREST_NUDGE_COOLDOWN_HOURS=24`
 - `AUTO_INTEREST_NUDGE_LOOKBACK_DAYS=14`
+- `PAID_DAILY_SMS_INTEREST_RESERVE=3` (reserve SMS quota/day for inbound "interested" nudges)
 - `PRIORITY_KICKOFF_URL=https://buy.stripe.com/...` (optional override for payment CTA in interested auto-replies)
 
 ## Lead Generation (Broward County)
