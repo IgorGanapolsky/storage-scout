@@ -1,7 +1,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Optional
 
 from .agents import OutreachWriter
 from .context_store import ContextStore, Lead
@@ -34,7 +34,7 @@ class AIOutreachWriter:
             baseline_example_url=self.baseline_example_url,
         )
 
-    def _get_api_key(self) -> Optional[str]:
+    def _get_api_key(self) -> str | None:
         return os.environ.get("OPENAI_API_KEY")
 
     def _unsubscribe_footer(self, email: str) -> str:
@@ -46,7 +46,7 @@ class AIOutreachWriter:
             f"Unsubscribe: {unsub}\n"
         )
 
-    def _call_openai(self, system: str, user: str) -> Optional[str]:
+    def _call_openai(self, system: str, user: str) -> str | None:
         api_key = self._get_api_key()
         if not api_key:
             logger.warning("OPENAI_API_KEY not set; falling back to template writer")
@@ -105,7 +105,7 @@ class AIOutreachWriter:
             lines.append(f"- {obs['content']}")
         return "\n".join(lines)
 
-    def _parse_response(self, text: str, lead: Lead) -> Dict[str, str]:
+    def _parse_response(self, text: str, lead: Lead) -> dict[str, str]:
         subject = ""
         body = text
         for line in text.splitlines():
@@ -119,7 +119,7 @@ class AIOutreachWriter:
         body += self._unsubscribe_footer(lead.email)
         return {"subject": subject, "body": body}
 
-    def render(self, lead: Lead) -> Dict[str, str]:
+    def render(self, lead: Lead) -> dict[str, str]:
         user_prompt = (
             f"Write an initial cold outreach email.\n\n"
             f"{self._lead_context(lead)}\n\n"
@@ -131,7 +131,7 @@ class AIOutreachWriter:
             return self._fallback.render(lead)
         return self._parse_response(result, lead)
 
-    def render_followup(self, lead: Lead, step: int) -> Dict[str, str]:
+    def render_followup(self, lead: Lead, step: int) -> dict[str, str]:
         step = int(step)
         user_prompt = (
             f"Write follow-up email #{step} for a lead who hasn't responded.\n\n"

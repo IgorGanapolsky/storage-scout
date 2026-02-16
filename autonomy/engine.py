@@ -2,11 +2,13 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
 
 from .agents import LeadScorer, OutreachWriter
 from .ai_writer import AIOutreachWriter
 from .context_store import ContextStore, Lead
+from .goal_executor import GoalExecutor
+from .goal_planner import GoalPlanner
+from .observer import Observer, ObserverConfig, Reflector
 from .outreach_policy import (
     DEFAULT_ALLOWED_EMAIL_METHODS,
     DEFAULT_BLOCKED_LOCAL_PARTS,
@@ -15,11 +17,7 @@ from .outreach_policy import (
     normalize_str_list,
     service_matches,
 )
-from .observer import Observer, ObserverConfig, Reflector
-from .goal_planner import GoalPlanner
-from .goal_executor import GoalExecutor
 from .providers import EmailConfig, EmailSender, LeadSourceCSV
-
 
 UTC = timezone.utc
 
@@ -38,12 +36,12 @@ class OutreachPolicy:
 @dataclass
 class EngineConfig:
     mode: str
-    company: Dict[str, str]
-    agents: Dict[str, Dict]
-    lead_sources: List[Dict]
-    email: Dict[str, str]
-    compliance: Dict[str, str]
-    storage: Dict[str, str]
+    company: dict[str, str]
+    agents: dict[str, dict]
+    lead_sources: list[dict]
+    email: dict[str, str]
+    compliance: dict[str, str]
+    storage: dict[str, str]
 
 
 class Engine:
@@ -177,9 +175,7 @@ class Engine:
         local = email_local_part(lead.email)
         if local in policy.blocked_local_parts:
             return False
-        if not is_sane_outreach_email(lead.email):
-            return False
-        return True
+        return is_sane_outreach_email(lead.email)
 
     def run_initial_outreach(self) -> int:
         outreach_cfg = self.config.agents["outreach"]
@@ -346,7 +342,7 @@ class Engine:
                     break
         return sent
 
-    def run(self) -> Dict[str, int]:
+    def run(self) -> dict[str, int]:
         self.ingest_leads()
         observed = 0
         reflected = 0
@@ -380,6 +376,6 @@ class Engine:
 
 
 def load_config(path: str) -> EngineConfig:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         raw = json.load(f)
     return EngineConfig(**raw)

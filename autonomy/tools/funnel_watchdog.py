@@ -17,6 +17,7 @@ This is intentionally lightweight and safe:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import random
 import re
@@ -26,9 +27,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
-
 
 UTC = timezone.utc
 
@@ -62,7 +61,7 @@ class FunnelWatchdogResult:
     as_of_utc: str
     checks_total: int = 0
     checks_ok: int = 0
-    issues: List[FunnelIssue] = field(default_factory=list)
+    issues: list[FunnelIssue] = field(default_factory=list)
 
     def add_ok(self) -> None:
         self.checks_total += 1
@@ -81,7 +80,7 @@ def _now_utc_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def _derive_urls(*, intake_url: str, unsubscribe_url_template: str) -> Dict[str, str]:
+def _derive_urls(*, intake_url: str, unsubscribe_url_template: str) -> dict[str, str]:
     intake_url = (intake_url or "").strip()
     parsed = urlparse(intake_url)
     if not parsed.scheme or not parsed.netloc:
@@ -105,7 +104,7 @@ def _derive_urls(*, intake_url: str, unsubscribe_url_template: str) -> Dict[str,
     }
 
 
-def _http_get(url: str, *, timeout: int = 14, max_bytes: int = 320_000) -> Tuple[int, str]:
+def _http_get(url: str, *, timeout: int = 14, max_bytes: int = 320_000) -> tuple[int, str]:
     url = (url or "").strip()
     if not url:
         return 0, ""
@@ -129,7 +128,7 @@ def _http_get(url: str, *, timeout: int = 14, max_bytes: int = 320_000) -> Tuple
         return 0, ""
 
 
-def _extract_ctas_from_html(html: str) -> Dict[str, str]:
+def _extract_ctas_from_html(html: str) -> dict[str, str]:
     html = html or ""
     calendly = ""
     stripe = ""
@@ -139,7 +138,7 @@ def _extract_ctas_from_html(html: str) -> Dict[str, str]:
     m = CTA_STRIPE_RE.search(html)
     if m:
         stripe = m.group(0).strip()
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     if calendly:
         out["calendly"] = calendly
     if stripe:
@@ -166,7 +165,7 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
     sock = Path.home() / ".agent-browser" / f"{session}.sock"
     pid = Path.home() / ".agent-browser" / f"{session}.pid"
 
-    def run(args: List[str], *, check: bool) -> subprocess.CompletedProcess[str]:
+    def run(args: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             cmd + ["--session", session] + args,
             cwd=str(repo_root),
@@ -177,10 +176,8 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
         )
 
     # Ensure a clean slate for this session name.
-    try:
+    with contextlib.suppress(Exception):
         run(["close"], check=False)
-    except Exception:
-        pass
     try:
         sock.unlink(missing_ok=True)
         pid.unlink(missing_ok=True)
@@ -204,19 +201,15 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
                 return ""
 
         # Wait is best-effort (some pages never go network-idle).
-        try:
+        with contextlib.suppress(Exception):
             run(["wait", "--load", "networkidle"], check=False)
-        except Exception:
-            pass
         res = run(["get", "text", "body"], check=True)
         return (res.stdout or "").strip()
     except Exception:
         return ""
     finally:
-        try:
+        with contextlib.suppress(Exception):
             run(["close"], check=False)
-        except Exception:
-            pass
         try:
             sock.unlink(missing_ok=True)
             pid.unlink(missing_ok=True)

@@ -7,7 +7,6 @@ import time
 from html import unescape
 from pathlib import Path
 from random import SystemRandom
-from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -72,7 +71,7 @@ def get_api_key() -> str:
     raise SystemExit("Missing Google Places API key. Set GOOGLE_PLACES_API_KEY.")
 
 
-def load_cities(path: Optional[Path]) -> List[str]:
+def load_cities(path: Path | None) -> list[str]:
     if path and path.exists():
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -84,10 +83,10 @@ def load_cities(path: Optional[Path]) -> List[str]:
     raise SystemExit("No city list found.")
 
 
-def load_existing(path: Path) -> Tuple[Set[str], Set[str], Set[str]]:
-    emails: Set[str] = set()
-    domains: Set[str] = set()
-    phones: Set[str] = set()
+def load_existing(path: Path) -> tuple[set[str], set[str], set[str]]:
+    emails: set[str] = set()
+    domains: set[str] = set()
+    phones: set[str] = set()
     if not path.exists():
         return emails, domains, phones
     with path.open(newline="", encoding="utf-8") as f:
@@ -154,9 +153,9 @@ def fetch_html(url: str) -> str:
         return ""
 
 
-def extract_emails(html_text: str) -> Set[str]:
+def extract_emails(html_text: str) -> set[str]:
     html_text = unescape(html_text or "")
-    out: Set[str] = set()
+    out: set[str] = set()
     for m in EMAIL_RE.finditer(html_text):
         out.add(m.group(0).strip().lower())
     # Mailto links sometimes don't render as plain text.
@@ -167,12 +166,12 @@ def extract_emails(html_text: str) -> Set[str]:
     return out
 
 
-def candidate_pages(base_url: str, html_text: str, domain: str) -> List[str]:
+def candidate_pages(base_url: str, html_text: str, domain: str) -> list[str]:
     base_url = normalize_url(base_url)
     if not base_url:
         return []
 
-    candidates: List[str] = []
+    candidates: list[str] = []
     # Common contact-like paths as a fast fallback.
     for hint in CONTACT_HINTS:
         candidates.append(urljoin(base_url, f"/{hint}"))
@@ -190,8 +189,8 @@ def candidate_pages(base_url: str, html_text: str, domain: str) -> List[str]:
             candidates.append(full)
 
     # Keep only same-site URLs and de-dupe.
-    seen: Set[str] = set()
-    out: List[str] = []
+    seen: set[str] = set()
+    out: list[str] = []
     for url in candidates:
         url = normalize_url(url)
         if not url:
@@ -206,7 +205,7 @@ def candidate_pages(base_url: str, html_text: str, domain: str) -> List[str]:
     return out
 
 
-def choose_best_email(candidates: Set[str], website_domain: str) -> str:
+def choose_best_email(candidates: set[str], website_domain: str) -> str:
     website_domain = (website_domain or "").lower()
 
     def score(email: str) -> int:
@@ -249,14 +248,14 @@ def choose_best_email(candidates: Set[str], website_domain: str) -> str:
     return best
 
 
-def discover_best_email(website: str, domain: str) -> Tuple[str, str]:
+def discover_best_email(website: str, domain: str) -> tuple[str, str]:
     website = normalize_url(website)
     domain = (domain or "").strip().lower()
     if not website or not domain:
         return guess_email(domain), "guess"
 
     html_home = fetch_html(website)
-    emails: Set[str] = set()
+    emails: set[str] = set()
     emails |= extract_emails(html_home)
 
     # Crawl a few likely contact pages. Keep it bounded.
@@ -274,13 +273,13 @@ def discover_best_email(website: str, domain: str) -> Tuple[str, str]:
     return best, "guess"
 
 
-def request_json(url: str) -> Dict:
+def request_json(url: str) -> dict:
     req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.0"})
     with urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def text_search(query: str, api_key: str) -> List[Dict]:
+def text_search(query: str, api_key: str) -> list[dict]:
     params = {"query": query, "key": api_key}
     url = "https://maps.googleapis.com/maps/api/place/textsearch/json?" + urlencode(params)
     data = request_json(url)
@@ -291,7 +290,7 @@ def text_search(query: str, api_key: str) -> List[Dict]:
     return data.get("results", [])
 
 
-def place_details(place_id: str, api_key: str) -> Dict:
+def place_details(place_id: str, api_key: str) -> dict:
     fields = "name,formatted_phone_number,website,formatted_address,place_id,business_status"
     params = {"place_id": place_id, "fields": fields, "key": api_key}
     url = "https://maps.googleapis.com/maps/api/place/details/json?" + urlencode(params)
@@ -320,14 +319,14 @@ def save_city_index(index: int) -> None:
         json.dump({"index": index}, f)
 
 
-def iter_city_cycle(cities: List[str], start_index: int):
+def iter_city_cycle(cities: list[str], start_index: int):
     if not cities:
         raise SystemExit("No cities provided.")
     for i in range(len(cities)):
         yield cities[(start_index + i) % len(cities)]
 
 
-def iter_city_category_pairs(cities: List[str], categories: List[str], start_index: int):
+def iter_city_category_pairs(cities: list[str], categories: list[str], start_index: int):
     for city in iter_city_cycle(cities, start_index):
         shuffled_categories = categories[:]
         RNG.shuffle(shuffled_categories)
@@ -336,14 +335,14 @@ def iter_city_category_pairs(cities: List[str], categories: List[str], start_ind
 
 
 def build_lead_from_place(
-    place: Dict,
+    place: dict,
     category: str,
     city: str,
     api_key: str,
-    existing_emails: Set[str],
-    existing_domains: Set[str],
-    existing_phones: Set[str],
-) -> Optional[Dict]:
+    existing_emails: set[str],
+    existing_domains: set[str],
+    existing_phones: set[str],
+) -> dict | None:
     place_id = place.get("place_id")
     if not place_id:
         return None
@@ -399,15 +398,15 @@ def build_lead_from_place(
 
 
 def build_leads(
-    cities: List[str],
-    categories: List[str],
+    cities: list[str],
+    categories: list[str],
     limit: int,
     api_key: str,
-    existing_emails: Set[str],
-    existing_domains: Set[str],
-    existing_phones: Set[str],
-) -> Tuple[List[Dict], int]:
-    leads: List[Dict] = []
+    existing_emails: set[str],
+    existing_domains: set[str],
+    existing_phones: set[str],
+) -> tuple[list[dict], int]:
+    leads: list[dict] = []
     start_index = load_city_index()
 
     cities_used = 0
@@ -442,7 +441,7 @@ def build_leads(
     return leads, new_index
 
 
-def write_leads(path: Path, leads: List[Dict], replace: bool) -> None:
+def write_leads(path: Path, leads: list[dict], replace: bool) -> None:
     fieldnames = [
         "company",
         "name",

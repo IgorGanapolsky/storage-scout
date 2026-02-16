@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
-
+from collections.abc import Iterable
 
 # Default "role inboxes" that almost never convert in cold outreach.
 # Keep this list short and obvious; override via config if needed.
@@ -58,9 +57,7 @@ def is_sane_outreach_email(email: str) -> bool:
         return False
     if "%20" in local or " " in local:
         return False
-    if _HEX_LOCAL_RE.fullmatch(local):
-        return False
-    return True
+    return not _HEX_LOCAL_RE.fullmatch(local)
 
 
 def infer_email_method(*, email: str, raw_method: str, notes: str) -> str:

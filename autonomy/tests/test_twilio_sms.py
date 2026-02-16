@@ -27,7 +27,7 @@ class _FakeHTTPResponse:
             return self._body
         return self._body[:n]
 
-    def __enter__(self) -> "_FakeHTTPResponse":
+    def __enter__(self) -> _FakeHTTPResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
@@ -202,7 +202,7 @@ def test_send_sms_http_error(monkeypatch) -> None:
 
     try:
         send_sms(cfg, to_number="+19549736161")
-        assert False, "Should have raised"
+        raise AssertionError("Should have raised")
     except urllib.error.HTTPError as exc:
         assert exc.code == 400
 

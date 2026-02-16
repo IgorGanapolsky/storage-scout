@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+from autonomy.ai_writer import AIOutreachWriter
 from autonomy.context_store import ContextStore, Lead
 from autonomy.observer import Observer, ObserverConfig, Reflector
-from autonomy.ai_writer import AIOutreachWriter
 
 _CLEANUP: list[Path] = []
 
@@ -26,10 +27,8 @@ def _make_store() -> ContextStore:
 @atexit.register
 def _cleanup_test_files() -> None:
     for p in _CLEANUP:
-        try:
+        with contextlib.suppress(OSError):
             p.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _sample_lead() -> Lead:

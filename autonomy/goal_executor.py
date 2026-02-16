@@ -8,10 +8,10 @@ import logging
 import os
 import subprocess
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timezone
 from pathlib import Path
-from typing import Callable, Dict
 
 from .context_store import ContextStore, now_iso
 from .goal_planner import GoalTask, GoalTaskStore
@@ -35,7 +35,7 @@ class GoalExecutor:
     def __init__(self, store: ContextStore) -> None:
         self.store = store
         self.task_store = GoalTaskStore(store)
-        self._executors: Dict[str, Callable[[GoalTask], ExecutionResult]] = {
+        self._executors: dict[str, Callable[[GoalTask], ExecutionResult]] = {
             "lead_gen": self._exec_lead_gen,
             "outreach": self._exec_outreach,
             "content": self._exec_content,

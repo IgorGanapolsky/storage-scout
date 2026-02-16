@@ -15,7 +15,6 @@ from pathlib import Path
 
 from autonomy.context_store import ContextStore
 
-
 UTC = timezone.utc
 
 OUTCOMES = (

@@ -4,7 +4,6 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
-from typing import List
 
 from .context_store import Lead
 from .outreach_policy import infer_email_method
@@ -34,8 +33,8 @@ class LeadSourceCSV:
             notes=str(row.get("notes") or ""),
         )
 
-    def load(self) -> List[Lead]:
-        leads: List[Lead] = []
+    def load(self) -> list[Lead]:
+        leads: list[Lead] = []
         path = Path(self.path)
         if not path.exists():
             return leads

@@ -1,9 +1,11 @@
+import contextlib
 import json
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any
 
 UTC = timezone.utc
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -123,10 +125,8 @@ class ContextStore:
             )
             """
         )
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             cur.execute("ALTER TABLE actions ADD COLUMN observed INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # column already exists
         self.conn.commit()
         self._migrate_leads_email_method()
 
@@ -318,7 +318,7 @@ class ContextStore:
         cur.execute("SELECT 1 FROM opt_outs WHERE email=?", (normalized,))
         return cur.fetchone() is not None
 
-    def log_action(self, agent_id: str, action_type: str, trace_id: str, payload: Dict[str, Any]) -> None:
+    def log_action(self, agent_id: str, action_type: str, trace_id: str, payload: dict[str, Any]) -> None:
         record = {
             "ts": now_iso(),
             "agent_id": agent_id,
@@ -412,7 +412,7 @@ class ContextStore:
         )
         return cur.fetchall()
 
-    def email_deliverability(self, *, days: int, email_methods: list[str] | None = None) -> Dict[str, object]:
+    def email_deliverability(self, *, days: int, email_methods: list[str] | None = None) -> dict[str, object]:
         """Compute bounce rate for leads emailed in the last N days.
 
         Denominator is distinct leads emailed (messages.status='sent').

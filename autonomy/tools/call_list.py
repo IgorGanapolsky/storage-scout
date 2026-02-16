@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 UTC = timezone.utc
 
 # Keep in sync with outreach policy defaults; this is used only for reporting,

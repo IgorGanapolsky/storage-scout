@@ -19,6 +19,7 @@ the daily report can track progress.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 import time
@@ -31,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
-
 
 UTC = timezone.utc
 
@@ -211,7 +211,7 @@ def load_twilio_config(env: dict[str, str]) -> TwilioConfig | None:
 
 
 def _auth_header(cfg: TwilioConfig) -> str:
-    raw = f"{cfg.account_sid}:{cfg.auth_token}".encode("utf-8")
+    raw = f"{cfg.account_sid}:{cfg.auth_token}".encode()
     b64 = base64.b64encode(raw).decode("ascii")
     return f"Basic {b64}"
 
@@ -495,10 +495,8 @@ def run_auto_calls(
                 },
             )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             store.conn.close()
-        except Exception:
-            pass
 
     return AutoCallResult(
         attempted=attempted,
