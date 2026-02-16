@@ -15,6 +15,7 @@ from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
     _is_business_hours,
+    _lead_called_recently,
     _is_reasonable_email,
     _state_tz,
     load_twilio_config,
@@ -124,6 +125,32 @@ def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekendDateTime)
     assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is False
+
+
+def test_lead_called_recently_ignores_failed_attempts() -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        store.log_action(
+            agent_id="test",
+            action_type="call.attempt",
+            trace_id="failed-1",
+            payload={"lead_id": "failed@example.com", "outcome": "failed"},
+        )
+        store.log_action(
+            agent_id="test",
+            action_type="call.attempt",
+            trace_id="spoke-1",
+            payload={"lead_id": "spoke@example.com", "outcome": "spoke"},
+        )
+
+        assert _lead_called_recently(store, lead_id="failed@example.com", cooldown_days=7) is False
+        assert _lead_called_recently(store, lead_id="spoke@example.com", cooldown_days=7) is True
+    finally:
+        store.conn.close()
 
 
 def test_wait_for_call_terminal_status_polls(monkeypatch) -> None:
