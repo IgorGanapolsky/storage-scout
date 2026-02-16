@@ -125,9 +125,11 @@ def _is_reasonable_email(value: str) -> bool:
     email = (value or "").strip().lower()
     if not _EMAIL_RE.match(email):
         return False
-    local = email.split("@", 1)[0]
+    domain = email.split("@", 1)[1]
+    parts = domain.rsplit(".", 1)
+    tld = parts[1] if len(parts) == 2 else ""
     # Filter out common scrape artifacts like "asset-1@3x.png".
-    return "." not in local
+    return tld not in {"png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "css", "js", "pdf"}
 
 
 def _format_exception_notes(exc: Exception) -> tuple[str, dict[str, Any]]:
