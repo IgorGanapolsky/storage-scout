@@ -22,7 +22,7 @@
 5. Add Loom link to follow-up emails.
 
 **Week 4 — Retainer + Scale**
-1. Convert 1 QuickStart client into Managed Growth.
+1. Convert 1 QuickStart client into AI Workflow Subscription ($497/mo).
 2. Increase outreach to 50/day if reply rates stay above 5%.
 3. Add additional niche-specific landing page section.
 4. Publish 2 social posts summarizing results.

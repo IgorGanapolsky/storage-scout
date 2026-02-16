@@ -15,9 +15,9 @@
 - Booking workflow + staff alerts.
 - Live test and launch support.
 
-**Managed Growth — $500/mo**
+**AI Workflow Subscription — $497/mo**
 - Weekly optimization and reporting.
-- One new automation request per month.
+- Ongoing automation tuning (missed-call text back, callback routing, inbound reply handling).
 - Monitoring and alerting.
 
 **Optional Add-ons**

@@ -36,8 +36,10 @@ from autonomy.tools.lead_gen_broward import (
     save_city_index,
     write_leads,
 )
+from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
+from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.utils import UTC, truthy
 
@@ -301,6 +303,8 @@ def _format_report(
     call_list: dict | None = None,
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
+    twilio_inbox: TwilioInboxResult | None = None,
+    revenue_learning: dict | None = None,
     guardrails: dict | None = None,
     engine_result: dict,
     inbox_result,
@@ -357,6 +361,21 @@ def _format_report(
     lines.append("Inbox sync (Fastmail)")
     for k, v in asdict(inbox_result).items():
         lines.append(f"- {k}: {v}")
+    if twilio_inbox is not None:
+        lines.append("")
+        lines.append("Inbox sync (Twilio SMS)")
+        for k, v in asdict(twilio_inbox).items():
+            lines.append(f"- {k}: {v}")
+    if revenue_learning:
+        lines.append("")
+        lines.append("Revenue learning (RAG)")
+        lines.append(f"- saved: {bool(revenue_learning.get('saved'))}")
+        lines.append(f"- bottleneck: {revenue_learning.get('bottleneck') or ''}")
+        lines.append(f"- leading_signal: {revenue_learning.get('leading_signal') or ''}")
+        lines.append(f"- confidence_pct: {revenue_learning.get('confidence_pct')}")
+        lines.append(f"- path: {revenue_learning.get('path') or ''}")
+        for action in revenue_learning.get("next_actions", [])[:3]:
+            lines.append(f"- next_action: {action}")
 
     if funnel_result is not None:
         lines.append("")
@@ -582,6 +601,7 @@ def main() -> None:
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     guardrails: dict[str, object] = {}
+    twilio_inbox_result = TwilioInboxResult(reason="not_run")
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -612,6 +632,18 @@ def main() -> None:
             last_uid=prior_uid,
         )
     print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    if truthy(env.get("TWILIO_INBOX_SYNC_ENABLED"), default=True):
+        twilio_inbox_result = run_twilio_inbox_sync(
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
+            env=env,
+            booking_url=cfg.company.get("booking_url", ""),
+            kickoff_url=cfg.company.get("kickoff_url", ""),
+        )
+    else:
+        twilio_inbox_result = TwilioInboxResult(reason="disabled")
+    print(f"live_job: twilio_inbox done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
@@ -657,6 +689,7 @@ def main() -> None:
         int(board_pre.call_booked_total or 0) > 0
         or int(inbox_result.calendly_bookings or 0) > 0
         or int(inbox_result.stripe_payments or 0) > 0
+        or int(twilio_inbox_result.interested or 0) > 0
     )
     stop_loss_state = _evaluate_paid_stop_loss(
         repo_root=repo_root,
@@ -784,6 +817,25 @@ def main() -> None:
             )
 
     board = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
+    revenue_sources = [s.strip() for s in (env.get("REVENUE_RESEARCH_SOURCES") or "").split(",") if s.strip()]
+    lesson = build_revenue_lesson(
+        scoreboard=board,
+        guardrails=guardrails,
+        inbox_result=inbox_result,
+        twilio_inbox_result=twilio_inbox_result,
+        auto_calls=auto_calls,
+        sms_followup=sms_result,
+        sources=revenue_sources,
+    )
+    revenue_learning_raw = record_revenue_lesson(repo_root=repo_root, lesson=lesson)
+    revenue_learning = {
+        "saved": bool(revenue_learning_raw.get("saved")),
+        "path": str(revenue_learning_raw.get("path") or ""),
+        "bottleneck": lesson.bottleneck,
+        "leading_signal": lesson.leading_signal,
+        "confidence_pct": lesson.confidence_pct,
+        "next_actions": lesson.next_actions,
+    }
     goal_task_data = {
         "generated": engine_result.get("goal_tasks_generated", 0),
         "done": engine_result.get("goal_tasks_done", 0),
@@ -794,6 +846,8 @@ def main() -> None:
         call_list=call_list,
         auto_calls=auto_calls,
         sms_followup=sms_result,
+        twilio_inbox=twilio_inbox_result,
+        revenue_learning=revenue_learning,
         guardrails=guardrails,
         engine_result=engine_result,
         inbox_result=inbox_result,
@@ -816,6 +870,8 @@ def main() -> None:
         "leadgen_new": int(leadgen_new),
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
+        "twilio_inbox_result": asdict(twilio_inbox_result),
+        "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "guardrails": guardrails,
         "scoreboard_days": int(args.scoreboard_days),
@@ -828,16 +884,18 @@ def main() -> None:
     last_sent_sha1 = state.get("last_summary_sha1") or state.get("last_sent_sha1")
 
     # If we already sent a report today, only resend when something truly urgent happens.
-    # (Outbound send counts are not urgent; they can be reviewed in tomorrow's report.)
-    urgent_change = any(
-        [
-            int(inbox_result.new_replies or 0) > 0,
-            int(inbox_result.intake_submissions or 0) > 0,
-            int(inbox_result.calendly_bookings or 0) > 0,
-            int(inbox_result.stripe_payments or 0) > 0,
-        ]
+    # Default urgency is tied to booking/revenue signals to avoid inbox fatigue.
+    urgent_change = bool(
+        int(inbox_result.calendly_bookings or 0) > 0
+        or int(inbox_result.stripe_payments or 0) > 0
     )
-    if funnel_result is not None and not funnel_result.is_healthy:
+    if truthy(env.get("REPORT_URGENT_ON_INTAKE"), default=False) and int(inbox_result.intake_submissions or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_REPLY"), default=False) and int(inbox_result.new_replies or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_TWILIO_INTEREST"), default=False) and int(twilio_inbox_result.interested or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_FUNNEL_ISSUES"), default=True) and funnel_result is not None and not funnel_result.is_healthy:
         urgent_change = True
 
     should_send = False

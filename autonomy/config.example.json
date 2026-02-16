@@ -6,7 +6,9 @@
     "intake_url": "https://callcatcherhq.com/intake",
     "reply_to": "hello@callcatcherhq.com",
     "mailing_address": "123 Main St, City, ST 00000",
-    "signature": "— CallCatcher HQ"
+    "signature": "— CallCatcher HQ",
+    "booking_url": "https://calendly.com/example/audit-call",
+    "kickoff_url": "https://buy.stripe.com/example"
   },
   "agents": {
     "outreach": {
