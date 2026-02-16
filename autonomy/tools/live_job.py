@@ -850,17 +850,18 @@ def main() -> None:
     last_sent_sha1 = state.get("last_summary_sha1") or state.get("last_sent_sha1")
 
     # If we already sent a report today, only resend when something truly urgent happens.
-    # (Outbound send counts are not urgent; they can be reviewed in tomorrow's report.)
-    urgent_change = any(
-        [
-            int(inbox_result.new_replies or 0) > 0,
-            int(inbox_result.intake_submissions or 0) > 0,
-            int(inbox_result.calendly_bookings or 0) > 0,
-            int(inbox_result.stripe_payments or 0) > 0,
-            int(twilio_inbox_result.interested or 0) > 0,
-        ]
+    # Default urgency is tied to booking/revenue signals to avoid inbox fatigue.
+    urgent_change = bool(
+        int(inbox_result.calendly_bookings or 0) > 0
+        or int(inbox_result.stripe_payments or 0) > 0
     )
-    if funnel_result is not None and not funnel_result.is_healthy:
+    if truthy(env.get("REPORT_URGENT_ON_INTAKE"), default=False) and int(inbox_result.intake_submissions or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_REPLY"), default=False) and int(inbox_result.new_replies or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_TWILIO_INTEREST"), default=False) and int(twilio_inbox_result.interested or 0) > 0:
+        urgent_change = True
+    if truthy(env.get("REPORT_URGENT_ON_FUNNEL_ISSUES"), default=True) and funnel_result is not None and not funnel_result.is_healthy:
         urgent_change = True
 
     should_send = False
