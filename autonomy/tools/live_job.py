@@ -38,6 +38,7 @@ from autonomy.tools.lead_gen_broward import (
 )
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
+from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.utils import UTC, truthy
 
@@ -301,6 +302,7 @@ def _format_report(
     call_list: dict | None = None,
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
+    twilio_inbox: TwilioInboxResult | None = None,
     guardrails: dict | None = None,
     engine_result: dict,
     inbox_result,
@@ -357,6 +359,11 @@ def _format_report(
     lines.append("Inbox sync (Fastmail)")
     for k, v in asdict(inbox_result).items():
         lines.append(f"- {k}: {v}")
+    if twilio_inbox is not None:
+        lines.append("")
+        lines.append("Inbox sync (Twilio SMS)")
+        for k, v in asdict(twilio_inbox).items():
+            lines.append(f"- {k}: {v}")
 
     if funnel_result is not None:
         lines.append("")
@@ -582,6 +589,7 @@ def main() -> None:
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     guardrails: dict[str, object] = {}
+    twilio_inbox_result = TwilioInboxResult(reason="not_run")
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -612,6 +620,17 @@ def main() -> None:
             last_uid=prior_uid,
         )
     print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    if truthy(env.get("TWILIO_INBOX_SYNC_ENABLED"), default=True):
+        twilio_inbox_result = run_twilio_inbox_sync(
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
+            env=env,
+            booking_url=cfg.company.get("booking_url", ""),
+        )
+    else:
+        twilio_inbox_result = TwilioInboxResult(reason="disabled")
+    print(f"live_job: twilio_inbox done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
@@ -657,6 +676,7 @@ def main() -> None:
         int(board_pre.call_booked_total or 0) > 0
         or int(inbox_result.calendly_bookings or 0) > 0
         or int(inbox_result.stripe_payments or 0) > 0
+        or int(twilio_inbox_result.interested or 0) > 0
     )
     stop_loss_state = _evaluate_paid_stop_loss(
         repo_root=repo_root,
@@ -794,6 +814,7 @@ def main() -> None:
         call_list=call_list,
         auto_calls=auto_calls,
         sms_followup=sms_result,
+        twilio_inbox=twilio_inbox_result,
         guardrails=guardrails,
         engine_result=engine_result,
         inbox_result=inbox_result,
@@ -816,6 +837,7 @@ def main() -> None:
         "leadgen_new": int(leadgen_new),
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
+        "twilio_inbox_result": asdict(twilio_inbox_result),
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "guardrails": guardrails,
         "scoreboard_days": int(args.scoreboard_days),
@@ -835,6 +857,7 @@ def main() -> None:
             int(inbox_result.intake_submissions or 0) > 0,
             int(inbox_result.calendly_bookings or 0) > 0,
             int(inbox_result.stripe_payments or 0) > 0,
+            int(twilio_inbox_result.interested or 0) > 0,
         ]
     )
     if funnel_result is not None and not funnel_result.is_healthy:
