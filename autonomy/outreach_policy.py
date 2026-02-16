@@ -24,7 +24,7 @@ DEFAULT_BLOCKED_LOCAL_PARTS = {
 # Default email provenance allowed for sending.
 # - direct: person-like email (usually first@ / first.last@) or explicitly tagged
 # - scrape: discovered on-site (still filtered by blocked locals above)
-DEFAULT_ALLOWED_EMAIL_METHODS = ["direct", "scrape"]
+DEFAULT_ALLOWED_EMAIL_METHODS = ["direct"]
 
 _HEX_LOCAL_RE = re.compile(r"[0-9a-f]{24,}", re.IGNORECASE)
 
