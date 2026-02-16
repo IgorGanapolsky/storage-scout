@@ -36,6 +36,7 @@ class TwilioInboxConfig:
     auth_token: str
     from_number: str
     booking_url: str
+    kickoff_url: str
     auto_reply_enabled: bool
     max_per_run: int
 
@@ -53,7 +54,12 @@ class TwilioInboxResult:
     auto_reply_failed: int = 0
 
 
-def load_twilio_inbox_config(env: dict[str, str], *, booking_url: str = "") -> TwilioInboxConfig | None:
+def load_twilio_inbox_config(
+    env: dict[str, str],
+    *,
+    booking_url: str = "",
+    kickoff_url: str = "",
+) -> TwilioInboxConfig | None:
     sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
     token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
     from_num = (env.get("TWILIO_FROM_NUMBER") or "").strip()
@@ -61,11 +67,17 @@ def load_twilio_inbox_config(env: dict[str, str], *, booking_url: str = "") -> T
         return None
 
     booking = (booking_url or "").strip() or "https://calendly.com/igorganapolsky/audit-call"
+    kickoff = (
+        (kickoff_url or "").strip()
+        or (env.get("PRIORITY_KICKOFF_URL") or "").strip()
+        or "https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01"
+    )
     return TwilioInboxConfig(
         account_sid=sid,
         auth_token=token,
         from_number=from_num,
         booking_url=booking,
+        kickoff_url=kickoff,
         auto_reply_enabled=truthy(env.get("AUTO_SMS_INBOUND_REPLY_ENABLED"), default=True),
         max_per_run=max(1, int((env.get("AUTO_SMS_INBOUND_MAX_PER_RUN") or "50").strip() or 50)),
     )
@@ -153,10 +165,12 @@ def _already_processed(store: ContextStore, inbound_sid: str) -> bool:
     return row is not None
 
 
-def _interest_reply_text(booking_url: str) -> str:
+def _interest_reply_text(booking_url: str, kickoff_url: str) -> str:
     return (
         "Great, thanks for replying. Book your free 5-min missed-call baseline here: "
-        f"{booking_url} Reply STOP to opt out."
+        f"{booking_url} "
+        "Want priority setup? Reserve your kickoff here: "
+        f"{kickoff_url} Reply STOP to opt out."
     )
 
 
@@ -173,8 +187,9 @@ def run_twilio_inbox_sync(
     audit_log: Path,
     env: dict[str, str],
     booking_url: str = "",
+    kickoff_url: str = "",
 ) -> TwilioInboxResult:
-    cfg = load_twilio_inbox_config(env, booking_url=booking_url)
+    cfg = load_twilio_inbox_config(env, booking_url=booking_url, kickoff_url=kickoff_url)
     if cfg is None:
         return TwilioInboxResult(reason="missing_twilio_env")
 
@@ -227,7 +242,7 @@ def run_twilio_inbox_sync(
                 continue
             if classification == "interested":
                 result.interested += 1
-                reply_body = _interest_reply_text(cfg.booking_url)
+                reply_body = _interest_reply_text(cfg.booking_url, cfg.kickoff_url)
             else:
                 result.replied += 1
                 reply_body = _generic_reply_text(cfg.booking_url)

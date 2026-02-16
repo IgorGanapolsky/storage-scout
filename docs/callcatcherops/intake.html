@@ -247,7 +247,10 @@
           <div class="brand-badge"></div>
           CallCatcher Ops
         </div>
-        <a href="./index.html">Back to site</a>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="./index.html">Back to site</a>
+          <a class="inline-link" href="./workflow-subscription.html">Workflow subscription</a>
+        </div>
       </header>
 
       <h1>Get your free missed-call baseline</h1>
@@ -265,7 +268,7 @@
         </div>
         <div class="step-card">
           <div class="step-title">Optional: Priority kickoff ($249)</div>
-          <p class="note">If you want priority turnaround, pay $249 to reserve an implementation slot. Credited toward the build if you proceed.</p>
+          <p class="note">If you want priority turnaround, pay $249 to reserve an implementation slot. Credited toward the build if you proceed. Ongoing management starts at $497/month after launch.</p>
           <a class="button secondary" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
         </div>
       </div>
@@ -357,6 +360,7 @@
           <div class="cta-row">
             <a class="button" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book baseline call</a>
             <a class="button secondary" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
+            <a class="button secondary" id="cta-subscription" href="./workflow-subscription.html">See $497/mo plan</a>
           </div>
           <p class="note small">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
         </div>
@@ -377,6 +381,7 @@
       };
       trackCta('cta-pay', 'pay_249');
       trackCta('cta-book', 'book_baseline');
+      trackCta('cta-subscription', 'view_workflow_subscription');
     </script>
   </body>
 </html>
