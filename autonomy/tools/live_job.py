@@ -30,6 +30,7 @@ from autonomy.tools.lead_gen_broward import (
 from autonomy.tools.fastmail_inbox_sync import InboxSyncResult, load_dotenv, sync_fastmail_inbox
 from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.scoreboard import load_scoreboard
+from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 
 
 UTC = timezone.utc
@@ -156,6 +157,7 @@ def _format_report(
     *,
     leadgen_new: int,
     call_list: dict | None = None,
+    auto_calls: AutoCallResult | None = None,
     engine_result: dict,
     inbox_result,
     scoreboard,
@@ -178,6 +180,18 @@ def _format_report(
         lines.append(f"- services: {services_str}")
         lines.append(f"- rows: {int(call_list.get('rows') or 0)}")
         lines.append(f"- path: {call_list.get('path') or ''}")
+    if auto_calls is not None:
+        lines.append("")
+        lines.append("Auto calls (Twilio)")
+        lines.append(f"- status: {auto_calls.reason}")
+        lines.append(f"- attempted: {auto_calls.attempted}")
+        lines.append(f"- completed: {auto_calls.completed}")
+        lines.append(f"- spoke: {auto_calls.spoke}")
+        lines.append(f"- voicemail: {auto_calls.voicemail}")
+        lines.append(f"- no_answer: {auto_calls.no_answer}")
+        lines.append(f"- wrong_number: {auto_calls.wrong_number}")
+        lines.append(f"- failed: {auto_calls.failed}")
+        lines.append(f"- skipped: {auto_calls.skipped}")
     lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
@@ -349,7 +363,8 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     output_path = (repo_root / output_rel).resolve()
     write_call_list(output_path, rows)
 
-    return {"services": services, "rows": len(rows), "path": str(output_rel)}
+    # Include row data in-memory so other steps (e.g. auto-calls) can reuse it.
+    return {"services": services, "rows": len(rows), "path": str(output_rel), "data": rows}
 
 
 def main() -> None:
@@ -457,9 +472,17 @@ def main() -> None:
             funnel_result.add_issue(name="watchdog_error", url=cfg.company.get("intake_url", ""), detail=str(exc))
     print(f"live_job: funnel_watchdog done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
-    # 3) Scoreboard + report.
-    board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
+    # 3) Optional: write a call list and place outbound calls (Twilio) before computing scoreboard.
     call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
+    auto_calls: AutoCallResult | None = None
+    if call_list is not None and isinstance(call_list.get("data"), list):
+        sqlite_path_raw = Path(cfg.storage["sqlite_path"])
+        sqlite_path = sqlite_path_raw if sqlite_path_raw.is_absolute() else (repo_root / sqlite_path_raw).resolve()
+        audit_log_raw = Path(cfg.storage["audit_log"])
+        audit_log = audit_log_raw if audit_log_raw.is_absolute() else (repo_root / audit_log_raw).resolve()
+        auto_calls = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_list["data"])
+
+    board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
     goal_task_data = {
         "generated": engine_result.get("goal_tasks_generated", 0),
         "done": engine_result.get("goal_tasks_done", 0),
@@ -468,6 +491,7 @@ def main() -> None:
     report = _format_report(
         leadgen_new=leadgen_new,
         call_list=call_list,
+        auto_calls=auto_calls,
         engine_result=engine_result,
         inbox_result=inbox_result,
         scoreboard=board,

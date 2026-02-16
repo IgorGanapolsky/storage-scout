@@ -56,6 +56,21 @@ If you point SMTP at Fastmail (`smtp_host` ends with `fastmail.com`), outbound o
 Override (not recommended) by setting:
 - `ALLOW_FASTMAIL_OUTREACH=1`
 
+## Auto Calls (Twilio, Optional)
+The daily job can optionally place outbound calls via Twilio and log outcomes into SQLite (so the scoreboard/report reflects execution).
+
+This is **disabled by default** and requires paid Twilio credentials in local `.env` (gitignored):
+- `AUTO_CALLS_ENABLED=1`
+- `TWILIO_ACCOUNT_SID=...`
+- `TWILIO_AUTH_TOKEN=...`
+- `TWILIO_FROM_NUMBER=+1...` (E.164)
+
+Optional tuning:
+- `AUTO_CALLS_MAX_PER_RUN=10`
+- `AUTO_CALLS_COOLDOWN_DAYS=7`
+- `AUTO_CALLS_START_HOUR_LOCAL=9`
+- `AUTO_CALLS_END_HOUR_LOCAL=17`
+
 ## Lead Generation (Broward County)
 `autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
 
