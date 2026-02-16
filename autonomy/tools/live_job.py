@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.request
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -16,6 +16,7 @@ from pathlib import Path
 if __package__ is None:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from autonomy.context_store import ContextStore
 from autonomy.engine import Engine, load_config
 from autonomy.tools.call_list import generate_call_list, write_call_list
 from autonomy.tools.lead_gen_broward import (
@@ -31,6 +32,7 @@ from autonomy.tools.fastmail_inbox_sync import InboxSyncResult, load_dotenv, syn
 from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
+from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 
 
 UTC = timezone.utc
@@ -57,6 +59,134 @@ def _read_json(path: Path) -> dict:
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _int_env(raw: str | None, default: int) -> int:
+    if raw is None:
+        return int(default)
+    try:
+        return int(str(raw).strip() or default)
+    except Exception:
+        return int(default)
+
+
+def _float_env(raw: str | None, default: float) -> float:
+    if raw is None:
+        return float(default)
+    try:
+        return float(str(raw).strip() or default)
+    except Exception:
+        return float(default)
+
+
+def _resolve_store_paths(*, cfg, repo_root: Path) -> tuple[Path, Path]:
+    sqlite_raw = Path(cfg.storage["sqlite_path"])
+    audit_raw = Path(cfg.storage["audit_log"])
+    sqlite_path = sqlite_raw if sqlite_raw.is_absolute() else (repo_root / sqlite_raw).resolve()
+    audit_log = audit_raw if audit_raw.is_absolute() else (repo_root / audit_raw).resolve()
+    return sqlite_path, audit_log
+
+
+def _count_actions_since(store: ContextStore, *, action_type: str, since_iso: str) -> int:
+    row = store.conn.execute(
+        "SELECT COUNT(1) FROM actions WHERE action_type=? AND ts >= ?",
+        (str(action_type), str(since_iso)),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _count_actions_today(store: ContextStore, *, action_type: str) -> int:
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    return _count_actions_since(store, action_type=action_type, since_iso=today_start)
+
+
+def _log_guard_block(
+    *,
+    store: ContextStore,
+    channel: str,
+    reason: str,
+    details: dict[str, object] | None = None,
+) -> None:
+    payload: dict[str, object] = {"channel": str(channel), "reason": str(reason)}
+    if details:
+        payload["details"] = details
+    trace = f"guard:{channel}:{int(time.time())}"
+    store.log_action(
+        agent_id="guardrails.v1",
+        action_type="guard.block",
+        trace_id=trace,
+        payload=payload,
+    )
+
+
+def _parse_iso_date(raw: str | None) -> date | None:
+    val = (raw or "").strip()
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(val)
+    except Exception:
+        return None
+
+
+def _evaluate_paid_stop_loss(
+    *,
+    repo_root: Path,
+    env: dict[str, str],
+    has_revenue_signal: bool,
+) -> dict[str, object]:
+    state_path = repo_root / "autonomy" / "state" / "paid_stop_loss_state.json"
+    state = _read_json(state_path)
+
+    enabled = _truthy_env(env.get("STOP_LOSS_ENABLED"), default=True)
+    max_zero_runs = max(1, _int_env(env.get("STOP_LOSS_ZERO_REVENUE_RUNS"), 1))
+    max_zero_days = max(1, _int_env(env.get("STOP_LOSS_ZERO_REVENUE_DAYS"), 1))
+    today = datetime.now(UTC).date()
+
+    if has_revenue_signal:
+        next_state = {
+            "enabled": bool(enabled),
+            "has_revenue_signal": True,
+            "zero_revenue_runs": 0,
+            "first_zero_revenue_date_utc": "",
+            "last_eval_date_utc": today.isoformat(),
+            "blocked": False,
+            "block_reason": "",
+            "max_zero_runs": int(max_zero_runs),
+            "max_zero_days": int(max_zero_days),
+        }
+        _write_json(state_path, next_state)
+        return next_state
+
+    first_zero_date = _parse_iso_date(str(state.get("first_zero_revenue_date_utc") or ""))
+    if first_zero_date is None:
+        first_zero_date = today
+
+    zero_runs = _int_env(str(state.get("zero_revenue_runs", 0)), 0) + 1
+    zero_days = int((today - first_zero_date).days) + 1
+
+    blocked = bool(enabled) and (zero_runs >= max_zero_runs or zero_days >= max_zero_days)
+    block_reason = ""
+    if blocked:
+        if zero_runs >= max_zero_runs:
+            block_reason = "stop_loss_zero_revenue_runs"
+        else:
+            block_reason = "stop_loss_zero_revenue_days"
+
+    next_state = {
+        "enabled": bool(enabled),
+        "has_revenue_signal": False,
+        "zero_revenue_runs": int(zero_runs),
+        "zero_revenue_days": int(zero_days),
+        "first_zero_revenue_date_utc": first_zero_date.isoformat(),
+        "last_eval_date_utc": today.isoformat(),
+        "blocked": bool(blocked),
+        "block_reason": block_reason,
+        "max_zero_runs": int(max_zero_runs),
+        "max_zero_days": int(max_zero_days),
+    }
+    _write_json(state_path, next_state)
+    return next_state
 
 
 def _send_email(*, smtp_user: str, smtp_password: str, to_email: str, subject: str, body: str) -> None:
@@ -158,6 +288,8 @@ def _format_report(
     leadgen_new: int,
     call_list: dict | None = None,
     auto_calls: AutoCallResult | None = None,
+    sms_followup: SmsResult | None = None,
+    guardrails: dict | None = None,
     engine_result: dict,
     inbox_result,
     scoreboard,
@@ -192,10 +324,23 @@ def _format_report(
         lines.append(f"- wrong_number: {auto_calls.wrong_number}")
         lines.append(f"- failed: {auto_calls.failed}")
         lines.append(f"- skipped: {auto_calls.skipped}")
+    if sms_followup is not None:
+        lines.append("")
+        lines.append("SMS follow-up (Twilio)")
+        lines.append(f"- status: {sms_followup.reason}")
+        lines.append(f"- attempted: {sms_followup.attempted}")
+        lines.append(f"- delivered: {sms_followup.delivered}")
+        lines.append(f"- failed: {sms_followup.failed}")
+        lines.append(f"- skipped: {sms_followup.skipped}")
     lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
     lines.append(f"- sent_followup: {int(engine_result.get('sent_followup') or 0)}")
+    if guardrails:
+        lines.append("")
+        lines.append("Guardrails")
+        for k, v in guardrails.items():
+            lines.append(f"- {k}: {v}")
     lines.append("")
     lines.append("Inbox sync (Fastmail)")
     for k, v in asdict(inbox_result).items():
@@ -422,6 +567,9 @@ def main() -> None:
 
     cfg_path = (repo_root / args.config).resolve()
     cfg = load_config(str(cfg_path))
+    sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
+    guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    guardrails: dict[str, object] = {}
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -431,8 +579,8 @@ def main() -> None:
     fastmail_state_path = repo_root / "autonomy" / "state" / "fastmail_sync_state.json"
     try:
         inbox_result = sync_fastmail_inbox(
-            sqlite_path=Path(cfg.storage["sqlite_path"]),
-            audit_log=Path(cfg.storage["audit_log"]),
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
             fastmail_user=fastmail_user,
             fastmail_password=smtp_password,
             state_path=fastmail_state_path,
@@ -453,10 +601,77 @@ def main() -> None:
         )
     print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
-    # 2) Run outreach (initial + follow-ups) using live config.
-    engine = Engine(cfg)
-    engine_result = engine.run()
-    print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+    board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
+
+    deliverability_gate_enabled = _truthy_env(env.get("DELIVERABILITY_GATE_ENABLED"), default=True)
+    deliverability_max_bounce = max(0.0, min(1.0, _float_env(env.get("DELIVERABILITY_MAX_BOUNCE_RATE"), 0.05)))
+    deliverability_block = bool(
+        deliverability_gate_enabled
+        and int(board_pre.emailed_leads_recent or 0) > 0
+        and float(board_pre.bounce_rate_recent or 0.0) > float(deliverability_max_bounce)
+    )
+    guardrails["deliverability_gate_enabled"] = bool(deliverability_gate_enabled)
+    guardrails["deliverability_max_bounce_rate"] = float(deliverability_max_bounce)
+    guardrails["deliverability_recent_bounce_rate"] = float(board_pre.bounce_rate_recent or 0.0)
+    guardrails["deliverability_blocked"] = bool(deliverability_block)
+
+    if deliverability_block:
+        _log_guard_block(
+            store=guard_store,
+            channel="email.outreach",
+            reason="deliverability_bounce_rate",
+            details={
+                "bounce_rate_recent": float(board_pre.bounce_rate_recent or 0.0),
+                "max_bounce_rate": float(deliverability_max_bounce),
+                "emailed_leads_recent": int(board_pre.emailed_leads_recent or 0),
+            },
+        )
+        engine_result = {
+            "sent_initial": 0,
+            "sent_followup": 0,
+            "goal_tasks_generated": 0,
+            "goal_tasks_done": 0,
+            "goal_tasks_failed": 0,
+            "guard_blocked": "deliverability_bounce_rate",
+        }
+        print("live_job: engine blocked by deliverability gate", file=sys.stderr)
+    else:
+        # 2) Run outreach (initial + follow-ups) using live config.
+        engine = Engine(cfg)
+        engine_result = engine.run()
+        print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    has_revenue_signal = bool(
+        int(board_pre.call_booked_total or 0) > 0
+        or int(inbox_result.calendly_bookings or 0) > 0
+        or int(inbox_result.stripe_payments or 0) > 0
+    )
+    stop_loss_state = _evaluate_paid_stop_loss(
+        repo_root=repo_root,
+        env=env,
+        has_revenue_signal=has_revenue_signal,
+    )
+    guardrails["stop_loss_blocked"] = bool(stop_loss_state.get("blocked", False))
+    guardrails["stop_loss_reason"] = str(stop_loss_state.get("block_reason") or "")
+    guardrails["zero_revenue_runs"] = int(stop_loss_state.get("zero_revenue_runs") or 0)
+    guardrails["zero_revenue_days"] = int(stop_loss_state.get("zero_revenue_days") or 0)
+
+    paid_kill_switch = _truthy_env(env.get("PAID_KILL_SWITCH"), default=False)
+    guardrails["paid_kill_switch"] = bool(paid_kill_switch)
+
+    daily_call_cap = max(0, _int_env(env.get("PAID_DAILY_CALL_CAP"), 10))
+    calls_today = _count_actions_today(guard_store, action_type="call.attempt")
+    call_budget_remaining = max(0, int(daily_call_cap) - int(calls_today))
+    guardrails["call_daily_cap"] = int(daily_call_cap)
+    guardrails["calls_today"] = int(calls_today)
+    guardrails["calls_budget_remaining"] = int(call_budget_remaining)
+
+    daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
+    sms_today = _count_actions_today(guard_store, action_type="sms.attempt")
+    sms_budget_remaining = max(0, int(daily_sms_cap) - int(sms_today))
+    guardrails["sms_daily_cap"] = int(daily_sms_cap)
+    guardrails["sms_today"] = int(sms_today)
+    guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
 
     funnel_enabled = (env.get("FUNNEL_WATCHDOG") or "1").strip().lower() not in {"0", "false", "no", "off"}
     funnel_result: FunnelWatchdogResult | None = None
@@ -476,13 +691,69 @@ def main() -> None:
     call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
     auto_calls: AutoCallResult | None = None
     if call_list is not None and isinstance(call_list.get("data"), list):
-        sqlite_path_raw = Path(cfg.storage["sqlite_path"])
-        sqlite_path = sqlite_path_raw if sqlite_path_raw.is_absolute() else (repo_root / sqlite_path_raw).resolve()
-        audit_log_raw = Path(cfg.storage["audit_log"])
-        audit_log = audit_log_raw if audit_log_raw.is_absolute() else (repo_root / audit_log_raw).resolve()
-        auto_calls = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_list["data"])
+        calls_block_reason = ""
+        if not _truthy_env(env.get("AUTO_CALLS_ENABLED"), default=False):
+            calls_block_reason = "auto_calls_disabled"
+        elif paid_kill_switch:
+            calls_block_reason = "paid_kill_switch"
+        elif bool(stop_loss_state.get("blocked", False)):
+            calls_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
+        elif call_budget_remaining <= 0:
+            calls_block_reason = "call_daily_cap_reached"
 
-    board = load_scoreboard(Path(cfg.storage["sqlite_path"]), days=int(args.scoreboard_days))
+        if calls_block_reason:
+            _log_guard_block(
+                store=guard_store,
+                channel="calls.twilio",
+                reason=calls_block_reason,
+                details={
+                    "calls_today": int(calls_today),
+                    "call_daily_cap": int(daily_call_cap),
+                },
+            )
+            auto_calls = AutoCallResult(reason=f"blocked:{calls_block_reason}")
+        else:
+            call_env = dict(env)
+            configured_max_calls = max(1, _int_env(call_env.get("AUTO_CALLS_MAX_PER_RUN"), 10))
+            call_env["AUTO_CALLS_MAX_PER_RUN"] = str(min(configured_max_calls, call_budget_remaining))
+            auto_calls = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=call_env, call_rows=call_list["data"])
+
+    # 3b) Optional: send SMS follow-ups to leads that were called (spoke/voicemail).
+    sms_result: SmsResult | None = None
+    if auto_calls is not None and (auto_calls.spoke + auto_calls.voicemail) > 0:
+        sms_block_reason = ""
+        if not _truthy_env(env.get("AUTO_SMS_ENABLED"), default=False):
+            sms_block_reason = "auto_sms_disabled"
+        elif paid_kill_switch:
+            sms_block_reason = "paid_kill_switch"
+        elif bool(stop_loss_state.get("blocked", False)):
+            sms_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
+        elif sms_budget_remaining <= 0:
+            sms_block_reason = "sms_daily_cap_reached"
+
+        if sms_block_reason:
+            _log_guard_block(
+                store=guard_store,
+                channel="sms.twilio",
+                reason=sms_block_reason,
+                details={
+                    "sms_today": int(sms_today),
+                    "sms_daily_cap": int(daily_sms_cap),
+                },
+            )
+            sms_result = SmsResult(reason=f"blocked:{sms_block_reason}")
+        else:
+            sms_env = dict(env)
+            configured_max_sms = max(1, _int_env(sms_env.get("AUTO_SMS_MAX_PER_RUN"), 20))
+            sms_env["AUTO_SMS_MAX_PER_RUN"] = str(min(configured_max_sms, sms_budget_remaining))
+            sms_result = run_sms_followup(
+                sqlite_path=sqlite_path,
+                audit_log=audit_log,
+                env=sms_env,
+                booking_url=cfg.company.get("booking_url", ""),
+            )
+
+    board = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
     goal_task_data = {
         "generated": engine_result.get("goal_tasks_generated", 0),
         "done": engine_result.get("goal_tasks_done", 0),
@@ -492,6 +763,8 @@ def main() -> None:
         leadgen_new=leadgen_new,
         call_list=call_list,
         auto_calls=auto_calls,
+        sms_followup=sms_result,
+        guardrails=guardrails,
         engine_result=engine_result,
         inbox_result=inbox_result,
         scoreboard=board,
@@ -514,6 +787,7 @@ def main() -> None:
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
+        "guardrails": guardrails,
         "scoreboard_days": int(args.scoreboard_days),
         "scoreboard": asdict(board),
     }
@@ -593,6 +867,10 @@ def main() -> None:
 
     # Helpful for launchd logs.
     print(report)
+    try:
+        guard_store.conn.close()
+    except Exception:
+        pass
     try:
         if lock_fh is not None:
             lock_fh.close()
