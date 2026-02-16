@@ -241,7 +241,15 @@ def test_count_actions_today_paid_scope_filters_non_billable() -> None:
         trace_id="twilio-sms",
         payload={"lead_id": "c@example.com", "twilio": {"sid": "SM123"}},
     )
+    # Twilio interest nudge with SID should count as billable SMS scope too.
+    store.log_action(
+        agent_id="agent.sms.twilio.nudge.v1",
+        action_type="sms.interest_nudge",
+        trace_id="twilio-sms-nudge",
+        payload={"lead_id": "d@example.com", "twilio": {"sid": "SM124"}},
+    )
 
     assert _count_actions_today(store, action_type="call.attempt") == 2
     assert _count_actions_today(store, action_type="call.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.attempt", paid_only=True) == 1
+    assert _count_actions_today(store, action_type="sms.interest_nudge", paid_only=True) == 1
