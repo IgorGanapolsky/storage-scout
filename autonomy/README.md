@@ -29,6 +29,7 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/tools/scoreboard.py` - local outreach scoreboard (no PII)
 - `autonomy/tools/opt_out.py` - record opt-outs into sqlite
 - `autonomy/tools/fastmail_inbox_sync.py` - mark bounces/replies from inbox signals (no PII output)
+- `autonomy/tools/twilio_interest_nudge.py` - nudge inbound "interested" SMS leads toward booking/kickoff (fully automated)
 - `autonomy/tools/live_job.py` - live daily job: inbox sync + outreach + report delivery (email or ntfy)
 - `autonomy/tools/install_launchd_daily.py` - install macOS LaunchAgent for daily automation
 
@@ -72,6 +73,11 @@ Optional tuning:
 - `AUTO_CALLS_END_HOUR_LOCAL=17`
 - `TWILIO_INBOX_SYNC_ENABLED=1` (default on in live job)
 - `AUTO_SMS_INBOUND_REPLY_ENABLED=1` (auto-reply to inbound interested replies)
+- `AUTO_INTEREST_NUDGE_ENABLED=1` (default on; nudges interested inbound leads that have not booked)
+- `AUTO_INTEREST_NUDGE_MAX_PER_RUN=6`
+- `AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES=120`
+- `AUTO_INTEREST_NUDGE_COOLDOWN_HOURS=24`
+- `AUTO_INTEREST_NUDGE_LOOKBACK_DAYS=14`
 - `PRIORITY_KICKOFF_URL=https://buy.stripe.com/...` (optional override for payment CTA in interested auto-replies)
 
 ## Lead Generation (Broward County)

@@ -39,6 +39,7 @@ from autonomy.tools.lead_gen_broward import (
 from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
+from autonomy.tools.twilio_interest_nudge import InterestNudgeResult, run_interest_nudges
 from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.utils import UTC, truthy
@@ -106,9 +107,9 @@ def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bo
         where.append("agent_id = ?")
         params.append("agent.autocall.twilio.v1")
         where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
-    elif paid_only and action_type == "sms.attempt":
-        where.append("agent_id = ?")
-        params.append("agent.sms.twilio.v1")
+    elif paid_only and action_type in {"sms.attempt", "sms.interest_nudge"}:
+        where.append("agent_id IN (?, ?)")
+        params.extend(["agent.sms.twilio.v1", "agent.sms.twilio.nudge.v1"])
         where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
 
     sql = f"SELECT COUNT(1) FROM actions WHERE {' AND '.join(where)}"
@@ -303,6 +304,7 @@ def _format_report(
     call_list: dict | None = None,
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
+    interest_nudge: InterestNudgeResult | None = None,
     twilio_inbox: TwilioInboxResult | None = None,
     revenue_learning: dict | None = None,
     guardrails: dict | None = None,
@@ -348,6 +350,15 @@ def _format_report(
         lines.append(f"- delivered: {sms_followup.delivered}")
         lines.append(f"- failed: {sms_followup.failed}")
         lines.append(f"- skipped: {sms_followup.skipped}")
+    if interest_nudge is not None:
+        lines.append("")
+        lines.append("Interested nudge (Twilio)")
+        lines.append(f"- status: {interest_nudge.reason}")
+        lines.append(f"- candidates: {interest_nudge.candidates}")
+        lines.append(f"- attempted: {interest_nudge.attempted}")
+        lines.append(f"- nudged: {interest_nudge.nudged}")
+        lines.append(f"- failed: {interest_nudge.failed}")
+        lines.append(f"- skipped: {interest_nudge.skipped}")
     lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
@@ -715,12 +726,18 @@ def main() -> None:
     guardrails["calls_budget_remaining"] = int(call_budget_remaining)
 
     daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
-    sms_today_all = _count_actions_today(guard_store, action_type="sms.attempt")
-    sms_today = _count_actions_today(guard_store, action_type="sms.attempt", paid_only=True)
+    sms_today_followup_all = _count_actions_today(guard_store, action_type="sms.attempt")
+    sms_today_nudge_all = _count_actions_today(guard_store, action_type="sms.interest_nudge")
+    sms_today_all = int(sms_today_followup_all) + int(sms_today_nudge_all)
+    sms_today_followup = _count_actions_today(guard_store, action_type="sms.attempt", paid_only=True)
+    sms_today_nudge = _count_actions_today(guard_store, action_type="sms.interest_nudge", paid_only=True)
+    sms_today = int(sms_today_followup) + int(sms_today_nudge)
     sms_budget_remaining = max(0, int(daily_sms_cap) - int(sms_today))
     guardrails["sms_daily_cap"] = int(daily_sms_cap)
     guardrails["sms_today_scope"] = "billable_twilio"
     guardrails["sms_today_all_actions"] = int(sms_today_all)
+    guardrails["sms_today_followup_actions"] = int(sms_today_followup_all)
+    guardrails["sms_today_interest_nudges"] = int(sms_today_nudge_all)
     guardrails["sms_today"] = int(sms_today)
     guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
 
@@ -737,6 +754,44 @@ def main() -> None:
             funnel_result = FunnelWatchdogResult(as_of_utc=datetime.now(UTC).replace(microsecond=0).isoformat())
             funnel_result.add_issue(name="watchdog_error", url=cfg.company.get("intake_url", ""), detail=str(exc))
     print(f"live_job: funnel_watchdog done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    # 2b) High-intent SMS nudges for inbound "interested" replies.
+    interest_nudge_result: InterestNudgeResult | None = None
+    nudge_block_reason = ""
+    if not truthy(env.get("AUTO_INTEREST_NUDGE_ENABLED"), default=True):
+        nudge_block_reason = "auto_interest_nudge_disabled"
+    elif paid_kill_switch:
+        nudge_block_reason = "paid_kill_switch"
+    elif bool(stop_loss_state.get("blocked", False)):
+        nudge_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
+    elif sms_budget_remaining <= 0:
+        nudge_block_reason = "sms_daily_cap_reached"
+
+    if nudge_block_reason:
+        _log_guard_block(
+            store=guard_store,
+            channel="sms.interest_nudge",
+            reason=nudge_block_reason,
+            details={
+                "sms_today": int(sms_today),
+                "sms_today_all_actions": int(sms_today_all),
+                "sms_daily_cap": int(daily_sms_cap),
+            },
+        )
+        interest_nudge_result = InterestNudgeResult(reason=f"blocked:{nudge_block_reason}")
+    else:
+        nudge_env = dict(env)
+        configured_max_nudges = max(1, _int_env(nudge_env.get("AUTO_INTEREST_NUDGE_MAX_PER_RUN"), 6))
+        nudge_env["AUTO_INTEREST_NUDGE_MAX_PER_RUN"] = str(min(configured_max_nudges, sms_budget_remaining))
+        interest_nudge_result = run_interest_nudges(
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
+            env=nudge_env,
+            booking_url=cfg.company.get("booking_url", ""),
+            kickoff_url=cfg.company.get("kickoff_url", ""),
+        )
+        sms_budget_remaining = max(0, int(sms_budget_remaining) - int(interest_nudge_result.nudged))
+        guardrails["sms_budget_remaining_after_nudges"] = int(sms_budget_remaining)
 
     # 3) Optional: write a call list and place outbound calls (Twilio) before computing scoreboard.
     call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
@@ -846,6 +901,7 @@ def main() -> None:
         call_list=call_list,
         auto_calls=auto_calls,
         sms_followup=sms_result,
+        interest_nudge=interest_nudge_result,
         twilio_inbox=twilio_inbox_result,
         revenue_learning=revenue_learning,
         guardrails=guardrails,
@@ -871,6 +927,7 @@ def main() -> None:
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
         "twilio_inbox_result": asdict(twilio_inbox_result),
+        "interest_nudge_result": asdict(interest_nudge_result) if interest_nudge_result is not None else None,
         "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "guardrails": guardrails,
