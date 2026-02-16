@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from autonomy.context_store import ContextStore, Lead
-from autonomy.tools.twilio_inbox_sync import run_twilio_inbox_sync
+from autonomy.tools.twilio_inbox_sync import load_twilio_inbox_config, run_twilio_inbox_sync
 
 
 class _FakeHTTPResponse:
@@ -108,6 +108,9 @@ def test_twilio_inbox_sync_classifies_and_auto_replies(monkeypatch) -> None:
     assert first.auto_replies_sent == 1
     assert len(posted) == 1
     assert posted[0]["To"] == "+19545550111"
+    body = posted[0].get("Body", "")
+    assert "https://calendly.com/example/audit" in body
+    assert "https://buy.stripe.com/" in body
 
     # Same inbound SID values should be deduped on subsequent sync runs.
     second = run_twilio_inbox_sync(
@@ -128,3 +131,20 @@ def test_twilio_inbox_sync_classifies_and_auto_replies(monkeypatch) -> None:
         assert verify_store.is_opted_out("optout@example.com") is True
     finally:
         verify_store.conn.close()
+
+
+def test_load_twilio_inbox_config_kickoff_precedence() -> None:
+    env = {
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19540000000",
+        "PRIORITY_KICKOFF_URL": "https://pay.example/env",
+    }
+    cfg = load_twilio_inbox_config(
+        env,
+        booking_url="https://calendly.com/example/audit",
+        kickoff_url="https://pay.example/arg",
+    )
+    assert cfg is not None
+    assert cfg.booking_url == "https://calendly.com/example/audit"
+    assert cfg.kickoff_url == "https://pay.example/arg"

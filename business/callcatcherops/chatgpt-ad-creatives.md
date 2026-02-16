@@ -178,16 +178,16 @@ These are the queries/intents these ads should surface for in ChatGPT search and
 | Tier | Revenue | Notes |
 |------|---------|-------|
 | **QuickStart Build** | $1,500 | One-time setup fee |
-| **Managed Growth** (12 months) | $6,000 | $500/month recurring |
-| **Total LTV (Managed Growth client)** | **$7,500** | $1,500 + $6,000 |
+| **AI Workflow Subscription** (12 months) | $5,964 | $497/month recurring |
+| **Total LTV (Subscription client)** | **$7,464** | $1,500 + $5,964 |
 
 ### Lead Economics
 
 | Metric | Conservative | Aggressive |
 |--------|-------------|------------|
-| LTV | $7,500 | $7,500 |
+| LTV | $7,464 | $7,464 |
 | Close Rate | 10% | 20% |
-| Revenue per Lead | $750 | $1,500 |
+| Revenue per Lead | $746 | $1,492 |
 | Target Margin (after ad cost) | ≥ 50% | ≥ 50% |
 | **Allowable Cost Per Lead** | **$75** | **$150** |
 
@@ -198,4 +198,4 @@ These are the queries/intents these ads should surface for in ChatGPT search and
 ### Budget Guidance
 - **Test budget**: $500–$1,000 (gets ~7–13 leads at $75 cap)
 - **Scale budget**: $2,000–$5,000/month once unit economics are validated
-- **Break-even**: 1 Managed Growth close per month covers ~$500/month in ad spend at 10x ROI
+- **Break-even**: 1 subscription close per month covers ~$500/month in ad spend at 10x ROI
