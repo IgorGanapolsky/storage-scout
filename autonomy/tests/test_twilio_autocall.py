@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from autonomy.context_store import ContextStore, Lead
+from autonomy.tools.call_list import CallListRow
 from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
 from autonomy.tools.scoreboard import Scoreboard
 from autonomy.tools import live_job as live_job_mod
@@ -215,6 +216,78 @@ def test_run_auto_calls_end_to_end(monkeypatch) -> None:
     assert result.spoke == 1
     assert result.no_answer == 1
     assert result.skipped == 5
+
+
+def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        email = "dataclass@example.com"
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name="Test",
+                company="Co",
+                email=email,
+                phone="9546211439",
+                service="Dentist",
+                city="X",
+                state="FL",
+                source="test",
+                score=100,
+                status="new",
+                email_method="direct",
+            )
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.urllib.request.urlopen",
+        lambda req, timeout=20: _FakeHTTPResponse(
+            {"sid": "CA3", "status": "completed", "answered_by": "human"}
+            if req.get_method() == "GET"
+            else {"sid": "CA3", "status": "queued"}
+        ),
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+
+    rows = [
+        CallListRow(
+            company="Co",
+            service="Dentist",
+            city="X",
+            state="FL",
+            phone="9546211439",
+            website="",
+            contact_name="Test",
+            email="dataclass@example.com",
+            email_method="direct",
+            lead_status="new",
+            score=100,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        )
+    ]
+
+    result = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=rows)
+    assert result.reason == "ok"
+    assert result.attempted == 1
+    assert result.spoke == 1
 
 
 def test_live_job_report_includes_auto_calls_section() -> None:

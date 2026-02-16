@@ -24,7 +24,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -354,7 +354,14 @@ def run_auto_calls(
             if attempted >= max_calls:
                 break
 
-            lead_id = str(row.get("email") or "").strip().lower()
+            if isinstance(row, dict):
+                row_map = row
+            elif hasattr(row, "__dataclass_fields__"):
+                row_map = asdict(row)
+            else:
+                row_map = {}
+
+            lead_id = str(row_map.get("email") or "").strip().lower()
             if not lead_id or "@" not in lead_id:
                 skipped += 1
                 continue
@@ -365,12 +372,12 @@ def run_auto_calls(
                 skipped += 1
                 continue
 
-            state = str(row.get("state") or "").strip()
+            state = str(row_map.get("state") or "").strip()
             if not _is_business_hours(state=state, start_hour=start_hour, end_hour=end_hour):
                 skipped += 1
                 continue
 
-            to_phone = normalize_us_phone_e164(str(row.get("phone") or ""))
+            to_phone = normalize_us_phone_e164(str(row_map.get("phone") or ""))
             if not to_phone:
                 skipped += 1
                 continue
@@ -418,10 +425,10 @@ def run_auto_calls(
                     "attempted_at": attempted_at,
                     "outcome": outcome,
                     "notes": notes,
-                    "company": str(row.get("company") or ""),
-                    "service": str(row.get("service") or ""),
-                    "phone": str(row.get("phone") or ""),
-                    "city": str(row.get("city") or ""),
+                    "company": str(row_map.get("company") or ""),
+                    "service": str(row_map.get("service") or ""),
+                    "phone": str(row_map.get("phone") or ""),
+                    "city": str(row_map.get("city") or ""),
                     "state": state,
                     "twilio": {
                         "status": str(final.get("status") or ""),
