@@ -19,6 +19,12 @@ if __package__ is None:  # pragma: no cover
 from autonomy.context_store import ContextStore
 from autonomy.engine import Engine, load_config
 from autonomy.tools.call_list import generate_call_list, write_call_list
+from autonomy.tools.fastmail_inbox_sync import (
+    InboxSyncResult,
+    load_dotenv,
+    sync_fastmail_inbox,
+)
+from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.lead_gen_broward import (
     DEFAULT_CATEGORIES,
     build_leads,
@@ -28,12 +34,9 @@ from autonomy.tools.lead_gen_broward import (
     save_city_index,
     write_leads,
 )
-from autonomy.tools.fastmail_inbox_sync import InboxSyncResult, load_dotenv, sync_fastmail_inbox
-from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
-
 
 UTC = timezone.utc
 
@@ -711,7 +714,17 @@ def main() -> None:
                     "call_daily_cap": int(daily_call_cap),
                 },
             )
-            auto_calls = AutoCallResult(reason=f"blocked:{calls_block_reason}")
+            auto_calls = AutoCallResult(
+                attempted=0,
+                completed=0,
+                spoke=0,
+                voicemail=0,
+                no_answer=0,
+                wrong_number=0,
+                failed=0,
+                skipped=0,
+                reason=f"blocked:{calls_block_reason}",
+            )
         else:
             call_env = dict(env)
             configured_max_calls = max(1, _int_env(call_env.get("AUTO_CALLS_MAX_PER_RUN"), 10))
