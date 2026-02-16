@@ -52,10 +52,28 @@ class OutreachWriter:
     def _is_med_spa(self, lead: Lead) -> bool:
         return "med spa" in (lead.service or "").lower()
 
+    def _is_dentist(self, lead: Lead) -> bool:
+        return "dentist" in (lead.service or "").lower()
+
     def render(self, lead: Lead) -> Dict[str, str]:
-        company = lead.company or ("your med spa" if self._is_med_spa(lead) else "your team")
+        company = lead.company or ("your practice" if self._is_dentist(lead) else "your med spa" if self._is_med_spa(lead) else "your team")
         service = lead.service.lower() if lead.service else "service"
         city = lead.city or "your area"
+
+        if self._is_dentist(lead):
+            subject = f"{company} — missed new-patient calls"
+            body = (
+                f"Hi {lead.name or 'there'},\n\n"
+                f"Just tried calling — wanted to ask about missed new-patient calls during lunch or after-hours.\n\n"
+                f"We set up missed-call text-back + callback for dental practices. I can run a free 1-page baseline "
+                f"for {company}: estimated missed appointments/week + recovered revenue.\n"
+                f"{self._proof_line()}{self._booking_line()}\n\n"
+                f"{self.signature}\n"
+                f"{self.company_name}\n"
+                f"{self.mailing_address}\n\n"
+                f"Unsubscribe: {self._render_unsubscribe(lead.email)}\n"
+            )
+            return {"subject": subject, "body": body}
 
         if self._is_med_spa(lead):
             subject = f"{company} — missed calls = empty chairs"

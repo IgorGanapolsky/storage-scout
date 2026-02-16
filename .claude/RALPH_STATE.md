@@ -3,12 +3,31 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-10T16:53:24Z
+2026-02-16T13:47:00Z
 
 ## Current Status
-🎯 **ACTIVE** - CallCatcher Ops launch assets + automation scaffolding
+🎯 **ACTIVE** - Phone-first pivot: dentist vertical, direct-email-only outreach
 
 ## Recently Completed (This Session)
+
+### Phone-First Pivot (2026-02-16)
+- ✅ Tightened outreach config: `allowed_email_methods` now `["direct"]` only (was `["direct", "scrape"]`)
+- ✅ Added `"dentist"` to `target_services` alongside `"med spa"`
+- ✅ Lowered bounce pause threshold from 25% to 5% (matches industry standard)
+- ✅ Lowered bounce pause min_emailed from 20 to 10 (catches problems faster)
+- ✅ Updated `DEFAULT_ALLOWED_EMAIL_METHODS` in outreach_policy.py to `["direct"]` only
+- ✅ Added `phone_outreach` task type to goal planner with 4 phone-first templates
+- ✅ Reprioritized goals: phone → audits → pipeline (was leads → pipeline → audits)
+- ✅ Updated outreach email templates to support dentist vertical
+- ✅ Added dentist-specific email render in agents.py
+- ✅ Generated dentist call list: 29 rows → `autonomy/state/call_list_dentist_2026-02-16.csv`
+- ✅ All ruff checks pass
+
+### Next: YOU call the dentists
+- Call list: `autonomy/state/call_list_dentist_2026-02-16.csv`
+- Phone script: `business/callcatcherops/phone-script.md`
+- 72h plan: `business/callcatcherops/phone-first-72h.md`
+- Log outcomes: `python3 autonomy/tools/log_call.py --email "x@y.com" --outcome spoke --notes "..."`
 
 ### Repo Maintenance (2026-02-10)
 - ✅ Merged CallCatcher Ops assets + Flutter removal via PR #65
