@@ -22,6 +22,7 @@ import base64
 import json
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -35,6 +36,7 @@ from autonomy.context_store import ContextStore
 UTC = timezone.utc
 
 _US_PHONE_RE = re.compile(r"\D+")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 _STATE_TZ: dict[str, str] = {
     "AL": "America/Chicago",
@@ -117,6 +119,52 @@ def _default_twiml() -> str:
         "To opt out, email hello at callcatcherops dot com. Thanks."
     )
     return f'<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">{msg}</Say></Response>'
+
+
+def _is_reasonable_email(value: str) -> bool:
+    email = (value or "").strip().lower()
+    if not _EMAIL_RE.match(email):
+        return False
+    local = email.split("@", 1)[0]
+    # Filter out common scrape artifacts like "asset-1@3x.png".
+    return "." not in local
+
+
+def _format_exception_notes(exc: Exception) -> tuple[str, dict[str, Any]]:
+    details: dict[str, Any] = {"error_type": type(exc).__name__}
+    notes = f"exception={type(exc).__name__}"
+    if isinstance(exc, urllib.error.HTTPError):
+        details["http_status"] = int(exc.code)
+        raw = ""
+        try:
+            raw = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            raw = ""
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = {}
+            if isinstance(parsed, dict):
+                code = parsed.get("code")
+                message = str(parsed.get("message") or "").strip()
+                more_info = str(parsed.get("more_info") or "").strip()
+                if code not in (None, ""):
+                    details["error_code"] = code
+                if message:
+                    details["error_message"] = message[:200]
+                if more_info:
+                    details["error_more_info"] = more_info[:200]
+                notes = (
+                    f"exception=HTTPError status={int(exc.code)} "
+                    f"code={code if code not in (None, '') else ''} "
+                    f"message={message[:120]}".strip()
+                )
+            else:
+                notes = f"exception=HTTPError status={int(exc.code)}"
+        else:
+            notes = f"exception=HTTPError status={int(exc.code)}"
+    return notes, details
 
 
 @dataclass(frozen=True)
@@ -362,7 +410,7 @@ def run_auto_calls(
                 row_map = {}
 
             lead_id = str(row_map.get("email") or "").strip().lower()
-            if not lead_id or "@" not in lead_id:
+            if not _is_reasonable_email(lead_id):
                 skipped += 1
                 continue
             if store.is_opted_out(lead_id):
@@ -390,8 +438,9 @@ def run_auto_calls(
                 final = wait_for_call_terminal_status(cfg, call_sid=call_sid) if call_sid else created
                 outcome, notes = map_twilio_call_to_outcome(final)
             except Exception as exc:
-                outcome, notes = "no_answer", f"exception={type(exc).__name__}"
-                final = {"status": "exception", "error": str(exc)[:200]}
+                notes, error_details = _format_exception_notes(exc)
+                outcome = "failed"
+                final = {"status": "exception", **error_details}
 
             attempted += 1
 
@@ -435,6 +484,10 @@ def run_auto_calls(
                         "answered_by": str(final.get("answered_by") or ""),
                         "sid": str(final.get("sid") or ""),
                         "error_code": final.get("error_code"),
+                        "http_status": final.get("http_status"),
+                        "error_type": final.get("error_type"),
+                        "error_message": final.get("error_message"),
+                        "error_more_info": final.get("error_more_info"),
                     },
                 },
             )
