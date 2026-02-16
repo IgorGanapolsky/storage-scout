@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.request
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -39,17 +39,7 @@ from autonomy.tools.lead_gen_broward import (
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
-
-UTC = timezone.utc
-
-
-def _truthy_env(raw: str | None, default: bool = False) -> bool:
-    if raw is None:
-        return default
-    val = str(raw).strip().lower()
-    if not val:
-        return default
-    return val not in {"0", "false", "no", "off"}
+from autonomy.utils import UTC, truthy
 
 
 def _read_json(path: Path) -> dict:
@@ -100,9 +90,28 @@ def _count_actions_since(store: ContextStore, *, action_type: str, since_iso: st
     return int(row[0] or 0) if row else 0
 
 
-def _count_actions_today(store: ContextStore, *, action_type: str) -> int:
+def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bool = False) -> int:
+    """Count actions from today's UTC window.
+
+    When `paid_only=True`, only count Twilio-originated attempts that have a
+    concrete Twilio SID (best-effort proxy for billable channel usage).
+    """
     today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    return _count_actions_since(store, action_type=action_type, since_iso=today_start)
+    where: list[str] = ["action_type = ?", "ts >= ?"]
+    params: list[object] = [str(action_type), str(today_start)]
+
+    if paid_only and action_type == "call.attempt":
+        where.append("agent_id = ?")
+        params.append("agent.autocall.twilio.v1")
+        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+    elif paid_only and action_type == "sms.attempt":
+        where.append("agent_id = ?")
+        params.append("agent.sms.twilio.v1")
+        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+
+    sql = f"SELECT COUNT(1) FROM actions WHERE {' AND '.join(where)}"
+    row = store.conn.execute(sql, tuple(params)).fetchone()
+    return int(row[0] or 0) if row else 0
 
 
 def _log_guard_block(
@@ -143,7 +152,7 @@ def _evaluate_paid_stop_loss(
     state_path = repo_root / "autonomy" / "state" / "paid_stop_loss_state.json"
     state = _read_json(state_path)
 
-    enabled = _truthy_env(env.get("STOP_LOSS_ENABLED"), default=True)
+    enabled = truthy(env.get("STOP_LOSS_ENABLED"), default=True)
     max_zero_runs = max(1, _int_env(env.get("STOP_LOSS_ZERO_REVENUE_RUNS"), 1))
     max_zero_days = max(1, _int_env(env.get("STOP_LOSS_ZERO_REVENUE_DAYS"), 1))
     today = datetime.now(UTC).date()
@@ -532,7 +541,7 @@ def main() -> None:
     dotenv_path = (repo_root / args.dotenv).resolve()
     env = load_dotenv(dotenv_path)
 
-    lock_enabled = _truthy_env(env.get("LIVE_JOB_LOCK"), default=True)
+    lock_enabled = truthy(env.get("LIVE_JOB_LOCK"), default=True)
     lock_fh = None
     if lock_enabled:
         lock_fh = _acquire_lock(repo_root / "autonomy" / "state" / "live_job.lock")
@@ -606,7 +615,7 @@ def main() -> None:
 
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
-    deliverability_gate_enabled = _truthy_env(env.get("DELIVERABILITY_GATE_ENABLED"), default=True)
+    deliverability_gate_enabled = truthy(env.get("DELIVERABILITY_GATE_ENABLED"), default=True)
     deliverability_max_bounce = max(0.0, min(1.0, _float_env(env.get("DELIVERABILITY_MAX_BOUNCE_RATE"), 0.05)))
     deliverability_block = bool(
         deliverability_gate_enabled
@@ -659,20 +668,26 @@ def main() -> None:
     guardrails["zero_revenue_runs"] = int(stop_loss_state.get("zero_revenue_runs") or 0)
     guardrails["zero_revenue_days"] = int(stop_loss_state.get("zero_revenue_days") or 0)
 
-    paid_kill_switch = _truthy_env(env.get("PAID_KILL_SWITCH"), default=False)
+    paid_kill_switch = truthy(env.get("PAID_KILL_SWITCH"), default=False)
     guardrails["paid_kill_switch"] = bool(paid_kill_switch)
 
     daily_call_cap = max(0, _int_env(env.get("PAID_DAILY_CALL_CAP"), 10))
-    calls_today = _count_actions_today(guard_store, action_type="call.attempt")
+    calls_today_all = _count_actions_today(guard_store, action_type="call.attempt")
+    calls_today = _count_actions_today(guard_store, action_type="call.attempt", paid_only=True)
     call_budget_remaining = max(0, int(daily_call_cap) - int(calls_today))
     guardrails["call_daily_cap"] = int(daily_call_cap)
+    guardrails["calls_today_scope"] = "billable_twilio"
+    guardrails["calls_today_all_actions"] = int(calls_today_all)
     guardrails["calls_today"] = int(calls_today)
     guardrails["calls_budget_remaining"] = int(call_budget_remaining)
 
     daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
-    sms_today = _count_actions_today(guard_store, action_type="sms.attempt")
+    sms_today_all = _count_actions_today(guard_store, action_type="sms.attempt")
+    sms_today = _count_actions_today(guard_store, action_type="sms.attempt", paid_only=True)
     sms_budget_remaining = max(0, int(daily_sms_cap) - int(sms_today))
     guardrails["sms_daily_cap"] = int(daily_sms_cap)
+    guardrails["sms_today_scope"] = "billable_twilio"
+    guardrails["sms_today_all_actions"] = int(sms_today_all)
     guardrails["sms_today"] = int(sms_today)
     guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
 
@@ -695,7 +710,7 @@ def main() -> None:
     auto_calls: AutoCallResult | None = None
     if call_list is not None and isinstance(call_list.get("data"), list):
         calls_block_reason = ""
-        if not _truthy_env(env.get("AUTO_CALLS_ENABLED"), default=False):
+        if not truthy(env.get("AUTO_CALLS_ENABLED"), default=False):
             calls_block_reason = "auto_calls_disabled"
         elif paid_kill_switch:
             calls_block_reason = "paid_kill_switch"
@@ -711,6 +726,7 @@ def main() -> None:
                 reason=calls_block_reason,
                 details={
                     "calls_today": int(calls_today),
+                    "calls_today_all_actions": int(calls_today_all),
                     "call_daily_cap": int(daily_call_cap),
                 },
             )
@@ -735,7 +751,7 @@ def main() -> None:
     sms_result: SmsResult | None = None
     if auto_calls is not None and (auto_calls.spoke + auto_calls.voicemail) > 0:
         sms_block_reason = ""
-        if not _truthy_env(env.get("AUTO_SMS_ENABLED"), default=False):
+        if not truthy(env.get("AUTO_SMS_ENABLED"), default=False):
             sms_block_reason = "auto_sms_disabled"
         elif paid_kill_switch:
             sms_block_reason = "paid_kill_switch"
@@ -751,6 +767,7 @@ def main() -> None:
                 reason=sms_block_reason,
                 details={
                     "sms_today": int(sms_today),
+                    "sms_today_all_actions": int(sms_today_all),
                     "sms_daily_cap": int(daily_sms_cap),
                 },
             )

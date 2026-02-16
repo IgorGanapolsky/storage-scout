@@ -25,11 +25,10 @@ import string
 import subprocess
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-UTC = timezone.utc
+from autonomy.utils import now_utc_iso
 
 CTA_CALENDLY_RE = re.compile(r"https?://(?:www\.)?calendly\.com/[^\s\"'>]+", re.IGNORECASE)
 CTA_STRIPE_RE = re.compile(r"https?://buy\.stripe\.com/[^\s\"'>]+", re.IGNORECASE)
@@ -74,10 +73,6 @@ class FunnelWatchdogResult:
     @property
     def is_healthy(self) -> bool:
         return not self.issues
-
-
-def _now_utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _derive_urls(*, intake_url: str, unsubscribe_url_template: str) -> dict[str, str]:
@@ -218,7 +213,7 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
 
 
 def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_template: str) -> FunnelWatchdogResult:
-    res = FunnelWatchdogResult(as_of_utc=_now_utc_iso())
+    res = FunnelWatchdogResult(as_of_utc=now_utc_iso())
     urls = _derive_urls(intake_url=intake_url, unsubscribe_url_template=unsubscribe_url_template)
     if not urls:
         res.add_issue(name="config", url=intake_url, detail="invalid intake_url; cannot derive funnel urls")

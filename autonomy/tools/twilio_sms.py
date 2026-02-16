@@ -18,50 +18,38 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.utils import UTC, normalize_us_phone, state_tz, truthy
 
-UTC = timezone.utc
-
-_US_PHONE_RE = re.compile(r"\D+")
-
-_STATE_TZ: dict[str, str] = {
-    "AL": "America/Chicago", "AK": "America/Anchorage", "AZ": "America/Phoenix",
-    "AR": "America/Chicago", "CA": "America/Los_Angeles", "CO": "America/Denver",
-    "CT": "America/New_York", "DC": "America/New_York", "DE": "America/New_York",
-    "FL": "America/New_York", "GA": "America/New_York", "HI": "Pacific/Honolulu",
-    "ID": "America/Boise", "IL": "America/Chicago", "IN": "America/Indiana/Indianapolis",
-    "IA": "America/Chicago", "KS": "America/Chicago", "KY": "America/New_York",
-    "LA": "America/Chicago", "ME": "America/New_York", "MD": "America/New_York",
-    "MA": "America/New_York", "MI": "America/Detroit", "MN": "America/Chicago",
-    "MS": "America/Chicago", "MO": "America/Chicago", "MT": "America/Denver",
-    "NE": "America/Chicago", "NV": "America/Los_Angeles", "NH": "America/New_York",
-    "NJ": "America/New_York", "NM": "America/Denver", "NY": "America/New_York",
-    "NC": "America/New_York", "ND": "America/Chicago", "OH": "America/New_York",
-    "OK": "America/Chicago", "OR": "America/Los_Angeles", "PA": "America/New_York",
-    "RI": "America/New_York", "SC": "America/New_York", "SD": "America/Chicago",
-    "TN": "America/Chicago", "TX": "America/Chicago", "UT": "America/Denver",
-    "VT": "America/New_York", "VA": "America/New_York", "WA": "America/Los_Angeles",
-    "WV": "America/New_York", "WI": "America/Chicago", "WY": "America/Denver",
-}
+# Re-export for backward compatibility (tests import this name).
+normalize_phone = normalize_us_phone
 
 
-def normalize_phone(raw: str) -> str:
-    """Normalize a US phone number to E.164 (+1XXXXXXXXXX)."""
-    digits = _US_PHONE_RE.sub("", raw or "")
-    if digits.startswith("1") and len(digits) == 11:
-        return f"+{digits}"
-    if len(digits) == 10:
-        return f"+1{digits}"
-    return ""
+def _is_business_hours(state: str, start_hour: int, end_hour: int) -> bool:
+    """Keep local wrapper for monkeypatch-friendly tests and stable behavior."""
+    try:
+        from zoneinfo import ZoneInfo
+    except Exception:
+        return True
+
+    tz_name = state_tz(state)
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
+    now_local = datetime.now(tz)
+    if now_local.weekday() >= 5:
+        return False
+    return int(start_hour) <= int(now_local.hour) < int(end_hour)
 
 
 def _default_sms_body(booking_url: str) -> str:
@@ -95,7 +83,7 @@ class TwilioSmsConfig:
 
 
 def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConfig | None:
-    if not _truthy(env.get("AUTO_SMS_ENABLED") or ""):
+    if not truthy(env.get("AUTO_SMS_ENABLED") or ""):
         return None
     sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
     token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
@@ -118,10 +106,6 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
         start_hour=int((env.get("AUTO_SMS_START_HOUR_LOCAL") or "9").strip() or 9),
         end_hour=int((env.get("AUTO_SMS_END_HOUR_LOCAL") or "17").strip() or 17),
     )
-
-
-def _truthy(val: str) -> bool:
-    return val.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def _auth_header(cfg: TwilioSmsConfig) -> str:
@@ -163,19 +147,6 @@ def _lead_texted_recently(store: ContextStore, *, lead_id: str, cooldown_days: i
     return row is not None
 
 
-def _is_business_hours(state: str, start_hour: int, end_hour: int) -> bool:
-    import zoneinfo
-    tz_name = _STATE_TZ.get((state or "").strip().upper(), "America/New_York")
-    try:
-        tz = zoneinfo.ZoneInfo(tz_name)
-    except Exception:
-        tz = zoneinfo.ZoneInfo("America/New_York")
-    now_local = datetime.now(tz)
-    if now_local.weekday() >= 5:
-        return False
-    return start_hour <= now_local.hour < end_hour
-
-
 def _is_opted_out(store: ContextStore, email: str) -> bool:
     row = store.conn.execute(
         "SELECT 1 FROM opt_outs WHERE email = ? LIMIT 1",
@@ -194,7 +165,7 @@ def run_sms_followup(
     """Send SMS follow-ups to leads that were called today but didn't book."""
     cfg = load_sms_config(env, booking_url=booking_url)
     if cfg is None:
-        enabled = _truthy(env.get("AUTO_SMS_ENABLED") or "")
+        enabled = truthy(env.get("AUTO_SMS_ENABLED") or "")
         if not enabled:
             return SmsResult(reason="disabled")
         return SmsResult(reason="missing_twilio_env")
