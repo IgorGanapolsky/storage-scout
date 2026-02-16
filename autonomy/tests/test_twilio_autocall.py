@@ -1,10 +1,40 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime as real_datetime
+from pathlib import Path
+from uuid import uuid4
+
+from autonomy.context_store import ContextStore, Lead
+from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
+from autonomy.tools.scoreboard import Scoreboard
+from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.twilio_autocall import (
+    AutoCallResult,
+    _is_business_hours,
+    _state_tz,
     load_twilio_config,
     map_twilio_call_to_outcome,
     normalize_us_phone_e164,
-)
+    run_auto_calls,
+    wait_for_call_terminal_status,
+ )
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict) -> None:
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def read(self, n: int | None = None) -> bytes:
+        if n is None or n < 0:
+            return self._body
+        return self._body[:n]
+
+    def __enter__(self) -> "_FakeHTTPResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
 
 
 def test_normalize_us_phone_e164() -> None:
@@ -25,6 +55,7 @@ def test_map_twilio_call_to_outcome() -> None:
     assert map_twilio_call_to_outcome({"status": "completed", "answered_by": "machine_start"})[0] == "voicemail"
     assert map_twilio_call_to_outcome({"status": "completed", "answered_by": "human"})[0] == "spoke"
     assert map_twilio_call_to_outcome({"status": "completed"})[0] == "spoke"
+    assert map_twilio_call_to_outcome({"status": "something-else"})[0] == "no_answer"
 
 
 def test_load_twilio_config_requires_e164_from_number() -> None:
@@ -40,3 +71,201 @@ def test_load_twilio_config_requires_e164_from_number() -> None:
     assert cfg is not None
     assert cfg.from_number == "+19546211439"
 
+
+def test_load_twilio_config_missing_env() -> None:
+    assert load_twilio_config({}) is None
+    assert load_twilio_config({"TWILIO_ACCOUNT_SID": "AC123"}) is None
+    assert load_twilio_config({"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}) is None
+
+
+def test_state_tz_defaults_and_known() -> None:
+    assert _state_tz("") == "America/New_York"
+    assert _state_tz("fl") == "America/New_York"
+    assert _state_tz("CA") == "America/Los_Angeles"
+
+
+def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
+    # Monday, Feb 16 2026 at 10:00 local time.
+    class FixedWeekdayDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 2, 16, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekdayDateTime)
+    assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is True
+    assert _is_business_hours(state="FL", start_hour=11, end_hour=17) is False
+
+    # Saturday, Feb 14 2026 at 10:00 local time.
+    class FixedWeekendDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 2, 14, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekendDateTime)
+    assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is False
+
+
+def test_wait_for_call_terminal_status_polls(monkeypatch) -> None:
+    env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token", "TWILIO_FROM_NUMBER": "+19546211439"}
+    cfg = load_twilio_config(env)
+    assert cfg is not None
+
+    get_calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=20):  # noqa: ANN001
+        if req.get_method() != "GET":
+            raise AssertionError("expected GET")
+        get_calls["n"] += 1
+        if get_calls["n"] == 1:
+            return _FakeHTTPResponse({"sid": "CA1", "status": "queued"})
+        return _FakeHTTPResponse({"sid": "CA1", "status": "completed", "answered_by": "human"})
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+
+    final = wait_for_call_terminal_status(cfg, call_sid="CA1")
+    assert str(final.get("status")) == "completed"
+    assert get_calls["n"] >= 2
+
+
+def test_run_auto_calls_end_to_end(monkeypatch) -> None:
+    # Create a unique sqlite/audit file under autonomy/state (ContextStore enforces this).
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    # Seed store with leads + opt-out + a recent call for cooldown skip.
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        opted = "opted@example.com"
+        recent = "recent@example.com"
+        boom = "boom@example.com"
+        good = "good@example.com"
+
+        for email in (opted, recent, boom, good):
+            store.upsert_lead(
+                Lead(
+                    id=email,
+                    name="Test",
+                    company="Co",
+                    email=email,
+                    phone="9546211439",
+                    service="Dentist",
+                    city="X",
+                    state="FL",
+                    source="test",
+                    score=100,
+                    status="new",
+                    email_method="direct",
+                )
+            )
+
+        store.add_opt_out(opted)
+        store.log_action(
+            agent_id="test",
+            action_type="call.attempt",
+            trace_id="t1",
+            payload={"lead_id": recent},
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "2",
+        "AUTO_CALLS_COOLDOWN_DAYS": "7",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+
+    def fake_is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
+        return state != "TX"
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", fake_is_business_hours)
+
+    post_calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=20):  # noqa: ANN001
+        method = req.get_method()
+        if method == "POST":
+            post_calls["n"] += 1
+            if post_calls["n"] == 1:
+                raise RuntimeError("boom")
+            return _FakeHTTPResponse({"sid": "CA2", "status": "queued"})
+        if method == "GET":
+            return _FakeHTTPResponse({"sid": "CA2", "status": "completed", "answered_by": "human"})
+        raise AssertionError(f"unexpected method: {method}")
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+
+    call_rows = [
+        {"email": "not-an-email", "phone": "9546211439", "state": "FL"},
+        {"email": opted, "phone": "9546211439", "state": "FL"},
+        {"email": recent, "phone": "9546211439", "state": "FL"},
+        {"email": "hours@example.com", "phone": "9546211439", "state": "TX"},
+        {"email": "badphone@example.com", "phone": "011 954 621 1439", "state": "FL"},
+        {"email": boom, "phone": "9546211439", "state": "FL"},
+        {"email": good, "phone": "9546211439", "state": "FL"},
+    ]
+
+    result = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_rows)
+    assert result.reason == "ok"
+    assert result.attempted == 2
+    assert result.spoke == 1
+    assert result.no_answer == 1
+    assert result.skipped == 5
+
+
+def test_live_job_report_includes_auto_calls_section() -> None:
+    report = live_job_mod._format_report(
+        leadgen_new=0,
+        call_list=None,
+        auto_calls=AutoCallResult(
+            attempted=1,
+            completed=1,
+            spoke=1,
+            voicemail=0,
+            no_answer=0,
+            wrong_number=0,
+            failed=0,
+            skipped=0,
+            reason="ok",
+        ),
+        engine_result={"sent_initial": 0, "sent_followup": 0},
+        inbox_result=InboxSyncResult(
+            processed_messages=0,
+            new_bounces=0,
+            new_replies=0,
+            new_opt_outs=0,
+            intake_submissions=0,
+            calendly_bookings=0,
+            stripe_payments=0,
+            last_uid=0,
+        ),
+        scoreboard=Scoreboard(
+            leads_total=0,
+            leads_new=0,
+            leads_contacted=0,
+            leads_replied=0,
+            leads_bounced=0,
+            leads_other=0,
+            email_sent_total=0,
+            email_sent_recent=0,
+            emailed_leads_recent=0,
+            bounced_leads_recent=0,
+            bounce_rate_recent=0.0,
+            opt_out_total=0,
+            last_email_ts="",
+            call_attempts_total=0,
+            call_attempts_recent=0,
+            call_booked_total=0,
+            call_booked_recent=0,
+            last_call_ts="",
+        ),
+        scoreboard_days=30,
+        funnel_result=None,
+        goal_tasks=None,
+    )
+    assert "Auto calls (Twilio)" in report
+    assert "- status: ok" in report
