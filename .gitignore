@@ -34,3 +34,6 @@ htmlcov/
 
 # Local scratch (not part of CallCatcher Ops scope)
 tools_rental/
+
+# oh-my-codex runtime state (local only)
+.omx/

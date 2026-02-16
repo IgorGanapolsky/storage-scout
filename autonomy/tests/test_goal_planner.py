@@ -340,7 +340,16 @@ class TestTaskTemplates:
     """Test that task templates are well-formed."""
 
     def test_all_task_types_have_templates(self) -> None:
-        expected = {"lead_gen", "outreach", "content", "landing_page", "research", "social", "automation"}
+        expected = {
+            "lead_gen",
+            "outreach",
+            "content",
+            "landing_page",
+            "research",
+            "social",
+            "automation",
+            "phone_outreach",
+        }
         assert set(TASK_TEMPLATES.keys()) == expected
 
     def test_templates_have_entries(self) -> None:
