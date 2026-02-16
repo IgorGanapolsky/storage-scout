@@ -70,6 +70,9 @@ Optional tuning:
 - `AUTO_CALLS_COOLDOWN_DAYS=7`
 - `AUTO_CALLS_START_HOUR_LOCAL=9`
 - `AUTO_CALLS_END_HOUR_LOCAL=17`
+- `TWILIO_INBOX_SYNC_ENABLED=1` (default on in live job)
+- `AUTO_SMS_INBOUND_REPLY_ENABLED=1` (auto-reply to inbound interested replies)
+- `PRIORITY_KICKOFF_URL=https://buy.stripe.com/...` (optional override for payment CTA in interested auto-replies)
 
 ## Lead Generation (Broward County)
 `autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.

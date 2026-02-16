@@ -639,6 +639,7 @@ def main() -> None:
             audit_log=audit_log,
             env=env,
             booking_url=cfg.company.get("booking_url", ""),
+            kickoff_url=cfg.company.get("kickoff_url", ""),
         )
     else:
         twilio_inbox_result = TwilioInboxResult(reason="disabled")

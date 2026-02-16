@@ -65,7 +65,7 @@ We already pivoted to this structure:
 - Free Baseline ($0): low risk; starts relationship.
 - Priority Kickoff ($249): fast paid "micro-commitment" that funds initial setup work.
 - QuickStart Build ($1,500): the real implementation.
-- Managed Growth ($500/mo): recurring.
+- AI Workflow Subscription ($497/mo): recurring.
 
 Why this structure is correct:
 - Cold traffic rarely buys $1,500 on first touch.
@@ -124,7 +124,7 @@ Gate:
 ### Weeks 3-4 (Days 15-30): Deliver + Convert To Recurring
 - Deliver the QuickStart in 7 days.
 - Track: missed calls, response time, booked appointments.
-- Convert to Managed Growth ($500/mo) with reporting and monitoring.
+- Convert to AI Workflow Subscription ($497/mo) with reporting and monitoring.
 
 ## 8) Stop/Pivot Criteria (No False Hope)
 
@@ -138,6 +138,6 @@ If after 14 days we have:
 Target unit economics:
 - 1 paid kickoff per ~200-400 outbound touches (early stage, depends heavily on targeting and follow-up).
 - 1 QuickStart per 2-4 kickoffs.
-- 1 Managed Growth retainer per 2-3 QuickStarts.
+- 1 AI Workflow Subscription retainer per 2-3 QuickStarts.
 
 These are hypotheses until we measure them with our own data.

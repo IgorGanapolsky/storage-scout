@@ -31,7 +31,7 @@ Not included:
 - Free Baseline: review your current call flow + missed-call leakage estimate
 - Priority Kickoff ($249): reserve an implementation slot (credited toward build)
 - QuickStart Build: implement missed-call recovery and booking automation
-- Managed Growth: monitor, optimize, and report conversion impact
+- AI Workflow Subscription ($497/mo): monitor, optimize, and report conversion impact
 
 See: `business/callcatcherops/pricing.md`
 
