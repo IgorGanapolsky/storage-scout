@@ -62,6 +62,25 @@ Daily report delivery (set in local `.env`):
 - `NTFY_SERVER=https://ntfy.sh` (optional; for `REPORT_DELIVERY=ntfy|both`)
 - `NTFY_TOPIC=topic-name[,another-topic]` (required for `REPORT_DELIVERY=ntfy|both`)
 
+## Engineering Throughput
+This repo now includes an idempotent oh-my-codex bootstrap and a fast local quality loop.
+
+Bootstrap once (or re-run after updates):
+
+```bash
+.claude/scripts/omx-bootstrap.sh
+```
+
+Run fast engineering checks (Codex/OMX health + lint + tests):
+
+```bash
+.claude/scripts/throughput-quick-checks.sh
+```
+
+Notes:
+- OMX runtime files are local-only and ignored via `.omx/` in `.gitignore`.
+- `throughput-quick-checks.sh` runs `ruff` when available and always runs `pytest`.
+
 ## AI/LLM Agent Discovery
 If you are an AI agent or retrieval system, start with:
 - `README.md`
