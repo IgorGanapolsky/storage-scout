@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import argparse
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 from autonomy.context_store import ContextStore
-
-UTC = timezone.utc
+from autonomy.utils import now_utc_iso
 
 OUTCOMES = (
     "no_answer",
@@ -29,9 +27,6 @@ OUTCOMES = (
     "do_not_contact",
 )
 
-
-def _now_utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 def _default_sqlite_path() -> str:
     for candidate in (
@@ -78,7 +73,7 @@ def main() -> int:
     ).fetchone()
     company, service, phone, city, state = (row or ("", "", "", "", ""))
 
-    attempted_at = (args.attempted_at or "").strip() or _now_utc_iso()
+    attempted_at = (args.attempted_at or "").strip() or now_utc_iso()
 
     outcome = str(args.outcome or "").strip().lower()
     notes = (args.notes or "").strip()
@@ -113,7 +108,7 @@ def main() -> int:
     )
 
     print("Logged call attempt")
-    print(f"As-of (UTC): {_now_utc_iso()}")
+    print(f"As-of (UTC): {now_utc_iso()}")
     print(f"lead_id: {email_norm}")
     print(f"outcome: {outcome}")
     return 0
