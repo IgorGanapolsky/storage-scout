@@ -2,21 +2,22 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 from autonomy.context_store import ContextStore
+from autonomy.goal_executor import GoalExecutor
 from autonomy.goal_planner import (
+    TASK_TEMPLATES,
     Goal,
     GoalPlanner,
     GoalTask,
     GoalTaskStore,
-    TASK_TEMPLATES,
     load_goals,
 )
-from autonomy.goal_executor import GoalExecutor
 
 _CLEANUP: list[Path] = []
 
@@ -34,10 +35,8 @@ def _make_store() -> ContextStore:
 @atexit.register
 def _cleanup_test_files() -> None:
     for p in _CLEANUP:
-        try:
+        with contextlib.suppress(OSError):
             p.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _sample_goals_file(tmp_dir: Path) -> Path:
@@ -357,10 +356,8 @@ class TestTaskTemplates:
             assert len(templates) >= 1, f"No templates for {task_type}"
 
     def test_template_formatting(self) -> None:
-        for task_type, templates in TASK_TEMPLATES.items():
+        for _task_type, templates in TASK_TEMPLATES.items():
             for template in templates:
                 # Should not crash with format
-                try:
+                with contextlib.suppress(KeyError):
                     template.format(vertical="dental", city="Miami")
-                except KeyError:
-                    pass  # Some templates don't have variables — that's fine

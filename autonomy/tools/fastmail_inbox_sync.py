@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import imaplib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
 from pathlib import Path
-from typing import Iterable
 
 from autonomy.context_store import ContextStore
-
 
 UTC = timezone.utc
 
@@ -112,9 +112,7 @@ def _is_bounce(from_name: str, from_email: str, subject: str, body: str) -> bool
     if BOUNCE_SUBJECT_RE.search(subject_l or ""):
         return True
     # Common DSN markers.
-    if "final-recipient" in body_l and "diagnostic-code" in body_l:
-        return True
-    return False
+    return bool("final-recipient" in body_l and "diagnostic-code" in body_l)
 
 
 def _extract_failed_recipients(body: str) -> set[str]:
@@ -271,10 +269,8 @@ def sync_fastmail_inbox(
         if max_uid_seen > last_uid:
             _write_state(state_path, {"last_uid": max_uid_seen, "updated_at_utc": datetime.now(UTC).isoformat()})
     finally:
-        try:
+        with contextlib.suppress(Exception):
             imap.logout()
-        except Exception:
-            pass
 
     return InboxSyncResult(
         processed_messages=processed,

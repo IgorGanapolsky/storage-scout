@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Dict
 
 from .context_store import Lead
+
 
 @dataclass
 class LeadScorer:
@@ -55,7 +55,7 @@ class OutreachWriter:
     def _is_dentist(self, lead: Lead) -> bool:
         return "dentist" in (lead.service or "").lower()
 
-    def render(self, lead: Lead) -> Dict[str, str]:
+    def render(self, lead: Lead) -> dict[str, str]:
         company = lead.company or ("your practice" if self._is_dentist(lead) else "your med spa" if self._is_med_spa(lead) else "your team")
         service = lead.service.lower() if lead.service else "service"
         city = lead.city or "your area"
@@ -104,7 +104,7 @@ class OutreachWriter:
         )
         return {"subject": subject, "body": body}
 
-    def render_followup(self, lead: Lead, step: int) -> Dict[str, str]:
+    def render_followup(self, lead: Lead, step: int) -> dict[str, str]:
         step = int(step)
         if step <= 1:
             return self.render(lead)

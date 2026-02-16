@@ -3,7 +3,6 @@ import argparse
 import os
 from datetime import datetime, timedelta, timezone
 
-
 UTC = timezone.utc
 
 
@@ -24,8 +23,8 @@ def main() -> None:
 
     try:
         import stripe
-    except Exception:
-        raise SystemExit("Missing stripe client. Install: pip install stripe")
+    except Exception as exc:
+        raise SystemExit("Missing stripe client. Install: pip install stripe") from exc
 
     stripe.api_key = api_key
 

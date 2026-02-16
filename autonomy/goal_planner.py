@@ -11,7 +11,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
 
 from .context_store import ContextStore, now_iso
 
@@ -27,8 +26,8 @@ class Goal:
     priority: int
     category: str
     goal: str
-    metrics: List[str] = field(default_factory=list)
-    task_types: List[str] = field(default_factory=list)
+    metrics: list[str] = field(default_factory=list)
+    task_types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,7 +43,7 @@ class GoalTask:
 
 # Map task_types to concrete executable descriptions.
 # The planner picks from these based on which goal needs work.
-TASK_TEMPLATES: Dict[str, List[str]] = {
+TASK_TEMPLATES: dict[str, list[str]] = {
     "phone_outreach": [
         "Call 10 dentist leads from the call list CSV and log outcomes",
         "Call non-bounced contacted leads to follow up on baseline offer",
@@ -136,7 +135,7 @@ class GoalTaskStore:
         )
         self.conn.commit()
 
-    def get_pending_tasks(self, limit: int = 10) -> List[GoalTask]:
+    def get_pending_tasks(self, limit: int = 10) -> list[GoalTask]:
         cur = self.conn.cursor()
         cur.execute(
             "SELECT id, goal_id, task_type, description, status, created_at, completed_at FROM goal_tasks WHERE status='pending' ORDER BY created_at ASC LIMIT ?",
@@ -144,7 +143,7 @@ class GoalTaskStore:
         )
         return [GoalTask(**dict(row)) for row in cur.fetchall()]
 
-    def get_tasks_today(self) -> List[GoalTask]:
+    def get_tasks_today(self) -> list[GoalTask]:
         today = datetime.now(UTC).date().isoformat()
         cur = self.conn.cursor()
         cur.execute(
@@ -162,7 +161,7 @@ class GoalTaskStore:
         return int(row[0]) if row else 0
 
 
-def load_goals(path: Path | None = None) -> List[Goal]:
+def load_goals(path: Path | None = None) -> list[Goal]:
     """Load goals from the goals.json brain dump."""
     p = path or GOALS_PATH
     if not p.exists():
@@ -181,10 +180,10 @@ class GoalPlanner:
         self.max_daily_tasks = max_daily_tasks
         self.goals = load_goals()
 
-    def _get_pipeline_state(self) -> Dict[str, int]:
+    def _get_pipeline_state(self) -> dict[str, int]:
         """Query current pipeline counts from the DB."""
         cur = self.store.conn.cursor()
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
 
         for status in ("new", "contacted", "replied", "bounced"):
             row = cur.execute("SELECT COUNT(*) FROM leads WHERE status=?", (status,)).fetchone()
@@ -213,7 +212,7 @@ class GoalPlanner:
         today_tasks = self.task_store.get_tasks_today()
         return len(today_tasks) < self.max_daily_tasks
 
-    def generate_daily_tasks(self) -> List[GoalTask]:
+    def generate_daily_tasks(self) -> list[GoalTask]:
         """Generate today's autonomous task list based on goal priorities."""
         if not self._should_generate_tasks():
             logger.info("Daily tasks already generated; skipping")
@@ -224,7 +223,7 @@ class GoalPlanner:
             return []
 
         pipeline = self._get_pipeline_state()
-        tasks: List[GoalTask] = []
+        tasks: list[GoalTask] = []
 
         # Sort goals by priority (1 = highest)
         sorted_goals = sorted(self.goals, key=lambda g: g.priority)

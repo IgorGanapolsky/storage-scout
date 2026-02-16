@@ -16,6 +16,8 @@ from pathlib import Path
 if __package__ is None:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import contextlib
+
 from autonomy.context_store import ContextStore
 from autonomy.engine import Engine, load_config
 from autonomy.tools.call_list import generate_call_list, write_call_list
@@ -217,10 +219,8 @@ def _acquire_lock(lock_path: Path) -> object | None:
     try:
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        try:
+        with contextlib.suppress(Exception):
             fh.close()
-        except Exception:
-            pass
         return None
 
     try:
@@ -880,10 +880,8 @@ def main() -> None:
 
     # Helpful for launchd logs.
     print(report)
-    try:
+    with contextlib.suppress(Exception):
         guard_store.conn.close()
-    except Exception:
-        pass
     try:
         if lock_fh is not None:
             lock_fh.close()

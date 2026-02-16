@@ -19,12 +19,17 @@ def main() -> None:
 
     try:
         from google.analytics.data_v1beta import BetaAnalyticsDataClient
-        from google.analytics.data_v1beta.types import DateRange, Dimension, Metric, RunReportRequest
+        from google.analytics.data_v1beta.types import (
+            DateRange,
+            Dimension,
+            Metric,
+            RunReportRequest,
+        )
         from google.oauth2 import service_account
-    except Exception:
+    except Exception as exc:
         raise SystemExit(
             "Missing GA4 client deps. Install: pip install google-analytics-data google-auth"
-        )
+        ) from exc
 
     creds = service_account.Credentials.from_service_account_file(
         str(credentials_path),
