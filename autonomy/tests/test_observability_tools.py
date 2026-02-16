@@ -10,6 +10,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     _is_bounce,
 )
 from autonomy.tools.live_job import (
+    _compute_sms_channel_budgets,
     _count_actions_today,
     _evaluate_paid_stop_loss,
     _format_report,
@@ -253,3 +254,38 @@ def test_count_actions_today_paid_scope_filters_non_billable() -> None:
     assert _count_actions_today(store, action_type="call.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.interest_nudge", paid_only=True) == 1
+
+
+def test_compute_sms_channel_budgets_holds_interest_reserve() -> None:
+    budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=10,
+        sms_today_followup=6,
+        sms_today_nudge=0,
+        interest_reserve=3,
+    )
+    assert budgets["total_remaining"] == 4
+    assert budgets["interest_reserve"] == 3
+    assert budgets["interest_reserve_remaining"] == 3
+    assert budgets["followup_remaining"] == 1
+
+
+def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
+    budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=10,
+        sms_today_followup=6,
+        sms_today_nudge=2,
+        interest_reserve=3,
+    )
+    assert budgets["total_remaining"] == 2
+    assert budgets["interest_reserve_remaining"] == 1
+    assert budgets["followup_remaining"] == 1
+
+    budgets2 = _compute_sms_channel_budgets(
+        daily_sms_cap=10,
+        sms_today_followup=6,
+        sms_today_nudge=3,
+        interest_reserve=3,
+    )
+    assert budgets2["total_remaining"] == 1
+    assert budgets2["interest_reserve_remaining"] == 0
+    assert budgets2["followup_remaining"] == 1
