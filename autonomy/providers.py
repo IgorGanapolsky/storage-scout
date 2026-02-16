@@ -7,10 +7,7 @@ from pathlib import Path
 
 from .context_store import Lead
 from .outreach_policy import infer_email_method
-
-
-def _truthy_env(val: str) -> bool:
-    return (val or "").strip().lower() in {"1", "true", "yes", "on"}
+from .utils import truthy
 
 
 def _is_fastmail_smtp_host(host: str) -> bool:
@@ -91,7 +88,7 @@ class EmailSender:
             return {"ok": False, "reason": "missing-smtp-password", "smtp_password_env": password_env}
 
         host = self.config.smtp_host
-        if _is_fastmail_smtp_host(host) and not _truthy_env(os.getenv("ALLOW_FASTMAIL_OUTREACH", "")):
+        if _is_fastmail_smtp_host(host) and not truthy(os.getenv("ALLOW_FASTMAIL_OUTREACH", "")):
             return {
                 "ok": False,
                 "reason": "blocked-fastmail-outreach",

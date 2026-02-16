@@ -5,10 +5,10 @@ import argparse
 import csv
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-UTC = timezone.utc
+from autonomy.utils import UTC, now_utc_iso
 
 # Keep in sync with outreach policy defaults; this is used only for reporting,
 # not for suppression (suppression lives in the outreach engine config/policy).
@@ -53,10 +53,6 @@ class CallListRow:
     baseline_call_time: str = ""
     pilot_yes: str = ""
     notes: str = ""
-
-
-def _now_utc_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _default_sqlite_path() -> Path:
@@ -168,12 +164,13 @@ def generate_call_list(
         {where_sql}
         ORDER BY
             CASE COALESCE(status,'')
-                WHEN 'new' THEN 0
+                WHEN 'replied' THEN 0
                 WHEN 'contacted' THEN 1
-                WHEN 'replied' THEN 2
+                WHEN 'new' THEN 2
                 WHEN 'bounced' THEN 3
                 ELSE 9
             END,
+            email_sent_count DESC,
             score DESC,
             updated_at DESC
         LIMIT ?
@@ -265,10 +262,9 @@ def main() -> None:
         source_csv=Path(args.source_csv) if args.source_csv else None,
     )
     write_call_list(Path(output), rows)
-    print(f"As-of (UTC): {_now_utc_iso()}")
+    print(f"As-of (UTC): {now_utc_iso()}")
     print(f"Wrote {len(rows)} rows -> {output}")
 
 
 if __name__ == "__main__":
     main()
-
