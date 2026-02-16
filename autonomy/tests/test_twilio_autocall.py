@@ -15,6 +15,7 @@ from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
     _is_business_hours,
+    _is_reasonable_email,
     _state_tz,
     load_twilio_config,
     map_twilio_call_to_outcome,
@@ -96,6 +97,12 @@ def test_state_tz_defaults_and_known() -> None:
     assert _state_tz("") == "America/New_York"
     assert _state_tz("fl") == "America/New_York"
     assert _state_tz("CA") == "America/Los_Angeles"
+
+
+def test_is_reasonable_email_filters_scrape_artifacts() -> None:
+    assert _is_reasonable_email("first.last@clinic.com") is True
+    assert _is_reasonable_email("asset-1@3x.png") is False
+    assert _is_reasonable_email("not-an-email") is False
 
 
 def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
