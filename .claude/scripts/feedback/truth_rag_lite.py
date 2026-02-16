@@ -35,6 +35,8 @@ FEEDBACK_DIR = MEMORY_DIR / "feedback"
 
 FEEDBACK_LOG = FEEDBACK_DIR / "feedback-log.jsonl"
 PENDING_SYNC = FEEDBACK_DIR / "pending_cortex_sync.jsonl"
+REVENUE_LEARNING_LOG = FEEDBACK_DIR / "revenue-learning-log.jsonl"
+STRATEGY_LOG = FEEDBACK_DIR / "strategy-response-log.jsonl"
 LESSONS_MD = MEMORY_DIR / "lessons-learned.md"
 
 
@@ -298,8 +300,93 @@ def _load_lesson_docs() -> list[Doc]:
     return docs
 
 
+def _load_revenue_docs() -> list[Doc]:
+    docs: list[Doc] = []
+    for i, obj in enumerate(_read_jsonl(REVENUE_LEARNING_LOG)):
+        if not isinstance(obj, dict):
+            continue
+        ts = str(obj.get("as_of_utc") or obj.get("timestamp") or "")
+        bottleneck = str(obj.get("bottleneck") or "").strip()
+        leading = str(obj.get("leading_signal") or "").strip()
+        hypothesis = str(obj.get("hypothesis") or "").strip()
+        confidence = obj.get("confidence_pct")
+        next_actions = obj.get("next_actions") or []
+        metrics = obj.get("metrics") or {}
+        if not isinstance(next_actions, list):
+            next_actions = []
+        if not isinstance(metrics, dict):
+            metrics = {}
+
+        text_lines = [
+            f"Revenue lesson: bottleneck={bottleneck or 'unknown'}",
+            f"Leading signal: {leading or 'none'}",
+            f"Hypothesis: {hypothesis or 'n/a'}",
+            f"Confidence: {confidence}",
+            f"Metrics: {json.dumps(metrics, sort_keys=True)}",
+        ]
+        for action in next_actions[:3]:
+            text_lines.append(f"Next action: {str(action)}")
+
+        docs.append(
+            Doc(
+                doc_id=str(obj.get("signature") or f"revenue_{i}"),
+                kind="lesson",
+                ts=ts,
+                text="\n".join(text_lines),
+                tags=["revenue", "callcatcherops"],
+                weight=1.0,
+            )
+        )
+    docs.sort(key=lambda d: d.ts or "", reverse=True)
+    return docs
+
+
+def _load_strategy_docs() -> list[Doc]:
+    docs: list[Doc] = []
+    for i, obj in enumerate(_read_jsonl(STRATEGY_LOG)):
+        if not isinstance(obj, dict):
+            continue
+        ts = str(obj.get("timestamp") or "")
+        domain = str(obj.get("domain") or "")
+        question = str(obj.get("question") or "").strip()
+        response = str(obj.get("response") or "").strip()
+        truth_score = obj.get("truthfulness_score")
+        if not question and not response:
+            continue
+
+        metrics = obj.get("metrics") or {}
+        if not isinstance(metrics, dict):
+            metrics = {}
+        sources = obj.get("sources") or []
+        if not isinstance(sources, list):
+            sources = []
+
+        text_lines = [
+            f"Strategy domain: {domain or 'unknown'}",
+            f"Question: {question}",
+            f"Response: {response}",
+            f"Truth score: {truth_score}",
+            f"Metrics: {json.dumps(metrics, sort_keys=True)}",
+        ]
+        if sources:
+            text_lines.append(f"Sources: {', '.join([str(s) for s in sources[:5]])}")
+
+        docs.append(
+            Doc(
+                doc_id=str(obj.get("id") or f"strategy_{i}"),
+                kind="lesson",
+                ts=ts,
+                text="\n".join(text_lines),
+                tags=["strategy", domain] if domain else ["strategy"],
+                weight=0.9,
+            )
+        )
+    docs.sort(key=lambda d: d.ts or "", reverse=True)
+    return docs
+
+
 def _build_corpus() -> list[Doc]:
-    return _load_feedback_docs() + _load_lesson_docs()
+    return _load_feedback_docs() + _load_lesson_docs() + _load_revenue_docs() + _load_strategy_docs()
 
 
 def _extract_critical_high_lessons(max_per_section: int = 5) -> list[tuple[str, str]]:
@@ -355,6 +442,8 @@ def _score_query(docs: list[Doc], query: str, top_k: int = 8) -> list[tuple[Doc,
 
 def _print_start_context() -> int:
     docs_feedback = _load_feedback_docs()
+    docs_revenue = _load_revenue_docs()
+    docs_strategy = _load_strategy_docs()
     lie_hits = [d for d in docs_feedback if LIE_TERMS_RE.search(d.text)]
 
     print("\n" + "=" * 52)
@@ -383,6 +472,20 @@ def _print_start_context() -> int:
         print("\nCRITICAL/HIGH LESSONS (DON'T REPEAT):")
         for sev, title in lessons:
             print(f"- [{sev}] {title[:140]}")
+
+    if docs_revenue:
+        print("\nRECENT REVENUE LESSONS (RAG):")
+        for d in docs_revenue[:3]:
+            day = _safe_iso_date(d.ts)
+            snippet = re.sub(r"\s+", " ", d.text).strip()
+            print(f"- [{day}] {snippet[:200]}")
+
+    if docs_strategy:
+        print("\nRECENT STRATEGY ENTRIES (RAG):")
+        for d in docs_strategy[:2]:
+            day = _safe_iso_date(d.ts)
+            snippet = re.sub(r"\s+", " ", d.text).strip()
+            print(f"- [{day}] {snippet[:200]}")
 
     print("=" * 52 + "\n")
     return 0
