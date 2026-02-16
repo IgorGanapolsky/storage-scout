@@ -45,15 +45,21 @@ class GoalTask:
 # Map task_types to concrete executable descriptions.
 # The planner picks from these based on which goal needs work.
 TASK_TEMPLATES: Dict[str, List[str]] = {
+    "phone_outreach": [
+        "Call 10 dentist leads from the call list CSV and log outcomes",
+        "Call non-bounced contacted leads to follow up on baseline offer",
+        "Call new dentist leads with phone numbers and ask for the owner/office manager",
+        "Leave voicemails for unreachable leads and send post-voicemail follow-up email",
+    ],
     "lead_gen": [
         "Scrape 10 new {vertical} businesses in Broward County via Google Places and add to outreach DB",
-        "Research top 5 {vertical} businesses in {city} with public phone numbers",
-        "Find 10 new leads from Yelp/Google Maps for {vertical} in South Florida",
+        "Research top 5 {vertical} businesses in {city} with public phone numbers and direct emails",
+        "Find 10 new leads from Yelp/Google Maps for {vertical} in South Florida with direct email addresses",
     ],
     "outreach": [
-        "Send initial outreach emails to today's highest-scored unsent leads",
-        "Send follow-up emails to leads contacted 3+ days ago with no reply",
-        "Draft personalized cold email for leads in the {vertical} vertical",
+        "Send post-call follow-up emails to leads who said 'email me' (direct emails only)",
+        "Send follow-up emails to leads contacted 3+ days ago with no reply (direct emails only)",
+        "Draft personalized cold email for leads in the {vertical} vertical (direct email only)",
     ],
     "content": [
         "Draft LinkedIn post about missed-call revenue leak for {vertical} businesses",
