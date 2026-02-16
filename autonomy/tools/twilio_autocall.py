@@ -322,6 +322,7 @@ def _lead_called_recently(store: ContextStore, *, lead_id: str, cooldown_days: i
         FROM actions
         WHERE action_type='call.attempt'
           AND json_extract(payload_json, '$.lead_id') = ?
+          AND COALESCE(json_extract(payload_json, '$.outcome'), '') <> 'failed'
           AND ts >= ?
         LIMIT 1
         """,
