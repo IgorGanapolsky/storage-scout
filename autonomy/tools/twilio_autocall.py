@@ -349,84 +349,93 @@ def run_auto_calls(
     failed = 0
     skipped = 0
 
-    for row in call_rows:
-        if attempted >= max_calls:
-            break
+    try:
+        for row in call_rows:
+            if attempted >= max_calls:
+                break
 
-        lead_id = str(row.get("email") or "").strip().lower()
-        if not lead_id or "@" not in lead_id:
-            skipped += 1
-            continue
-        if store.is_opted_out(lead_id):
-            skipped += 1
-            continue
-        if _lead_called_recently(store, lead_id=lead_id, cooldown_days=cooldown_days):
-            skipped += 1
-            continue
+            lead_id = str(row.get("email") or "").strip().lower()
+            if not lead_id or "@" not in lead_id:
+                skipped += 1
+                continue
+            if store.is_opted_out(lead_id):
+                skipped += 1
+                continue
+            if _lead_called_recently(store, lead_id=lead_id, cooldown_days=cooldown_days):
+                skipped += 1
+                continue
 
-        state = str(row.get("state") or "").strip()
-        if not _is_business_hours(state=state, start_hour=start_hour, end_hour=end_hour):
-            skipped += 1
-            continue
+            state = str(row.get("state") or "").strip()
+            if not _is_business_hours(state=state, start_hour=start_hour, end_hour=end_hour):
+                skipped += 1
+                continue
 
-        to_phone = normalize_us_phone_e164(str(row.get("phone") or ""))
-        if not to_phone:
-            skipped += 1
-            continue
+            to_phone = normalize_us_phone_e164(str(row.get("phone") or ""))
+            if not to_phone:
+                skipped += 1
+                continue
 
-        # Place call and wait for terminal status (best-effort).
-        attempted_at = _now_utc_iso()
-        try:
-            created = create_call(cfg, to_number=to_phone)
-            call_sid = str(created.get("sid") or "")
-            final = wait_for_call_terminal_status(cfg, call_sid=call_sid) if call_sid else created
-            outcome, notes = map_twilio_call_to_outcome(final)
-        except Exception as exc:
-            outcome, notes = "no_answer", f"exception={type(exc).__name__}"
-            final = {"status": "exception", "error": str(exc)[:200]}
+            # Place call and wait for terminal status (best-effort).
+            attempted_at = _now_utc_iso()
+            try:
+                created = create_call(cfg, to_number=to_phone)
+                call_sid = str(created.get("sid") or "")
+                final = wait_for_call_terminal_status(cfg, call_sid=call_sid) if call_sid else created
+                outcome, notes = map_twilio_call_to_outcome(final)
+            except Exception as exc:
+                outcome, notes = "no_answer", f"exception={type(exc).__name__}"
+                final = {"status": "exception", "error": str(exc)[:200]}
 
-        attempted += 1
+            attempted += 1
 
-        if outcome == "spoke":
-            spoke += 1
-        elif outcome == "voicemail":
-            voicemail += 1
-        elif outcome == "wrong_number":
-            wrong_number += 1
-        elif outcome == "no_answer":
-            no_answer += 1
-        else:
-            failed += 1
+            if outcome == "spoke":
+                spoke += 1
+            elif outcome == "voicemail":
+                voicemail += 1
+            elif outcome == "wrong_number":
+                wrong_number += 1
+            elif outcome == "no_answer":
+                no_answer += 1
+            else:
+                failed += 1
 
-        if str(final.get("status") or "").strip().lower() == "completed":
-            completed += 1
+            if str(final.get("status") or "").strip().lower() == "completed":
+                completed += 1
 
-        # Minimal lead status update: new -> contacted when we attempt a call.
-        if store.get_lead_status(lead_id) == "new":
-            store.mark_contacted(lead_id)
+            # Minimal lead status update: new -> contacted when we attempt a call.
+            if store.get_lead_status(lead_id) == "new":
+                store.mark_contacted(lead_id)
 
-        store.log_action(
-            agent_id="agent.autocall.twilio.v1",
-            action_type="call.attempt",
-            trace_id=f"twilio:{str(final.get('sid') or '')}".strip() or f"twilio:{attempted_at}",
-            payload={
-                "lead_id": lead_id,
-                "attempted_at": attempted_at,
-                "outcome": outcome,
-                "notes": notes,
-                "company": str(row.get("company") or ""),
-                "service": str(row.get("service") or ""),
-                "phone": str(row.get("phone") or ""),
-                "city": str(row.get("city") or ""),
-                "state": state,
-                "twilio": {
-                    "status": str(final.get("status") or ""),
-                    "answered_by": str(final.get("answered_by") or ""),
-                    "sid": str(final.get("sid") or ""),
-                    "error_code": final.get("error_code"),
+            twilio_sid = str(final.get("sid") or "").strip()
+            trace_id = f"twilio:{twilio_sid}" if twilio_sid else f"twilio:{attempted_at}"
+
+            store.log_action(
+                agent_id="agent.autocall.twilio.v1",
+                action_type="call.attempt",
+                trace_id=trace_id,
+                payload={
+                    "lead_id": lead_id,
+                    "attempted_at": attempted_at,
+                    "outcome": outcome,
+                    "notes": notes,
+                    "company": str(row.get("company") or ""),
+                    "service": str(row.get("service") or ""),
+                    "phone": str(row.get("phone") or ""),
+                    "city": str(row.get("city") or ""),
+                    "state": state,
+                    "twilio": {
+                        "status": str(final.get("status") or ""),
+                        "answered_by": str(final.get("answered_by") or ""),
+                        "sid": str(final.get("sid") or ""),
+                        "error_code": final.get("error_code"),
+                    },
                 },
-            },
-        )
+            )
+    finally:
+        try:
+            store.conn.close()
+        except Exception:
+            pass
 
     return AutoCallResult(
         attempted=attempted,

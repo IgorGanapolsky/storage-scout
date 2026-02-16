@@ -28,6 +28,9 @@ autonomy/state/
 # Python
 __pycache__/
 *.pyc
+.coverage
+coverage.xml
+htmlcov/
 
 # Local scratch (not part of CallCatcher Ops scope)
 tools_rental/
