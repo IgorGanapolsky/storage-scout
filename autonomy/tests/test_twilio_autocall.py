@@ -12,6 +12,7 @@ from autonomy.tools.call_list import CallListRow
 from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
 from autonomy.tools.scoreboard import Scoreboard
 from autonomy.tools import live_job as live_job_mod
+from autonomy.tools.twilio_sms import SmsResult
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
     _is_business_hours,
@@ -435,6 +436,13 @@ def test_live_job_report_includes_auto_calls_section() -> None:
             skipped=0,
             reason="ok",
         ),
+        sms_followup=SmsResult(
+            attempted=1,
+            delivered=1,
+            failed=0,
+            skipped=0,
+            reason="ok",
+        ),
         engine_result={"sent_initial": 0, "sent_followup": 0},
         inbox_result=InboxSyncResult(
             processed_messages=0,
@@ -472,3 +480,5 @@ def test_live_job_report_includes_auto_calls_section() -> None:
     )
     assert "Auto calls (Twilio)" in report
     assert "- status: ok" in report
+    assert "SMS follow-up (Twilio)" in report
+    assert "- delivered: 1" in report
