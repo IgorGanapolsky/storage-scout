@@ -36,6 +36,7 @@ from autonomy.tools.lead_gen_broward import (
     save_city_index,
     write_leads,
 )
+from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
@@ -303,6 +304,7 @@ def _format_report(
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
     twilio_inbox: TwilioInboxResult | None = None,
+    revenue_learning: dict | None = None,
     guardrails: dict | None = None,
     engine_result: dict,
     inbox_result,
@@ -364,6 +366,16 @@ def _format_report(
         lines.append("Inbox sync (Twilio SMS)")
         for k, v in asdict(twilio_inbox).items():
             lines.append(f"- {k}: {v}")
+    if revenue_learning:
+        lines.append("")
+        lines.append("Revenue learning (RAG)")
+        lines.append(f"- saved: {bool(revenue_learning.get('saved'))}")
+        lines.append(f"- bottleneck: {revenue_learning.get('bottleneck') or ''}")
+        lines.append(f"- leading_signal: {revenue_learning.get('leading_signal') or ''}")
+        lines.append(f"- confidence_pct: {revenue_learning.get('confidence_pct')}")
+        lines.append(f"- path: {revenue_learning.get('path') or ''}")
+        for action in revenue_learning.get("next_actions", [])[:3]:
+            lines.append(f"- next_action: {action}")
 
     if funnel_result is not None:
         lines.append("")
@@ -804,6 +816,25 @@ def main() -> None:
             )
 
     board = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
+    revenue_sources = [s.strip() for s in (env.get("REVENUE_RESEARCH_SOURCES") or "").split(",") if s.strip()]
+    lesson = build_revenue_lesson(
+        scoreboard=board,
+        guardrails=guardrails,
+        inbox_result=inbox_result,
+        twilio_inbox_result=twilio_inbox_result,
+        auto_calls=auto_calls,
+        sms_followup=sms_result,
+        sources=revenue_sources,
+    )
+    revenue_learning_raw = record_revenue_lesson(repo_root=repo_root, lesson=lesson)
+    revenue_learning = {
+        "saved": bool(revenue_learning_raw.get("saved")),
+        "path": str(revenue_learning_raw.get("path") or ""),
+        "bottleneck": lesson.bottleneck,
+        "leading_signal": lesson.leading_signal,
+        "confidence_pct": lesson.confidence_pct,
+        "next_actions": lesson.next_actions,
+    }
     goal_task_data = {
         "generated": engine_result.get("goal_tasks_generated", 0),
         "done": engine_result.get("goal_tasks_done", 0),
@@ -815,6 +846,7 @@ def main() -> None:
         auto_calls=auto_calls,
         sms_followup=sms_result,
         twilio_inbox=twilio_inbox_result,
+        revenue_learning=revenue_learning,
         guardrails=guardrails,
         engine_result=engine_result,
         inbox_result=inbox_result,
@@ -838,6 +870,7 @@ def main() -> None:
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
         "twilio_inbox_result": asdict(twilio_inbox_result),
+        "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "guardrails": guardrails,
         "scoreboard_days": int(args.scoreboard_days),
