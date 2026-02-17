@@ -183,8 +183,8 @@ def _extract_human_context(raw: Any) -> str:
             prompt = obj.get("prompt")
             if isinstance(prompt, str) and prompt.strip():
                 return prompt.strip()
-        except Exception:
-            pass
+        except json.JSONDecodeError:
+            return s
 
     return s
 
