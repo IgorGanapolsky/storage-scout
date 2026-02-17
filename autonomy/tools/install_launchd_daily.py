@@ -10,6 +10,10 @@ LABEL = "com.callcatcherops.autonomy.daily"
 def _plist_content(*, python_exe: str, repo_root: Path) -> str:
     job_script = repo_root / "autonomy" / "tools" / "live_job.py"
     config_path = repo_root / "autonomy" / "state" / "config.callcatcherops.live.json"
+    if not config_path.exists():
+        fallback = repo_root / "autonomy" / "config.callcatcherops.json"
+        if fallback.exists():
+            config_path = fallback
     out_log = repo_root / "autonomy" / "state" / "launchd_daily.out.log"
     err_log = repo_root / "autonomy" / "state" / "launchd_daily.err.log"
 
@@ -54,6 +58,7 @@ def _plist_content(*, python_exe: str, repo_root: Path) -> str:
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     python_exe = sys.executable
+    (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
 
     plist_path = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
     plist_path.parent.mkdir(parents=True, exist_ok=True)
