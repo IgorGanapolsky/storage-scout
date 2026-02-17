@@ -320,8 +320,9 @@ def _acquire_lock(lock_path: Path) -> object | None:
     try:
         fh.write(str(os.getpid()))
         fh.flush()
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        # Lock ownership still holds; PID write is only a diagnostic convenience.
+        return fh
     return fh
 
 
@@ -1203,11 +1204,9 @@ def main() -> None:
     print(report)
     with contextlib.suppress(Exception):
         guard_store.conn.close()
-    try:
-        if lock_fh is not None:
+    if lock_fh is not None:
+        with contextlib.suppress(OSError, ValueError):
             lock_fh.close()
-    except Exception:
-        pass
 
 
 if __name__ == "__main__":
