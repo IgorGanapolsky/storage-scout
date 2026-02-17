@@ -127,13 +127,31 @@ def build_revenue_lesson(
     sources: list[str] | None = None,
 ) -> RevenueLesson:
     interested_signals = _safe_int(getattr(twilio_inbox_result, "interested", 0))
-    booked_total = _safe_int(getattr(scoreboard, "call_booked_total", 0))
-    stripe_payments = _safe_int(getattr(inbox_result, "stripe_payments", 0))
+    booked_total = _safe_int(
+        getattr(
+            scoreboard,
+            "bookings_total",
+            getattr(scoreboard, "call_booked_total", 0),
+        )
+    )
+    stripe_payments = _safe_int(
+        getattr(
+            scoreboard,
+            "stripe_payments_total",
+            getattr(inbox_result, "stripe_payments", 0),
+        )
+    )
 
     metrics: dict[str, Any] = {
         "booked_total": booked_total,
         "stripe_payments": stripe_payments,
-        "calendly_bookings": _safe_int(getattr(inbox_result, "calendly_bookings", 0)),
+        "calendly_bookings": _safe_int(
+            getattr(
+                scoreboard,
+                "calendly_bookings_total",
+                getattr(inbox_result, "calendly_bookings", 0),
+            )
+        ),
         "deliverability_blocked": bool(guardrails.get("deliverability_blocked")),
         "bounce_rate_recent": _safe_float(guardrails.get("deliverability_recent_bounce_rate")),
         "calls_today_billable": _safe_int(guardrails.get("calls_today")),

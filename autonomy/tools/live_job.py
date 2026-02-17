@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.request
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -115,6 +115,52 @@ def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bo
     sql = f"SELECT COUNT(1) FROM actions WHERE {' AND '.join(where)}"
     row = store.conn.execute(sql, tuple(params)).fetchone()
     return int(row[0] or 0) if row else 0
+
+
+def _count_call_booked_today(store: ContextStore) -> int:
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    row = store.conn.execute(
+        """
+        SELECT COUNT(1)
+        FROM actions
+        WHERE action_type='call.attempt'
+          AND ts >= ?
+          AND json_extract(payload_json, '$.outcome') = 'booked'
+        """,
+        (today_start,),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _deliverability_snapshot(store: ContextStore, *, days: int) -> dict[str, float | int]:
+    cutoff = (datetime.now(UTC) - timedelta(days=max(1, int(days)))).isoformat()
+    emailed_row = store.conn.execute(
+        """
+        SELECT COUNT(DISTINCT lead_id)
+        FROM messages
+        WHERE channel='email' AND status='sent' AND ts >= ?
+        """,
+        (cutoff,),
+    ).fetchone()
+    bounced_row = store.conn.execute(
+        """
+        SELECT COUNT(DISTINCT m.lead_id)
+        FROM messages m
+        JOIN leads l ON l.id = m.lead_id
+        WHERE m.channel='email' AND m.status='sent' AND m.ts >= ?
+          AND l.status='bounced'
+        """,
+        (cutoff,),
+    ).fetchone()
+    emailed = int((emailed_row[0] or 0) if emailed_row else 0)
+    bounced = int((bounced_row[0] or 0) if bounced_row else 0)
+    bounce_rate = float(bounced) / float(emailed) if emailed else 0.0
+    return {
+        "window_days": max(1, int(days)),
+        "emailed": emailed,
+        "bounced": bounced,
+        "bounce_rate": bounce_rate,
+    }
 
 
 def _compute_sms_channel_budgets(
@@ -348,6 +394,7 @@ def _format_report(
     inbox_result,
     scoreboard,
     scoreboard_days: int,
+    kpi: dict[str, int] | None = None,
     funnel_result: FunnelWatchdogResult | None = None,
     goal_tasks: dict | None = None,
 ) -> str:
@@ -396,6 +443,13 @@ def _format_report(
         lines.append(f"- failed: {interest_nudge.failed}")
         lines.append(f"- skipped: {interest_nudge.skipped}")
     lines.append("")
+    if kpi:
+        lines.append("Revenue KPI")
+        lines.append(f"- bookings_today: {int(kpi.get('bookings_today') or 0)}")
+        lines.append(f"- payments_today: {int(kpi.get('payments_today') or 0)}")
+        lines.append(f"- bookings_last_{int(scoreboard_days)}d: {int(kpi.get('bookings_window') or 0)}")
+        lines.append(f"- payments_last_{int(scoreboard_days)}d: {int(kpi.get('payments_window') or 0)}")
+        lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
     lines.append(f"- sent_followup: {int(engine_result.get('sent_followup') or 0)}")
@@ -465,6 +519,11 @@ def _format_report(
         f"{int(scoreboard.call_attempts_total)} total | "
         f"{int(scoreboard.call_attempts_recent)} in last {int(scoreboard_days)} days | "
         f"booked: {int(scoreboard.call_booked_total)} total ({int(scoreboard.call_booked_recent)} recent)"
+    )
+    lines.append(
+        "Revenue outcomes: "
+        f"bookings={int(scoreboard.bookings_total)} total ({int(scoreboard.bookings_recent)} recent) | "
+        f"payments={int(scoreboard.stripe_payments_total)} total ({int(scoreboard.stripe_payments_recent)} recent)"
     )
     lines.append(f"Opt-outs recorded: {scoreboard.opt_out_total}")
     return "\n".join(lines).strip() + "\n"
@@ -541,6 +600,9 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
 def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     raw_services = (env.get("DAILY_CALL_LIST_SERVICES") or "").strip()
     if not raw_services:
+        fallback = (cfg.agents.get("outreach", {}) or {}).get("target_services") or []
+        raw_services = ",".join([str(s).strip() for s in fallback if str(s).strip()])
+    if not raw_services:
         return None
 
     services = [s.strip() for s in raw_services.split(",") if s.strip()]
@@ -556,6 +618,16 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
             limit = 25
     if limit <= 0:
         return None
+
+    high_intent_only = truthy(env.get("HIGH_INTENT_OUTREACH_ONLY"), default=True)
+    raw_statuses = (env.get("DAILY_CALL_LIST_STATUSES") or "").strip()
+    statuses = [s.strip() for s in raw_statuses.split(",") if s.strip()]
+    if not statuses and high_intent_only:
+        statuses = ["replied", "contacted", "new"]
+
+    default_min_score = 80 if high_intent_only else 0
+    min_score = max(0, _int_env(env.get("DAILY_CALL_LIST_MIN_SCORE"), default_min_score))
+    exclude_role_inbox = truthy(env.get("DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX"), default=high_intent_only)
 
     output_rel = (env.get("DAILY_CALL_LIST_OUTPUT") or "").strip()
     if not output_rel:
@@ -578,6 +650,9 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     rows = generate_call_list(
         sqlite_path=sqlite_path,
         services=services,
+        statuses=statuses or None,
+        min_score=min_score,
+        exclude_role_inbox=exclude_role_inbox,
         limit=limit,
         require_phone=True,
         include_opt_outs=False,
@@ -587,7 +662,15 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     write_call_list(output_path, rows)
 
     # Include row data in-memory so other steps (e.g. auto-calls) can reuse it.
-    return {"services": services, "rows": len(rows), "path": str(output_rel), "data": rows}
+    return {
+        "services": services,
+        "rows": len(rows),
+        "path": str(output_rel),
+        "data": rows,
+        "statuses": statuses,
+        "min_score": min_score,
+        "exclude_role_inbox": bool(exclude_role_inbox),
+    }
 
 
 def main() -> None:
@@ -695,15 +778,24 @@ def main() -> None:
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
     deliverability_gate_enabled = truthy(env.get("DELIVERABILITY_GATE_ENABLED"), default=True)
+    high_intent_only = truthy(env.get("HIGH_INTENT_OUTREACH_ONLY"), default=True)
+    guardrails["high_intent_mode"] = bool(high_intent_only)
+    deliverability_window_days = max(1, _int_env(env.get("DELIVERABILITY_WINDOW_DAYS"), 7))
+    deliverability_min_emails = max(1, _int_env(env.get("DELIVERABILITY_MIN_EMAILS"), 10))
+    deliverability_snapshot = _deliverability_snapshot(guard_store, days=deliverability_window_days)
     deliverability_max_bounce = max(0.0, min(1.0, _float_env(env.get("DELIVERABILITY_MAX_BOUNCE_RATE"), 0.05)))
     deliverability_block = bool(
         deliverability_gate_enabled
-        and int(board_pre.emailed_leads_recent or 0) > 0
-        and float(board_pre.bounce_rate_recent or 0.0) > float(deliverability_max_bounce)
+        and int(deliverability_snapshot["emailed"] or 0) >= int(deliverability_min_emails)
+        and float(deliverability_snapshot["bounce_rate"] or 0.0) > float(deliverability_max_bounce)
     )
     guardrails["deliverability_gate_enabled"] = bool(deliverability_gate_enabled)
+    guardrails["deliverability_window_days"] = int(deliverability_window_days)
+    guardrails["deliverability_min_emails"] = int(deliverability_min_emails)
     guardrails["deliverability_max_bounce_rate"] = float(deliverability_max_bounce)
-    guardrails["deliverability_recent_bounce_rate"] = float(board_pre.bounce_rate_recent or 0.0)
+    guardrails["deliverability_emailed_window"] = int(deliverability_snapshot["emailed"] or 0)
+    guardrails["deliverability_bounced_window"] = int(deliverability_snapshot["bounced"] or 0)
+    guardrails["deliverability_recent_bounce_rate"] = float(deliverability_snapshot["bounce_rate"] or 0.0)
     guardrails["deliverability_blocked"] = bool(deliverability_block)
 
     if deliverability_block:
@@ -712,9 +804,11 @@ def main() -> None:
             channel="email.outreach",
             reason="deliverability_bounce_rate",
             details={
-                "bounce_rate_recent": float(board_pre.bounce_rate_recent or 0.0),
+                "bounce_rate_recent": float(deliverability_snapshot["bounce_rate"] or 0.0),
                 "max_bounce_rate": float(deliverability_max_bounce),
-                "emailed_leads_recent": int(board_pre.emailed_leads_recent or 0),
+                "emailed_leads_recent": int(deliverability_snapshot["emailed"] or 0),
+                "window_days": int(deliverability_window_days),
+                "min_emails": int(deliverability_min_emails),
             },
         )
         engine_result = {
@@ -727,13 +821,27 @@ def main() -> None:
         }
         print("live_job: engine blocked by deliverability gate", file=sys.stderr)
     else:
+        if high_intent_only:
+            outreach_cfg = dict((cfg.agents.get("outreach") or {}))
+            follow_cfg = dict((outreach_cfg.get("followup") or {}))
+            min_email_score = max(0, _int_env(env.get("HIGH_INTENT_EMAIL_MIN_SCORE"), 80))
+            outreach_cfg["min_score"] = max(int(outreach_cfg.get("min_score") or 0), min_email_score)
+            if truthy(env.get("HIGH_INTENT_SKIP_COLD_EMAIL"), default=True):
+                outreach_cfg["daily_send_limit"] = 0
+            follow_cfg["enabled"] = bool(follow_cfg.get("enabled", True))
+            outreach_cfg["followup"] = follow_cfg
+            cfg.agents["outreach"] = outreach_cfg
+            guardrails["high_intent_email_min_score"] = int(outreach_cfg["min_score"])
+            guardrails["high_intent_skip_cold_email"] = bool(outreach_cfg.get("daily_send_limit", 0) == 0)
+
         # 2) Run outreach (initial + follow-ups) using live config.
         engine = Engine(cfg)
         engine_result = engine.run()
         print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     has_revenue_signal = bool(
-        int(board_pre.call_booked_total or 0) > 0
+        int(board_pre.bookings_total or 0) > 0
+        or int(board_pre.stripe_payments_total or 0) > 0
         or int(inbox_result.calendly_bookings or 0) > 0
         or int(inbox_result.stripe_payments or 0) > 0
         or int(twilio_inbox_result.interested or 0) > 0
@@ -850,6 +958,10 @@ def main() -> None:
 
     # 3) Optional: write a call list and place outbound calls (Twilio) before computing scoreboard.
     call_list = _maybe_write_call_list(cfg=cfg, env=env, repo_root=repo_root)
+    if call_list is not None:
+        guardrails["call_list_statuses"] = call_list.get("statuses") or []
+        guardrails["call_list_min_score"] = int(call_list.get("min_score") or 0)
+        guardrails["call_list_exclude_role_inbox"] = bool(call_list.get("exclude_role_inbox"))
     auto_calls: AutoCallResult | None = None
     if call_list is not None and isinstance(call_list.get("data"), list):
         calls_block_reason = ""
@@ -933,6 +1045,20 @@ def main() -> None:
             )
 
     board = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
+    bookings_today = int(_count_call_booked_today(guard_store)) + int(
+        _count_actions_today(guard_store, action_type="conversion.booking")
+    )
+    payments_today = int(_count_actions_today(guard_store, action_type="conversion.payment"))
+    kpi = {
+        "bookings_today": bookings_today,
+        "payments_today": payments_today,
+        "bookings_window": int(board.bookings_recent),
+        "payments_window": int(board.stripe_payments_recent),
+    }
+    guardrails["kpi_bookings_today"] = int(bookings_today)
+    guardrails["kpi_payments_today"] = int(payments_today)
+    guardrails[f"kpi_bookings_last_{int(args.scoreboard_days)}d"] = int(board.bookings_recent)
+    guardrails[f"kpi_payments_last_{int(args.scoreboard_days)}d"] = int(board.stripe_payments_recent)
     revenue_sources = [s.strip() for s in (env.get("REVENUE_RESEARCH_SOURCES") or "").split(",") if s.strip()]
     lesson = build_revenue_lesson(
         scoreboard=board,
@@ -970,6 +1096,7 @@ def main() -> None:
         inbox_result=inbox_result,
         scoreboard=board,
         scoreboard_days=int(args.scoreboard_days),
+        kpi=kpi,
         funnel_result=funnel_result,
         goal_tasks=goal_task_data,
     )
@@ -994,6 +1121,7 @@ def main() -> None:
         "guardrails": guardrails,
         "scoreboard_days": int(args.scoreboard_days),
         "scoreboard": asdict(board),
+        "kpi": kpi,
     }
     summary_sha1 = hashlib.sha1(json.dumps(summary_payload, sort_keys=True).encode("utf-8")).hexdigest()
 

@@ -100,3 +100,36 @@ Optional (won't block): SonarCloud, Claude Review, Seer
 **After completing any task:**
 - Update `.claude/RALPH_STATE.md` with current status
 - This ensures the next session knows where to continue
+
+## SESSION DIRECTIVE: PR MANAGEMENT & SYSTEM HYGIENE
+
+### Role
+- CTO operates autonomously; user is CEO.
+
+### Session Start Protocol
+1. Read `CLAUDE.md` directives.
+2. Query available RAG/memory context before task execution.
+3. Review open PRs and branches.
+4. Check CI status.
+
+### PR and Branch Workflow
+1. Inspect all open PRs and assess merge readiness.
+2. Identify branches without associated PRs.
+3. Merge PRs that pass review + CI criteria.
+4. Clean up stale branches/files/logs where safe.
+5. Verify CI on `main` after merges.
+6. Run dry-run operational check for next session readiness.
+
+### Operating Rules
+- Evidence-first reporting: include links, counts, and command outputs.
+- No manual handoffs when the agent can execute directly.
+- Report failures immediately; do not claim completion before verification.
+- Never store or commit secrets/tokens in repo files.
+
+### Post-Task Checklist
+- Open PRs reviewed and merged or blockers documented.
+- Orphan branches addressed (deleted or documented).
+- Stale files/logs/dormant artifacts cleaned.
+- CI passing on `main`.
+- Dry run completed successfully.
+- Lessons logged to available RAG/memory store.
