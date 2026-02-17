@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CallCatcher Ops — Missed Call Recovery for Local Service Businesses</title>
     <meta name="description" content="Recover missed calls, book more appointments, and capture every lead. CallCatcher Ops installs missed-call SMS + call-back automations for local service businesses in days." />
+    <meta name="keywords" content="missed call recovery, appointment booking automation, call tracking, local service business leads, inbound call conversion, call to text back automation" />
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <link rel="canonical" href="https://callcatcherops.com/callcatcherops/" />
+    <link rel="alternate" type="text/plain" href="https://callcatcherops.com/llms.txt" title="LLMs" />
     <meta property="og:title" content="CallCatcher Ops — Missed Call Recovery" />
     <meta property="og:description" content="Recover missed calls, book more appointments, and capture every lead in days." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://callcatcherops.com" />
+    <meta property="og:url" content="https://callcatcherops.com/callcatcherops/" />
+    <meta property="og:site_name" content="CallCatcher Ops" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CallCatcher Ops — Missed Call Recovery" />
+    <meta name="twitter:description" content="Recover missed calls and book more jobs from inbound phone leads." />
     <meta name="theme-color" content="#0F1C1B" />
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-W8E0EKB7W4"></script>
     <script>
@@ -16,6 +24,22 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-W8E0EKB7W4');
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "ProfessionalService",
+        "name": "CallCatcher Ops",
+        "url": "https://callcatcherops.com/callcatcherops/",
+        "description": "Missed call recovery and appointment booking automation for local service businesses.",
+        "areaServed": "United States",
+        "serviceType": [
+          "Missed call recovery",
+          "Appointment booking automation",
+          "Inbound call conversion optimization"
+        ],
+        "email": "hello@callcatcherops.com"
+      }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -47,6 +71,15 @@
       a {
         color: inherit;
         text-decoration: none;
+      }
+
+      a.inline-link {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      a.inline-link:hover {
+        opacity: 0.85;
       }
 
       .wrap {
@@ -311,7 +344,7 @@
           <div class="brand-badge"></div>
           CallCatcher Ops
         </div>
-        <a class="button secondary" href="./intake.html">Start the recovery audit</a>
+        <a class="button secondary" data-cta="header_baseline" href="./intake.html">Get a free baseline</a>
       </header>
 
       <section class="hero">
@@ -323,11 +356,21 @@
             after hours, on busy days, or when phones ring off the hook.
           </p>
           <div class="cta-row">
-            <a class="button primary" href="./intake.html">Start the audit</a>
-            <a class="button secondary" href="#pricing">See pricing ladder</a>
+            <a class="button primary" data-cta="hero_baseline" href="./intake.html">Get a free baseline</a>
+            <a class="button secondary" data-cta="hero_subscription" href="./workflow-subscription.html">See AI workflow subscription</a>
           </div>
-          <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">2-minute intake, response within one business day.</p>
-          <p style="margin-top: 18px; font-size: 0.95rem; color: #5a6f6c;">Designed for med spas, home services, clinics, and local franchises.</p>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">
+            Prefer a quick plan view?
+            <a class="inline-link" data-cta="hero_pricing" href="#pricing">See pricing ladder</a>
+          </p>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #5a6f6c;">
+            2-minute intake, baseline within one business day.
+            <a class="inline-link" data-cta="hero_baseline_example" href="./baseline-example.pdf">See an example baseline (PDF)</a>
+          </p>
+          <p style="margin-top: 18px; font-size: 0.95rem; color: #5a6f6c;">
+            Designed for med spas, home services, clinics, and local franchises.
+            <a class="inline-link" data-cta="hero_dentist_page" href="./dentist.html">Dental practice? Start here.</a>
+          </p>
         </div>
         <div class="hero-card">
           <h3>What you get in week one</h3>
@@ -364,12 +407,12 @@
         <h2 style="font-family: 'Space Grotesk', sans-serif;">Pricing Ladder</h2>
         <div class="grid-3" style="margin-top: 24px;">
           <div class="price-card">
-            <strong>Recovery Audit</strong>
-            <div class="value">$249</div>
+            <strong>Free Baseline</strong>
+            <div class="value">$0</div>
             <ul>
-              <li>Call flow + lead leakage review</li>
-              <li>ROI estimate with recovery targets</li>
-              <li>Setup plan + timeline</li>
+              <li>Call flow + missed-call leakage review</li>
+              <li>Baseline estimate for recoverable bookings</li>
+              <li>Clear next steps (pilot vs. build)</li>
             </ul>
           </div>
           <div class="price-card">
@@ -382,22 +425,25 @@
             </ul>
           </div>
           <div class="price-card">
-            <strong>Managed Growth</strong>
-            <div class="value">$500/mo</div>
+            <strong>AI Workflow Subscription</strong>
+            <div class="value">$497/mo</div>
             <ul>
-              <li>Weekly optimization + reporting</li>
-              <li>New automation requests each month</li>
-              <li>Ongoing support & monitoring</li>
+              <li>Weekly optimization + revenue reporting</li>
+              <li>Ongoing automation tuning across call, SMS, and follow-up</li>
+              <li>Monitoring, alerting, and compliance guardrails</li>
             </ul>
           </div>
         </div>
-        <p style="margin-top: 16px; color: #5a6f6c;">Custom pricing available for multi-location teams. No long-term contracts.</p>
+        <p style="margin-top: 16px; color: #5a6f6c;">
+          Optional priority kickoff: $249 (credited toward build). Custom pricing available for multi-location teams. No long-term contracts.
+          <a class="inline-link" data-cta="pricing_subscription" href="./workflow-subscription.html">See what is included in the subscription.</a>
+        </p>
       </section>
 
       <section class="grid-3" style="margin-top: 60px;">
         <div class="panel">
           <h4>Implementation timeline</h4>
-          <p>Day 1: intake + audit. Day 3: automation build. Day 5: live tests. Day 7: go-live with reporting.</p>
+          <p>Day 1: intake + baseline. Day 3: automation build. Day 5: live tests. Day 7: go-live with reporting.</p>
         </div>
         <div class="panel">
           <h4>Tech stack</h4>
@@ -429,8 +475,8 @@
         <h2 style="font-family: 'Space Grotesk', sans-serif;">Ready to stop losing inbound leads?</h2>
         <p style="color: #5a6f6c;">Email us and we’ll respond within one business day.</p>
         <div class="cta-row" style="justify-content: center;">
-          <a class="button primary" href="./intake.html">Start now</a>
-          <a class="button secondary" href="./intake.html">Request a quote</a>
+          <a class="button primary" data-cta="final_start" href="./intake.html">Start now</a>
+          <a class="button secondary" data-cta="final_subscription" href="./workflow-subscription.html">View subscription details</a>
         </div>
       </section>
 
@@ -440,5 +486,16 @@
         <div style="margin-top: 8px;">© 2026 CallCatcher Ops. All rights reserved.</div>
       </div>
     </div>
+    <script>
+      (() => {
+        if (typeof gtag !== 'function') return;
+        document.querySelectorAll('[data-cta]').forEach((el) => {
+          const label = el.getAttribute('data-cta') || 'unknown';
+          el.addEventListener('click', () => {
+            gtag('event', 'cta_click', { event_category: 'landing', event_label: label });
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

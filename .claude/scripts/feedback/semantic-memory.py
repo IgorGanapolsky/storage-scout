@@ -25,14 +25,14 @@ Usage:
   python semantic-memory.py --metrics            # Show query metrics
 """
 
-import sys
 import json
 import re
+import sys
 import time
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-from collections import OrderedDict
+from typing import Any
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent
@@ -69,7 +69,7 @@ class EmbeddingCache:
         self.hits = 0
         self.misses = 0
 
-    def get(self, text: str) -> Optional[List[float]]:
+    def get(self, text: str) -> list[float] | None:
         if text in self.cache:
             self.cache.move_to_end(text)
             self.hits += 1
@@ -77,7 +77,7 @@ class EmbeddingCache:
         self.misses += 1
         return None
 
-    def put(self, text: str, embedding: List[float]):
+    def put(self, text: str, embedding: list[float]):
         if text in self.cache:
             self.cache.move_to_end(text)
         else:
@@ -85,7 +85,7 @@ class EmbeddingCache:
                 self.cache.popitem(last=False)
             self.cache[text] = embedding
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         total = self.hits + self.misses
         hit_rate = self.hits / total if total > 0 else 0
         return {
@@ -105,7 +105,7 @@ class MetricsLogger:
         self.metrics_file = metrics_file
         self.metrics_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def log(self, event: str, data: Dict[str, Any]):
+    def log(self, event: str, data: dict[str, Any]):
         entry = {
             "timestamp": datetime.now().isoformat(),
             "event": event,
@@ -114,7 +114,7 @@ class MetricsLogger:
         with open(self.metrics_file, 'a') as f:
             f.write(json.dumps(entry) + '\n')
 
-    def get_summary(self, days: int = 7) -> Dict[str, Any]:
+    def get_summary(self, days: int = 7) -> dict[str, Any]:
         if not self.metrics_file.exists():
             return {"error": "No metrics found"}
 
@@ -150,7 +150,7 @@ class MetricsLogger:
 _metrics = MetricsLogger(METRICS_FILE)
 
 
-def get_table_names(db) -> List[str]:
+def get_table_names(db) -> list[str]:
     """Get table names from LanceDB"""
     result = db.list_tables()
     if hasattr(result, 'tables'):
@@ -190,7 +190,7 @@ def get_embedding_model(model_key: str = DEFAULT_MODEL):
         sys.exit(1)
 
 
-def get_embedding_with_cache(text: str, model) -> List[float]:
+def get_embedding_with_cache(text: str, model) -> list[float]:
     """Get embedding with LRU cache"""
     cached = _embedding_cache.get(text)
     if cached is not None:
@@ -212,7 +212,7 @@ class BM25:
         self.corpus = []
         self.n_docs = 0
 
-    def fit(self, documents: List[str]):
+    def fit(self, documents: list[str]):
         self.corpus = [self._tokenize(doc) for doc in documents]
         self.n_docs = len(self.corpus)
         self.doc_lengths = [len(doc) for doc in self.corpus]
@@ -226,7 +226,7 @@ class BM25:
                     self.doc_freqs[term] = self.doc_freqs.get(term, 0) + 1
                     seen.add(term)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         return re.findall(r'\w+', text.lower())
 
     def _idf(self, term: str) -> float:
@@ -255,13 +255,13 @@ class BM25:
 
         return score
 
-    def search(self, query: str, top_k: int = 10) -> List[Tuple[int, float]]:
+    def search(self, query: str, top_k: int = 10) -> list[tuple[int, float]]:
         scores = [(i, self.score(query, i)) for i in range(self.n_docs)]
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:top_k]
 
 
-def load_feedback() -> List[Dict[str, Any]]:
+def load_feedback() -> list[dict[str, Any]]:
     """Load RLHF feedback for indexing"""
     if not FEEDBACK_LOG.exists():
         return []
@@ -293,7 +293,7 @@ def load_feedback() -> List[Dict[str, Any]]:
     return patterns
 
 
-def load_lessons() -> List[Dict[str, Any]]:
+def load_lessons() -> list[dict[str, Any]]:
     """Load lessons from lessons directory"""
     if not LESSONS_DIR.exists():
         return []
@@ -319,7 +319,7 @@ def load_lessons() -> List[Dict[str, Any]]:
                 "full_text": doc_text,
                 "timestamp": lesson.get("createdAt", datetime.now().isoformat()),
             })
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             continue
 
     return lessons
@@ -405,7 +405,7 @@ def hybrid_search(
     threshold: float = SIMILARITY_THRESHOLD,
     table_name: str = None,
     use_bm25: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Hybrid search combining BM25 + vector similarity"""
     start_time = time.time()
 
@@ -479,7 +479,7 @@ def hybrid_search(
     return results
 
 
-def get_session_context() -> Dict[str, Any]:
+def get_session_context() -> dict[str, Any]:
     """Get relevant context for session start"""
     context = {
         "timestamp": datetime.now().isoformat(),
@@ -672,7 +672,7 @@ def add_feedback(feedback_type: str, context: str, model_key: str = DEFAULT_MODE
         return False
 
 
-def extract_tags(text: str) -> List[str]:
+def extract_tags(text: str) -> list[str]:
     """Extract relevant tags from text"""
     tags = []
     text_lower = text.lower()

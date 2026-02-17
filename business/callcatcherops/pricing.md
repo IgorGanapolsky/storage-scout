@@ -1,18 +1,23 @@
 # Pricing Ladder
 
-**Recovery Audit — $249**
-- Call flow review + lead leakage mapping.
-- Baseline estimate for missed-call recovery.
-- Build plan and timeline.
+**Free Baseline — $0**
+- Quick review of your current call flow + missed-call leakage.
+- Baseline estimate for recoverable bookings.
+- Clear next steps (pilot vs. build).
+
+**Priority Kickoff — $249**
+- Reserved implementation slot + faster turnaround.
+- Credited toward QuickStart Build if you proceed.
+- Includes baseline + build plan + timeline.
 
 **QuickStart Build — $1,500**
 - Missed-call SMS + call-back automations.
 - Booking workflow + staff alerts.
 - Live test and launch support.
 
-**Managed Growth — $500/mo**
+**AI Workflow Subscription — $497/mo**
 - Weekly optimization and reporting.
-- One new automation request per month.
+- Ongoing automation tuning (missed-call text back, callback routing, inbound reply handling).
 - Monitoring and alerting.
 
 **Optional Add-ons**

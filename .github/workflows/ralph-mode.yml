@@ -87,7 +87,7 @@ jobs:
             5. DO NOT break existing tests
 
             After implementation:
-            - Run `ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501`
+            - Run `ruff check autonomy/ --select E,F,W --ignore E501`
             - Fix any failing checks
             - Commit with clear message referencing the issue
 
@@ -137,7 +137,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -154,7 +154,7 @@ jobs:
             ITERATION=$((ITERATION + 1))
             echo "::group::Iteration $ITERATION of $MAX_ITERATIONS"
 
-            if ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501; then
+            if ruff check autonomy/ --select E,F,W --ignore E501; then
               echo "✅ Tests passed on iteration $ITERATION"
               echo "status=passed" >> $GITHUB_OUTPUT
               echo "iterations=$ITERATION" >> $GITHUB_OUTPUT
@@ -210,17 +210,16 @@ jobs:
 
             AUDIT CHECKLIST:
             □ Security: No hardcoded secrets, proper input validation
-            □ Logic: Business logic is correct (spread formula, thresholds)
+            □ Logic: Business logic is correct for missed-call recovery and outreach
             □ Quality: Code follows project patterns, is maintainable
             □ Tests: Test coverage is adequate, edge cases handled
             □ Performance: No obvious performance issues
             □ Breaking changes: Existing functionality preserved
 
-            CRITICAL CHECKS for Storage Scout:
-            - Spread = (neighborRate * 4) - commercialPrice - insurance
-            - Insurance default = $12
-            - High priority threshold = $120
-            - GitHub token via String.fromEnvironment only
+            CRITICAL CHECKS for CallCatcher Ops:
+            - No secrets, credentials, or private lead data committed
+            - Outreach engine remains dry-run by default unless explicitly configured
+            - Marketing CTA flow remains valid: landing page -> intake -> thanks
 
             OUTPUT:
             - APPROVE: If all checks pass
