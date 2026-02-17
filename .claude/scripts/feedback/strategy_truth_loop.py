@@ -291,7 +291,6 @@ def retrieve_similar_entries(
     results: list[SimilarResult] = []
     for entry in entries:
         prev_text = f"{entry.get('question', '')}\n{entry.get('response', '')}"
-        score = 0.0
         method = "lexical"
         if query_embedding is not None and isinstance(entry.get("embedding"), list):
             score = cosine_similarity(query_embedding, entry["embedding"])
