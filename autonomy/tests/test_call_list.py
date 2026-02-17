@@ -119,3 +119,71 @@ def test_call_list_prioritizes_warm_statuses() -> None:
 
     ordered = [r.email for r in rows]
     assert ordered[:3] == ["replied@example.com", "contacted@example.com", "new@example.com"]
+
+
+def test_call_list_high_intent_filters_role_inbox_and_low_scores() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    store.upsert_lead(
+        Lead(
+            id="info@clinic.example",
+            name="",
+            company="Role Inbox Clinic",
+            email="info@clinic.example",
+            phone="555-2001",
+            service="med spa",
+            city="Coral Springs",
+            state="FL",
+            source="t",
+            score=95,
+            status="replied",
+            email_method="direct",
+        )
+    )
+    store.upsert_lead(
+        Lead(
+            id="owner@clinic.example",
+            name="Owner",
+            company="Owner Clinic",
+            email="owner@clinic.example",
+            phone="555-2002",
+            service="med spa",
+            city="Coral Springs",
+            state="FL",
+            source="t",
+            score=65,
+            status="replied",
+            email_method="direct",
+        )
+    )
+    store.upsert_lead(
+        Lead(
+            id="jane@clinic.example",
+            name="Jane",
+            company="Jane Clinic",
+            email="jane@clinic.example",
+            phone="555-2003",
+            service="med spa",
+            city="Coral Springs",
+            state="FL",
+            source="t",
+            score=92,
+            status="replied",
+            email_method="direct",
+        )
+    )
+
+    rows = generate_call_list(
+        sqlite_path=Path(sqlite_path),
+        services=["med spa"],
+        statuses=["replied", "contacted"],
+        min_score=80,
+        exclude_role_inbox=True,
+        limit=25,
+        require_phone=True,
+        include_opt_outs=False,
+    )
+
+    assert [r.email for r in rows] == ["jane@clinic.example"]

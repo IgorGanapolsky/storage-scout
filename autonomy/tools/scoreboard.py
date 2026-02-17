@@ -27,6 +27,12 @@ class Scoreboard:
     call_attempts_recent: int
     call_booked_total: int
     call_booked_recent: int
+    calendly_bookings_total: int
+    calendly_bookings_recent: int
+    stripe_payments_total: int
+    stripe_payments_recent: int
+    bookings_total: int
+    bookings_recent: int
     last_call_ts: str
 
 
@@ -118,6 +124,26 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
             """,
             (cutoff,),
         )
+        calendly_bookings_total = _count(
+            cur,
+            "SELECT COUNT(1) FROM actions WHERE action_type='conversion.booking'",
+        )
+        calendly_bookings_recent = _count(
+            cur,
+            "SELECT COUNT(1) FROM actions WHERE action_type='conversion.booking' AND ts >= ?",
+            (cutoff,),
+        )
+        stripe_payments_total = _count(
+            cur,
+            "SELECT COUNT(1) FROM actions WHERE action_type='conversion.payment'",
+        )
+        stripe_payments_recent = _count(
+            cur,
+            "SELECT COUNT(1) FROM actions WHERE action_type='conversion.payment' AND ts >= ?",
+            (cutoff,),
+        )
+        bookings_total = int(call_booked_total) + int(calendly_bookings_total)
+        bookings_recent = int(call_booked_recent) + int(calendly_bookings_recent)
         last_call_ts = _scalar(cur, "SELECT MAX(ts) FROM actions WHERE action_type='call.attempt'")
 
     return Scoreboard(
@@ -138,6 +164,12 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
         call_attempts_recent=call_attempts_recent,
         call_booked_total=call_booked_total,
         call_booked_recent=call_booked_recent,
+        calendly_bookings_total=calendly_bookings_total,
+        calendly_bookings_recent=calendly_bookings_recent,
+        stripe_payments_total=stripe_payments_total,
+        stripe_payments_recent=stripe_payments_recent,
+        bookings_total=bookings_total,
+        bookings_recent=bookings_recent,
         last_call_ts=last_call_ts,
     )
 
@@ -177,6 +209,11 @@ def main() -> None:
         f"{board.call_attempts_recent} in last {int(args.days)} days | "
         f"booked: {board.call_booked_total} total ({board.call_booked_recent} recent) | "
         f"last call: {board.last_call_ts or 'n/a'}"
+    )
+    print(
+        "Revenue outcomes: "
+        f"bookings={board.bookings_total} total ({board.bookings_recent} recent) | "
+        f"payments={board.stripe_payments_total} total ({board.stripe_payments_recent} recent)"
     )
     print(f"Opt-outs recorded: {board.opt_out_total}")
 
