@@ -49,6 +49,19 @@ show_banner() {
     echo -e "${NC}"
 }
 
+default_test_cmd() {
+    # Prefer the autonomy Python test suite when present; otherwise fall back to repo tests.
+    if [ -d "$PROJECT_ROOT/autonomy/tests" ]; then
+        echo "python3 -m pytest -q autonomy/tests --maxfail=1"
+        return
+    fi
+    if [ -d "$PROJECT_ROOT/flutter_scout_app" ]; then
+        echo "cd flutter_scout_app && flutter test"
+        return
+    fi
+    echo "python3 -m pytest -q --maxfail=1"
+}
+
 start_session() {
     local description="$1"
     local issue_number="${2:-}"
@@ -97,9 +110,9 @@ EOF
     echo "You are now in RALPH MODE. Follow this loop:"
     echo ""
     echo "  1. IMPLEMENT the task described above"
-    echo "  2. RUN tests: cd flutter_scout_app && flutter test"
+    echo "  2. RUN tests: ${RALPH_TEST_CMD:-$(default_test_cmd)}"
     echo "  3. If tests PASS:"
-    echo "     - Commit with: git add -A && git commit -m 'Ralph: <what you did>'"
+     echo "     - Commit with: git add -A && git commit -m 'Ralph: <what you did>'"
     echo "     - Continue to next subtask or finish"
     echo "  4. If tests FAIL:"
     echo "     - Analyze the error"
