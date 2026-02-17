@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.parse
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -109,8 +110,10 @@ def test_twilio_inbox_sync_classifies_and_auto_replies(monkeypatch) -> None:
     assert len(posted) == 1
     assert posted[0]["To"] == "+19545550111"
     body = posted[0].get("Body", "")
-    assert "https://calendly.com/example/audit" in body
-    assert "https://buy.stripe.com/" in body
+    urls = re.findall(r"https?://[^] )>,]+", body)
+    parsed = [urllib.parse.urlparse(u) for u in urls]
+    assert any(p.scheme == "https" and p.netloc == "calendly.com" and p.path == "/example/audit" for p in parsed)
+    assert any(p.scheme == "https" and p.netloc == "buy.stripe.com" for p in parsed)
 
     # Same inbound SID values should be deduped on subsequent sync runs.
     second = run_twilio_inbox_sync(
