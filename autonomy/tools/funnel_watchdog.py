@@ -173,11 +173,10 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
     # Ensure a clean slate for this session name.
     with contextlib.suppress(Exception):
         run(["close"], check=False)
-    try:
+    with contextlib.suppress(OSError):
         sock.unlink(missing_ok=True)
+    with contextlib.suppress(OSError):
         pid.unlink(missing_ok=True)
-    except Exception:
-        pass
 
     try:
         try:
@@ -186,11 +185,10 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
             # If the daemon got wedged, clear and retry once.
             err = (exc.stderr or "").lower()
             if "daemon failed to start" in err:
-                try:
+                with contextlib.suppress(OSError):
                     sock.unlink(missing_ok=True)
+                with contextlib.suppress(OSError):
                     pid.unlink(missing_ok=True)
-                except Exception:
-                    pass
                 run(["open", url], check=True)
             else:
                 return ""
@@ -205,11 +203,10 @@ def _agent_browser_get_text(*, repo_root: Path, url: str, timeout: int = 60) -> 
     finally:
         with contextlib.suppress(Exception):
             run(["close"], check=False)
-        try:
+        with contextlib.suppress(OSError):
             sock.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
             pid.unlink(missing_ok=True)
-        except Exception:
-            pass
 
 
 def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_template: str) -> FunnelWatchdogResult:
