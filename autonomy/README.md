@@ -49,6 +49,12 @@ Configure in `agents.outreach`:
 - `blocked_local_parts` (list or comma string)
 - `bounce_pause` (`enabled`, `window_days`, `threshold`, `min_emailed`)
 
+Live-job deliverability gate controls (in `.env`):
+- `DELIVERABILITY_GATE_ENABLED=1`
+- `DELIVERABILITY_WINDOW_DAYS=7` (separate from scoreboard window)
+- `DELIVERABILITY_MIN_EMAILS=10` (minimum sample size before blocking)
+- `DELIVERABILITY_MAX_BOUNCE_RATE=0.05`
+
 In your lead CSV, you can optionally include `email_method` (e.g. `apollo`, `linkedin`, `direct`, `scrape`). If omitted, it's inferred from `notes` and the email local-part.
 
 ## Fastmail Safety Brake
@@ -80,6 +86,12 @@ Optional tuning:
 - `AUTO_INTEREST_NUDGE_LOOKBACK_DAYS=14`
 - `PAID_DAILY_SMS_INTEREST_RESERVE=3` (reserve SMS quota/day for inbound "interested" nudges)
 - `PRIORITY_KICKOFF_URL=https://buy.stripe.com/...` (optional override for payment CTA in interested auto-replies)
+- `HIGH_INTENT_OUTREACH_ONLY=1` (default on; tighten to warmer leads)
+- `HIGH_INTENT_SKIP_COLD_EMAIL=1` (default on; suppress initial cold emails in high-intent mode)
+- `HIGH_INTENT_EMAIL_MIN_SCORE=80`
+- `DAILY_CALL_LIST_STATUSES=replied,contacted,new`
+- `DAILY_CALL_LIST_MIN_SCORE=80`
+- `DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX=1`
 
 ## Lead Generation (Broward County)
 `autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
@@ -91,7 +103,7 @@ python autonomy/tools/lead_gen_broward.py --limit 30
 ```
 
 ## Scoreboard
-View local pipeline counts (leads + emails sent):
+View local pipeline counts (leads + emails + bookings/payments):
 
 ```bash
 python3 autonomy/tools/scoreboard.py

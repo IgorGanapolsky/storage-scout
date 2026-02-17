@@ -33,5 +33,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "agent-browser": "^0.10.0"
+  },
+  "overrides": {
+    "@appium/logger": {
+      "lodash": "4.17.23"
+    }
   }
 }

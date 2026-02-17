@@ -8,6 +8,8 @@ from autonomy.tools.fastmail_inbox_sync import (
     InboxSyncResult,
     _extract_failed_recipients,
     _is_bounce,
+    _looks_like_calendly_booking,
+    _looks_like_stripe_payment,
 )
 from autonomy.tools.live_job import (
     _compute_sms_channel_budgets,
@@ -79,6 +81,18 @@ def test_context_store_mark_status_by_email_and_scoreboard_counts() -> None:
     # Seed sent messages so scoreboard can compute totals.
     store.add_message(lead_id="contacted@example.com", channel="email", subject="s", body="b", status="sent")
     store.add_message(lead_id="replied@example.com", channel="email", subject="s", body="b", status="sent")
+    store.log_action(
+        agent_id="agent.inbox_sync.v1",
+        action_type="conversion.booking",
+        trace_id="imap:booking:test1",
+        payload={"source": "fastmail"},
+    )
+    store.log_action(
+        agent_id="agent.inbox_sync.v1",
+        action_type="conversion.payment",
+        trace_id="imap:payment:test1",
+        payload={"source": "fastmail"},
+    )
 
     board = load_scoreboard(Path(sqlite_path), days=30)
     assert board.leads_total == 4
@@ -88,6 +102,8 @@ def test_context_store_mark_status_by_email_and_scoreboard_counts() -> None:
     assert board.leads_bounced == 1
     assert board.leads_other == 0
     assert board.email_sent_total == 2
+    assert board.bookings_total == 1
+    assert board.stripe_payments_total == 1
 
 
 def test_fastmail_bounce_recipient_extraction_and_bounce_detection() -> None:
@@ -104,6 +120,29 @@ def test_fastmail_bounce_recipient_extraction_and_bounce_detection() -> None:
 
     assert _is_bounce("Mail Delivery System", "mailer-daemon@example.com", "Undelivered Mail Returned to Sender", body)
     assert _is_bounce("", "postmaster@example.com", "Delivery Status Notification (Failure)", body)
+
+
+def test_fastmail_booking_and_payment_detection_heuristics() -> None:
+    assert _looks_like_calendly_booking(
+        "notifications@calendly.com",
+        "Invitation: Intro Call",
+        "You are scheduled. https://calendly.com/example/team",
+    )
+    assert _looks_like_calendly_booking(
+        "no-reply@example.com",
+        "You are scheduled with CallCatcher Ops",
+        "",
+    )
+    assert _looks_like_stripe_payment(
+        "receipts+acct@example.com",
+        "Your payment receipt",
+        "checkout.stripe.com/pay/cs_test_123",
+    )
+    assert _looks_like_stripe_payment(
+        "support@stripe.com",
+        "Invoice paid",
+        "",
+    )
 
 
 def test_live_job_report_formatting() -> None:
@@ -135,6 +174,12 @@ def test_live_job_report_formatting() -> None:
         call_attempts_recent=0,
         call_booked_total=0,
         call_booked_recent=0,
+        calendly_bookings_total=0,
+        calendly_bookings_recent=0,
+        stripe_payments_total=0,
+        stripe_payments_recent=0,
+        bookings_total=0,
+        bookings_recent=0,
         last_call_ts="",
     )
     report = _format_report(
@@ -143,8 +188,10 @@ def test_live_job_report_formatting() -> None:
         inbox_result=inbox,
         scoreboard=board,
         scoreboard_days=30,
+        kpi={"bookings_today": 0, "payments_today": 0, "bookings_window": 0, "payments_window": 0},
     )
     assert "CallCatcher Ops Daily Report" in report
+    assert "Revenue KPI" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
 
@@ -178,6 +225,12 @@ def test_live_job_report_includes_guardrails_section() -> None:
         call_attempts_recent=0,
         call_booked_total=0,
         call_booked_recent=0,
+        calendly_bookings_total=0,
+        calendly_bookings_recent=0,
+        stripe_payments_total=0,
+        stripe_payments_recent=0,
+        bookings_total=0,
+        bookings_recent=0,
         last_call_ts="",
     )
     report = _format_report(

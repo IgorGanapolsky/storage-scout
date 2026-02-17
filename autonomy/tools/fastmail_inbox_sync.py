@@ -22,6 +22,19 @@ BOUNCE_SUBJECT_RE = re.compile(
     re.IGNORECASE,
 )
 OPT_OUT_RE = re.compile(r"\b(unsubscribe|opt\s*out|remove me)\b", re.IGNORECASE)
+CALENDLY_SUBJECT_RE = re.compile(
+    r"(calendly|invitation:|scheduled with|rescheduled|cancelled event)",
+    re.IGNORECASE,
+)
+CALENDLY_BODY_RE = re.compile(r"(calendly\.com/|you are scheduled|new event type)", re.IGNORECASE)
+STRIPE_SUBJECT_RE = re.compile(
+    r"(stripe|payment|invoice|receipt|checkout|charge succeeded|charge failed)",
+    re.IGNORECASE,
+)
+STRIPE_BODY_RE = re.compile(
+    r"(stripe\.com|buy\.stripe\.com|checkout\.stripe\.com|payment_intent|invoice\.paid)",
+    re.IGNORECASE,
+)
 
 IMAP_TIMEOUT_SECS = 20
 
@@ -132,6 +145,20 @@ def _extract_failed_recipients(body: str) -> set[str]:
     return out
 
 
+def _looks_like_calendly_booking(from_email: str, subject: str, body: str) -> bool:
+    sender = (from_email or "").strip().lower()
+    if "calendly" in sender:
+        return True
+    return bool(CALENDLY_SUBJECT_RE.search(subject or "") or CALENDLY_BODY_RE.search(body or ""))
+
+
+def _looks_like_stripe_payment(from_email: str, subject: str, body: str) -> bool:
+    sender = (from_email or "").strip().lower()
+    if "stripe" in sender:
+        return True
+    return bool(STRIPE_SUBJECT_RE.search(subject or "") or STRIPE_BODY_RE.search(body or ""))
+
+
 def sync_fastmail_inbox(
     *,
     sqlite_path: Path,
@@ -205,13 +232,28 @@ def sync_fastmail_inbox(
             if "baseline intake" in subject.lower() and "callcatcher" in subject.lower():
                 intake_submissions += 1
 
+            is_calendly_notice = _looks_like_calendly_booking(from_email, subject, body_text)
+            is_stripe_notice = _looks_like_stripe_payment(from_email, subject, body_text)
+
             # Calendly booking notifications
-            if "calendly" in (from_email or "").lower() or "calendly" in subject.lower():
+            if is_calendly_notice:
                 calendly_bookings += 1
+                store.log_action(
+                    agent_id="agent.inbox_sync.v1",
+                    action_type="conversion.booking",
+                    trace_id=f"imap:booking:{uid}",
+                    payload={"mailbox": mailbox, "source": "fastmail", "message_uid": uid},
+                )
 
             # Stripe payment notifications
-            if "stripe" in (from_email or "").lower() or "stripe" in subject.lower():
+            if is_stripe_notice:
                 stripe_payments += 1
+                store.log_action(
+                    agent_id="agent.inbox_sync.v1",
+                    action_type="conversion.payment",
+                    trace_id=f"imap:payment:{uid}",
+                    payload={"mailbox": mailbox, "source": "fastmail", "message_uid": uid},
+                )
 
             if _is_bounce(from_name, from_email, subject, body_text):
                 failed = _extract_failed_recipients(body_text)

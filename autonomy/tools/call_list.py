@@ -103,6 +103,8 @@ def generate_call_list(
     include_opt_outs: bool = False,
     source_csv: Path | None = None,
     statuses: list[str] | None = None,
+    min_score: int = 0,
+    exclude_role_inbox: bool = False,
 ) -> list[CallListRow]:
     if not sqlite_path.exists():
         raise SystemExit(f"Missing sqlite DB: {sqlite_path}")
@@ -121,6 +123,9 @@ def generate_call_list(
         placeholders = ",".join(["?"] * len(statuses_norm))
         clauses.append(f"LOWER(COALESCE(status,'')) IN ({placeholders})")
         params.extend(statuses_norm)
+    if int(min_score) > 0:
+        clauses.append("COALESCE(score, 0) >= ?")
+        params.append(int(min_score))
     if require_phone:
         clauses.append("TRIM(COALESCE(phone,'')) <> ''")
     if not include_opt_outs:
@@ -175,7 +180,10 @@ def generate_call_list(
             updated_at DESC
         LIMIT ?
     """
-    params.append(int(limit))
+    query_limit = int(limit)
+    if exclude_role_inbox:
+        query_limit = max(int(limit), int(limit) * 5)
+    params.append(query_limit)
 
     rows: list[CallListRow] = []
     with sqlite3.connect(sqlite_path) as conn:
@@ -184,6 +192,10 @@ def generate_call_list(
         for r in cur.execute(sql, tuple(params)).fetchall():
             email = str(r["email"] or "")
             local = _email_local_part(email)
+            role_inbox = _truthy_str(local in ROLE_LOCAL_PARTS)
+            if exclude_role_inbox and role_inbox == "yes":
+                continue
+
             rows.append(
                 CallListRow(
                     company=str(r["company"] or ""),
@@ -198,12 +210,14 @@ def generate_call_list(
                     lead_status=str(r["lead_status"] or ""),
                     score=int(r["score"] or 0),
                     source=str(r["source"] or ""),
-                    role_inbox=_truthy_str(local in ROLE_LOCAL_PARTS),
+                    role_inbox=role_inbox,
                     last_email_ts=str(r["last_email_ts"] or ""),
                     email_sent_count=int(r["email_sent_count"] or 0),
                     opted_out=_truthy_str(int(r["opted_out"] or 0) > 0),
                 )
             )
+            if len(rows) >= int(limit):
+                break
 
     return rows
 
@@ -229,6 +243,12 @@ def main() -> None:
         "--statuses",
         default="",
         help="Optional comma-separated lead statuses to include (e.g. 'new,contacted').",
+    )
+    parser.add_argument("--min-score", type=int, default=0, help="Optional minimum lead score.")
+    parser.add_argument(
+        "--exclude-role-inbox",
+        action="store_true",
+        help="Exclude role inbox local-parts (info@, contact@, support@, etc).",
     )
     parser.add_argument("--limit", type=int, default=200, help="Max rows to output.")
     parser.add_argument("--include-opt-outs", action="store_true", help="Include leads that opted out (not recommended).")
@@ -256,6 +276,8 @@ def main() -> None:
         sqlite_path=sqlite_path,
         services=services,
         statuses=statuses or None,
+        min_score=max(0, int(args.min_score)),
+        exclude_role_inbox=bool(args.exclude_role_inbox),
         limit=int(args.limit),
         require_phone=not bool(args.no_require_phone),
         include_opt_outs=bool(args.include_opt_outs),
