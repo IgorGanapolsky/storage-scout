@@ -85,6 +85,25 @@ def _resolve_store_paths(*, cfg, repo_root: Path) -> tuple[Path, Path]:
     return sqlite_path, audit_log
 
 
+def _resolve_config_path(*, repo_root: Path, config_arg: str) -> Path:
+    """
+    Resolve the config path with a developer-friendly fallback.
+
+    If the default live config is requested (even via an absolute path) but missing
+    (fresh clone/worktree or LaunchAgent), fall back to the tracked config in the repo.
+    """
+
+    requested = (repo_root / config_arg).resolve()
+    default_live = (repo_root / "autonomy" / "state" / "config.callcatcherops.live.json").resolve()
+
+    if requested == default_live and not requested.exists():
+        alt = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
+        if alt.exists():
+            return alt
+
+    return requested
+
+
 def _count_actions_since(store: ContextStore, *, action_type: str, since_iso: str) -> int:
     row = store.conn.execute(
         "SELECT COUNT(1) FROM actions WHERE action_type=? AND ts >= ?",
@@ -735,12 +754,7 @@ def main() -> None:
     # Ensure the outreach engine can read SMTP_PASSWORD via config.email.smtp_password_env.
     os.environ.setdefault("SMTP_PASSWORD", smtp_password)
 
-    cfg_path = (repo_root / args.config).resolve()
-    if not cfg_path.exists() and args.config == "autonomy/state/config.callcatcherops.live.json":
-        # Developer-friendly default: fall back to the tracked config in fresh clones/worktrees.
-        alt = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
-        if alt.exists():
-            cfg_path = alt
+    cfg_path = _resolve_config_path(repo_root=repo_root, config_arg=args.config)
     cfg = load_config(str(cfg_path))
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
