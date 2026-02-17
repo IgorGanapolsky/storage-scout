@@ -14,6 +14,8 @@ node_modules/
 
 # Secrets (if you use .env)
 .env
+.env.war_room
+.env.war_room.*
 *.env
 .secrets/
 

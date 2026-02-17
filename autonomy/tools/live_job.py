@@ -677,7 +677,11 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="CallCatcher Ops live daily job: inbox sync + outreach + report.")
     parser.add_argument("--config", default="autonomy/state/config.callcatcherops.live.json", help="Live config path.")
-    parser.add_argument("--dotenv", default=".env", help="Local .env path (gitignored).")
+    parser.add_argument(
+        "--dotenv",
+        default=".env",
+        help="Local .env path (gitignored). Supports multiple, comma-separated paths (later wins).",
+    )
     parser.add_argument("--scoreboard-days", type=int, default=30, help="Scoreboard window.")
     parser.add_argument("--report-to", default="", help="Override report recipient email.")
     parser.add_argument(
@@ -688,8 +692,12 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
-    dotenv_path = (repo_root / args.dotenv).resolve()
-    env = load_dotenv(dotenv_path)
+    env: dict[str, str] = {}
+    dotenv_paths = [p.strip() for p in str(args.dotenv or "").split(",") if p.strip()]
+    if not dotenv_paths:
+        dotenv_paths = [".env"]
+    for rel in dotenv_paths:
+        env.update(load_dotenv((repo_root / rel).resolve()))
 
     lock_enabled = truthy(env.get("LIVE_JOB_LOCK"), default=True)
     lock_fh = None
@@ -728,6 +736,11 @@ def main() -> None:
     os.environ.setdefault("SMTP_PASSWORD", smtp_password)
 
     cfg_path = (repo_root / args.config).resolve()
+    if not cfg_path.exists() and args.config == "autonomy/state/config.callcatcherops.live.json":
+        # Developer-friendly default: fall back to the tracked config in fresh clones/worktrees.
+        alt = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
+        if alt.exists():
+            cfg_path = alt
     cfg = load_config(str(cfg_path))
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
