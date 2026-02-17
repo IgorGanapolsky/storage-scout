@@ -1,64 +1,33 @@
-# GitHub Copilot Instructions for Storage Scout
+# GitHub Copilot Instructions for CallCatcher Ops
 
-This is a Flutter/Dart app for tracking storage arbitrage opportunities in Coral Springs, FL.
+This repository is focused on one business: CallCatcher Ops.
 
-## Critical Rules (MUST follow)
+## Product Context
+- Offer: missed-call recovery + appointment booking automation for local service businesses
+- Revenue path: landing page -> intake -> audit/build -> managed growth
+- Primary code areas:
+  - `docs/callcatcherops/` (public website + intake)
+  - `autonomy/` (outreach engine, dry-run default)
+  - `business/callcatcherops/` (offers, pricing, scripts)
 
-### Business Logic
-- Spread formula: `(neighborRate * 4) - commercialPrice - insurance`
-- Default insurance: $12 (Florida requirement)
-- High priority threshold: $120 spread
-- Target zip codes: 33071, 33076
+## Non-Negotiable Rules
+- Never add or commit secrets, API keys, tokens, or PII.
+- Keep outreach dry-run by default unless explicitly configured by the user.
+- Preserve a clean CTA flow and valid public URLs.
+- Prefer small, auditable Python scripts and minimal dependencies.
 
-### Security
-- NEVER hardcode secrets, API keys, or tokens
-- GitHub token MUST use `String.fromEnvironment('GITHUB_TOKEN')`
-- Build with: `flutter run --dart-define=GITHUB_TOKEN=$TOKEN`
+## Coding Priorities
+1. Revenue conversion (CTA clarity, booking flow, payment flow)
+2. Reliability (no broken pages/scripts, safe defaults)
+3. Measurement (analytics events and attributable outcomes)
 
-### GitHub Integration
-- CSV stored at: `data/storage_prices.csv`
-- API endpoint: `https://api.github.com/repos/{owner}/{repo}/contents/{path}`
-- Always fetch SHA before updating (GET then PUT)
+## Python Standards
+- Keep functions small and explicit.
+- Validate external inputs.
+- Avoid hidden side effects.
+- Run `ruff check autonomy/ --select E,F,W --ignore E501` before merge.
 
-## Code Patterns
-
-### Dart/Flutter
-- Use `const` constructors where possible
-- File naming: `snake_case.dart`
-- Class naming: `PascalCase`
-- Use `late final` for lazy initialization
-- Prefer immutable data with `final` fields
-
-### State Management
-- Use `StatefulWidget` for local state
-- Keep business logic in separate calculator classes
-- Validate all user inputs
-
-### Testing
-- Test files: `*_test.dart`
-- Run: `flutter test`
-- Use `flutter_test` package
-
-## Project Structure
-```
-flutter_scout_app/
-├── lib/
-│   ├── main.dart              # Main app with UI
-│   └── models/
-│       └── spread_calculator.dart  # Business logic
-├── test/
-│   └── spread_calculator_test.dart
-└── pubspec.yaml
-```
-
-## Import Order
-1. Dart SDK (`dart:*`)
-2. Flutter SDK (`package:flutter/*`)
-3. External packages
-4. Project imports (`package:storage_scout/*`)
-5. Relative imports
-
-## Notifications
-- Use ntfy.sh for push notifications
-- Topic: `storage-scout-alerts`
-- Only notify on high priority spreads (>= $120)
+## Website Standards
+- Keep metadata accurate (title, description, canonical, OG).
+- Keep sitemap/robots/llms files aligned to live URLs.
+- Avoid placeholder CTAs in production-facing pages.

@@ -1,7 +1,7 @@
 # CallCatcher Ops - Claude Configuration
 
 ## Project Overview
-CallCatcher Ops is a missed-call recovery and appointment booking offer for local service businesses. This repo also contains outreach automation and digital product landing pages.
+CallCatcher Ops is a missed-call recovery and appointment booking system for local service businesses. This repo is focused exclusively on the CallCatcher Ops website, outreach engine, and operating playbooks.
 
 ## User Mandates
 - Never argue with the user.
@@ -12,8 +12,7 @@ CallCatcher Ops is a missed-call recovery and appointment booking offer for loca
 - `docs/callcatcherops/` - Marketing site (GitHub Pages)
 - `autonomy/` - Outreach engine (CSV leads + SMTP, dry-run default)
 - `business/callcatcherops/` - Pricing, outreach scripts, deployment notes
-- `docs/` - Gumroad product landing pages
-- `tools_rental/` - Tools arbitrage experiments (optional)
+- `docs/` - Root redirect + SEO/discovery files
 
 ## Commands
 ### Outreach Engine
@@ -25,11 +24,6 @@ python3 autonomy/run.py
 ```bash
 export GOOGLE_PLACES_API_KEY=...
 python3 autonomy/tools/lead_gen_broward.py --limit 30
-```
-
-### Tools Rental API (Optional)
-```bash
-python3 tools_rental/api_server.py
 ```
 
 ## Git Workflow
@@ -44,7 +38,7 @@ python3 tools_rental/api_server.py
 
 ## Testing
 - No automated test suite configured.
-- CI runs `ruff` on `tools_rental/` and `digital_products/`.
+- CI runs `ruff` on `autonomy/`.
 
 ## Security
 - Secrets stored in `.env` (gitignored)
@@ -57,8 +51,7 @@ storage/
 ├── .github/workflows/
 ├── autonomy/
 ├── business/
-├── docs/
-└── tools_rental/
+└── docs/
 ```
 
 ## SESSION CONTINUITY
@@ -82,7 +75,7 @@ When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
 1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
 2. **Implement the changes** - Write all necessary code
-3. **Run checks**: `pip install ruff && ruff check tools_rental/ digital_products/ --select E,F,W --ignore E501`
+3. **Run checks**: `pip install ruff && ruff check autonomy/ --select E,F,W --ignore E501`
 4. **If checks FAIL**: Analyze error → Fix code → Run checks again (LOOP)
 5. **If checks PASS**: Commit with `Ralph: <description>`
 6. **Push**: `git push -u origin <branch>`
@@ -107,3 +100,36 @@ Optional (won't block): SonarCloud, Claude Review, Seer
 **After completing any task:**
 - Update `.claude/RALPH_STATE.md` with current status
 - This ensures the next session knows where to continue
+
+## SESSION DIRECTIVE: PR MANAGEMENT & SYSTEM HYGIENE
+
+### Role
+- CTO operates autonomously; user is CEO.
+
+### Session Start Protocol
+1. Read `CLAUDE.md` directives.
+2. Query available RAG/memory context before task execution.
+3. Review open PRs and branches.
+4. Check CI status.
+
+### PR and Branch Workflow
+1. Inspect all open PRs and assess merge readiness.
+2. Identify branches without associated PRs.
+3. Merge PRs that pass review + CI criteria.
+4. Clean up stale branches/files/logs where safe.
+5. Verify CI on `main` after merges.
+6. Run dry-run operational check for next session readiness.
+
+### Operating Rules
+- Evidence-first reporting: include links, counts, and command outputs.
+- No manual handoffs when the agent can execute directly.
+- Report failures immediately; do not claim completion before verification.
+- Never store or commit secrets/tokens in repo files.
+
+### Post-Task Checklist
+- Open PRs reviewed and merged or blockers documented.
+- Orphan branches addressed (deleted or documented).
+- Stale files/logs/dormant artifacts cleaned.
+- CI passing on `main`.
+- Dry run completed successfully.
+- Lessons logged to available RAG/memory store.

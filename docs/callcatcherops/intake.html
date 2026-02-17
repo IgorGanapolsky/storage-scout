@@ -4,11 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CallCatcher Ops Intake</title>
-    <meta name="description" content="Start your CallCatcher Ops recovery audit. Share your call flow details and we will respond within one business day." />
+    <meta name="description" content="Get your free missed-call baseline from CallCatcher Ops. Share your call flow details and we will respond within one business day." />
+    <meta name="keywords" content="missed call baseline, call recovery intake, appointment booking setup, local business phone lead recovery" />
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <link rel="canonical" href="https://callcatcherops.com/callcatcherops/intake.html" />
+    <link rel="alternate" type="text/plain" href="https://callcatcherops.com/llms.txt" title="LLMs" />
     <meta property="og:title" content="CallCatcher Ops Intake" />
-    <meta property="og:description" content="Start your recovery audit in 2 minutes." />
+    <meta property="og:description" content="Get your free missed-call baseline in 2 minutes." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://callcatcherops.com/intake.html" />
+    <meta property="og:url" content="https://callcatcherops.com/callcatcherops/intake.html" />
+    <meta property="og:site_name" content="CallCatcher Ops" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="CallCatcher Ops Intake" />
+    <meta name="twitter:description" content="Get your free missed-call baseline and next steps." />
     <meta name="theme-color" content="#0F1C1B" />
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-W8E0EKB7W4"></script>
     <script>
@@ -16,6 +24,15 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-W8E0EKB7W4');
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "CallCatcher Ops Intake",
+        "url": "https://callcatcherops.com/callcatcherops/intake.html",
+        "description": "Intake form for missed-call recovery baseline and next steps."
+      }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -46,6 +63,15 @@
       a {
         color: inherit;
         text-decoration: none;
+      }
+
+      a.inline-link {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      a.inline-link:hover {
+        opacity: 0.85;
       }
 
       .wrap {
@@ -95,6 +121,19 @@
         border-radius: var(--radius);
         padding: 28px;
         box-shadow: 0 18px 40px var(--shadow);
+      }
+
+      .step-card {
+        background: #fff;
+        border-radius: var(--radius);
+        padding: 22px;
+        box-shadow: 0 18px 40px var(--shadow);
+      }
+
+      .step-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        margin-bottom: 8px;
       }
 
       form {
@@ -152,9 +191,9 @@
       }
 
       .button.secondary {
-        background: #fff;
+        background: transparent;
         color: var(--ink);
-        border: 1px solid rgba(15, 28, 27, 0.25);
+        border: 1px solid rgba(15, 28, 27, 0.3);
       }
 
       .note {
@@ -167,24 +206,23 @@
       }
 
       .cta-panel {
-        margin-top: 24px;
-        padding: 20px;
-        border-radius: 16px;
-        background: rgba(245, 215, 178, 0.28);
+        margin-top: 22px;
+        border-radius: var(--radius);
+        padding: 22px;
+        background: linear-gradient(150deg, rgba(92, 164, 169, 0.12), rgba(245, 215, 178, 0.25));
         border: 1px solid rgba(15, 28, 27, 0.08);
       }
 
       .cta-panel h2 {
         font-family: "Space Grotesk", sans-serif;
-        font-size: 1.35rem;
-        margin: 0 0 8px;
+        margin: 0 0 10px;
       }
 
       .cta-row {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        margin-top: 12px;
+        margin-top: 10px;
       }
 
       .footer {
@@ -209,18 +247,38 @@
           <div class="brand-badge"></div>
           CallCatcher Ops
         </div>
-        <a href="./index.html">Back to site</a>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="./index.html">Back to site</a>
+          <a class="inline-link" href="./workflow-subscription.html">Workflow subscription</a>
+        </div>
       </header>
 
-      <h1>Start your recovery audit</h1>
-      <p class="subhead">Share your call flow details and we will respond within one business day with next steps and a recovery estimate.</p>
+      <h1>Get your free missed-call baseline</h1>
+      <p class="subhead">Share your call flow details and we will respond within one business day with a baseline recovery estimate and next steps.</p>
+      <p class="note" style="margin-top: 12px;">
+        Want to see what the deliverable looks like?
+        <a class="inline-link" data-cta="intake_baseline_example" href="./baseline-example.pdf">Example baseline (PDF)</a>
+      </p>
+
+      <div class="grid-2" style="margin-bottom: 24px;">
+        <div class="step-card">
+          <div class="step-title">Step 1: Book a 15-minute baseline call (free)</div>
+          <p class="note">Pick a time that works. We review your call flow and send the baseline within one business day.</p>
+          <a class="button" href="https://calendly.com/igorganapolsky/audit-call">Book the baseline call</a>
+        </div>
+        <div class="step-card">
+          <div class="step-title">Optional: Priority kickoff ($249)</div>
+          <p class="note">If you want priority turnaround, pay $249 to reserve an implementation slot. Credited toward the build if you proceed. Ongoing management starts at $497/month after launch.</p>
+          <a class="button secondary" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
+        </div>
+      </div>
 
       <div class="panel">
         <form action="https://formsubmit.co/hello@callcatcherops.com" method="POST">
-          <input type="hidden" name="_subject" value="CallCatcher Ops Intake" />
+          <input type="hidden" name="_subject" value="CallCatcher Ops Baseline Intake" />
           <input type="hidden" name="_template" value="table" />
           <input type="hidden" name="_captcha" value="false" />
-          <input type="hidden" name="_next" value="https://callcatcherops.com/thanks.html" />
+          <input type="hidden" name="_next" value="https://callcatcherops.com/callcatcherops/thanks.html?src=intake" />
 
           <div class="grid-2">
             <div>
@@ -294,15 +352,15 @@
           </div>
 
           <button class="button" type="submit">Submit intake</button>
-          <p class="note">By submitting, you agree to be contacted about this audit. We do not resell your data.</p>
+          <p class="note">By submitting, you agree to be contacted about this baseline. We do not resell your data.</p>
         </form>
-
         <div class="cta-panel">
-          <h2>Next: lock in your audit.</h2>
-          <p class="note">Step 1: pay the $249 audit. Step 2: book your call so we can review your missed-call flow together.</p>
+          <h2>Next: book your baseline.</h2>
+          <p class="note">Recommended: book the free baseline call. Optional: pay the $249 kickoff for priority turnaround.</p>
           <div class="cta-row">
-            <a class="button" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 now</a>
-            <a class="button secondary" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book audit call</a>
+            <a class="button" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book baseline call</a>
+            <a class="button secondary" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
+            <a class="button secondary" id="cta-subscription" href="./workflow-subscription.html">See $497/mo plan</a>
           </div>
           <p class="note small">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
         </div>
@@ -322,7 +380,8 @@
         });
       };
       trackCta('cta-pay', 'pay_249');
-      trackCta('cta-book', 'book_audit');
+      trackCta('cta-book', 'book_baseline');
+      trackCta('cta-subscription', 'view_workflow_subscription');
     </script>
   </body>
 </html>

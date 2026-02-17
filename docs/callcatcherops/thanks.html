@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Thanks — CallCatcher Ops</title>
     <meta name="description" content="Thanks for submitting your CallCatcher Ops intake. We will reply within one business day." />
+    <meta name="keywords" content="callcatcher thank you, missed call recovery next steps, baseline booking" />
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <link rel="canonical" href="https://callcatcherops.com/callcatcherops/thanks.html" />
+    <link rel="alternate" type="text/plain" href="https://callcatcherops.com/llms.txt" title="LLMs" />
     <meta property="og:title" content="Thanks — CallCatcher Ops" />
     <meta property="og:description" content="We will follow up within one business day." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://callcatcherops.com/thanks.html" />
+    <meta property="og:url" content="https://callcatcherops.com/callcatcherops/thanks.html" />
+    <meta property="og:site_name" content="CallCatcher Ops" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Thanks — CallCatcher Ops" />
+    <meta name="twitter:description" content="Your intake was received. Book your baseline and start next steps." />
     <meta name="theme-color" content="#0F1C1B" />
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-W8E0EKB7W4"></script>
     <script>
@@ -16,6 +24,15 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-W8E0EKB7W4');
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "CallCatcher Ops Thank You",
+        "url": "https://callcatcherops.com/callcatcherops/thanks.html",
+        "description": "Thank-you page with next actions after CallCatcher Ops intake submission."
+      }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,6 +73,25 @@
         box-shadow: 0 24px 50px var(--shadow);
       }
 
+      .steps {
+        margin: 24px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        margin-bottom: 10px;
+        padding-left: 22px;
+        position: relative;
+      }
+
+      .steps li::before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: var(--ember);
+      }
+
       h1 {
         font-family: "Space Grotesk", sans-serif;
         margin: 0 0 12px;
@@ -82,40 +118,19 @@
       }
 
       .button.secondary {
-        background: #fff;
+        background: transparent;
         color: var(--ink);
-        border: 1px solid rgba(15, 28, 27, 0.25);
-      }
-
-      .steps {
-        margin: 24px 0 8px;
-        padding: 18px;
-        background: rgba(191, 230, 194, 0.25);
-        border-radius: 14px;
-        border: 1px solid rgba(15, 28, 27, 0.08);
-      }
-
-      .steps h2 {
-        font-family: "Space Grotesk", sans-serif;
-        margin: 0 0 10px;
-        font-size: 1.35rem;
-      }
-
-      .steps ol {
-        margin: 0;
-        padding-left: 20px;
-        color: #334a47;
+        border: 1px solid rgba(15, 28, 27, 0.3);
       }
 
       .cta-row {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        margin: 16px 0 6px;
       }
 
       .note {
-        color: #536b68;
+        color: #5a6f6c;
         font-size: 0.95rem;
       }
 
@@ -134,17 +149,17 @@
         <div class="steps">
           <h2>Next steps</h2>
           <ol>
-            <li>Pay the $249 audit so we can start the analysis.</li>
-            <li>Book your audit call to review missed-call leaks and next actions.</li>
-            <li>We deliver the recovery plan within one business day of payment.</li>
+            <li>Book the free baseline call to review missed-call leaks and next actions.</li>
+            <li>If you want priority turnaround, pay the $249 kickoff to reserve an implementation slot.</li>
+            <li>After launch, move to the AI workflow subscription ($497/mo) for optimization and monitoring.</li>
           </ol>
           <div class="cta-row">
-            <a class="button" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 now</a>
-            <a class="button secondary" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book audit call</a>
+            <a class="button" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book baseline call</a>
+            <a class="button secondary" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
+            <a class="button secondary" id="cta-subscription" href="./workflow-subscription.html">See $497/mo plan</a>
           </div>
           <p class="note">If the buttons open an email, reply and we will send the payment link or booking calendar.</p>
         </div>
-        <a class="button secondary" href="./index.html">Back to CallCatcher Ops</a>
         <div class="footer">
           <div>CallCatcher Ops · Coral Springs, FL</div>
           <div>hello@callcatcherops.com</div>
@@ -160,7 +175,17 @@
         });
       };
       trackCta('cta-pay', 'pay_249');
-      trackCta('cta-book', 'book_audit');
+      trackCta('cta-book', 'book_baseline');
+      trackCta('cta-subscription', 'view_workflow_subscription');
+
+      // Fire a conversion event when the thanks page is reached via the intake form redirect.
+      (() => {
+        if (typeof gtag !== 'function') return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('src') === 'intake') {
+          gtag('event', 'intake_submit', { event_category: 'funnel', event_label: 'baseline_intake' });
+        }
+      })();
     </script>
   </body>
 </html>
