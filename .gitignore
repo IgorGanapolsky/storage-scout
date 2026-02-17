@@ -3,15 +3,37 @@
 .vscode/
 *.iml
 
+# Node
+node_modules/
+
 # macOS
 .DS_Store
+
+# Local git worktrees
+.worktrees/
 
 # Secrets (if you use .env)
 .env
 *.env
+.secrets/
 
 # RLHF Memory (local only, contains feedback data)
 .claude/memory/
+.claude/ralph/
+.claude/tmp/
 
 # Autonomy runtime state
 autonomy/state/
+
+# Python
+__pycache__/
+*.pyc
+.coverage
+coverage.xml
+htmlcov/
+
+# Local scratch (not part of CallCatcher Ops scope)
+tools_rental/
+
+# oh-my-codex runtime state (local only)
+.omx/

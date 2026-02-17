@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # Flutter/Dart dependencies
-  - package-ecosystem: "pub"
-    directory: "/flutter_scout_app"
+  # Node dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "daily"
       time: "09:00"

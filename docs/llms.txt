@@ -1,0 +1,42 @@
+# CallCatcher Ops
+
+> Missed call recovery and appointment booking automation for local service businesses.
+
+## Canonical
+- https://callcatcherops.com/callcatcherops/
+
+## Key Pages
+- https://callcatcherops.com/callcatcherops/
+- https://callcatcherops.com/callcatcherops/dentist.html
+- https://callcatcherops.com/callcatcherops/intake.html
+- https://callcatcherops.com/callcatcherops/thanks.html
+- https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- https://callcatcherops.com/callcatcherops/baseline-example.pdf
+- https://callcatcherops.com/unsubscribe.html
+
+## Service Definition
+CallCatcher Ops helps service businesses recover missed inbound calls, follow up quickly with compliant SMS/callback workflows, and turn recovered leads into booked appointments.
+
+## Ideal Customers
+- Home services companies
+- Med spas and clinics
+- Dental and health practices
+- Local franchises with call-driven lead flow
+
+## Outcomes
+- Fewer lost phone leads
+- Faster response time after missed calls
+- More booked appointments from existing demand
+- Clear attribution of recovered revenue
+
+## CTAs
+- Free baseline call: https://calendly.com/igorganapolsky/audit-call
+- Priority kickoff ($249): https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
+- AI workflow subscription ($497/mo): https://callcatcherops.com/callcatcherops/workflow-subscription.html
+
+## Pricing Docs
+- https://github.com/IgorGanapolsky/storage-scout/blob/main/business/callcatcherops/pricing.md
+- https://github.com/IgorGanapolsky/storage-scout/blob/main/business/callcatcherops/system.md
+
+## Contact
+- hello@callcatcherops.com

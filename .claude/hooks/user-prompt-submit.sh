@@ -7,6 +7,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MEMORY_DIR="$SCRIPT_DIR/../memory/feedback"
 PENDING_SYNC="$MEMORY_DIR/pending_cortex_sync.jsonl"
+PENDING_STRATEGY="$MEMORY_DIR/pending_strategy_questions.jsonl"
 
 mkdir -p "$MEMORY_DIR"
 
@@ -18,6 +19,7 @@ infer_domain() {
   local ctx="$1"
   local lower=$(echo "$ctx" | tr '[:upper:]' '[:lower:]')
 
+  [[ "$lower" =~ (callcatcher|fastmail|imap|launchd|stripe|calendly|outreach|lead|leads|bounce|bounces|reply|replies|booking|bookings|daily[[:space:]]report) ]] && echo "callcatcherops" && return
   [[ "$lower" =~ (sonar|snyk|codeql|security|ci|workflow) ]] && echo "ci" && return
   [[ "$lower" =~ (git|commit|push|pr|merge|branch) ]] && echo "github" && return
   [[ "$lower" =~ (api|http|request|endpoint) ]] && echo "api" && return
@@ -44,14 +46,32 @@ queue_feedback() {
   echo "✅ ${signal^} feedback recorded: $signal"
 }
 
+queue_strategy_question() {
+  local question="$1"
+  local domain=$(infer_domain "$question")
+  local priority="normal"
+  [[ "$question" =~ (money|revenue|first[[:space:]]dollar|urgent|demand|make[[:space:]]money) ]] && priority="high"
+
+  echo "{\"timestamp\":\"$TIMESTAMP\",\"domain\":\"$domain\",\"priority\":\"$priority\",\"question\":\"$(echo "$question" | head -c 400 | tr '\n' ' ' | sed 's/"/\\"/g')\"}" >> "$PENDING_STRATEGY"
+  echo "📌 Strategy question queued for truth-loop analysis"
+}
+
 # Detect thumbs up
 if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*up|👍|\+1|good\s*job|great\s*work|perfect|excellent|amazing|awesome|well\s*done)'; then
   queue_feedback "positive" "$USER_MESSAGE"
 fi
 
 # Detect thumbs down
-if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad|mistake|error|failed|broken|bug|issue|problem)'; then
+if echo "$USER_MESSAGE" | grep -qiE '(thumbs?\s*down|👎|-1|wrong|incorrect|bad|mistake|error|failed|broken|bug|issue|problem|lie|lies|lying|dishonest|false\s*promise|false\s*promises|hallucinat|made\s*up)'; then
   queue_feedback "negative" "$USER_MESSAGE"
+
+  # Local-only RLHF + lessons (powers lightweight RAG at session start).
+  # Best-effort: never fail the hook.
+  if command -v node >/dev/null 2>&1; then
+    MSG_ONE_LINE="$(echo "$USER_MESSAGE" | tr '\n' ' ' | head -c 500)"
+    node "$SCRIPT_DIR/../scripts/feedback/capture-feedback.js" down "$MSG_ONE_LINE" >/dev/null 2>&1 || true
+    node "$SCRIPT_DIR/../scripts/feedback/auto-lesson-creator.js" process >/dev/null 2>&1 || true
+  fi
 fi
 
 # Ralph Mode detection (kept - useful for autonomous execution)
@@ -66,6 +86,12 @@ if ! echo "$USER_MESSAGE_LOWER" | grep -qiE "$SINGLE_FILE_KEYWORDS"; then
     echo "🤖 RALPH MODE - Task: $TASK_DESC"
     echo "   Execute autonomously: branch → implement → test → PR"
   fi
+fi
+
+# Strategy question detection for truth-loop workflow
+STRATEGY_KEYWORDS="make money|revenue|first dollar|waste of time|business idea|deep research|how to make this work|be honest|truth|truthful|solid plan|viability|go to market"
+if echo "$USER_MESSAGE_LOWER" | grep -qiE "$STRATEGY_KEYWORDS"; then
+  queue_strategy_question "$USER_MESSAGE"
 fi
 
 exit 0

@@ -4,17 +4,34 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Dict, Iterable, List
 
 from .context_store import Lead
+from .outreach_policy import infer_email_method
+from .utils import truthy
+
+
+def _is_fastmail_smtp_host(host: str) -> bool:
+    host_l = (host or "").strip().lower().rstrip(".")
+    # IMPORTANT: Use a dot-boundary check to avoid matching lookalike domains
+    # such as "evilfastmail.com".
+    return host_l == "fastmail.com" or host_l.endswith(".fastmail.com")
+
 
 @dataclass
 class LeadSourceCSV:
     path: str
     source: str
 
-    def load(self) -> List[Lead]:
-        leads: List[Lead] = []
+    @staticmethod
+    def _email_method(row: dict, email: str) -> str:
+        return infer_email_method(
+            email=email,
+            raw_method=str(row.get("email_method") or ""),
+            notes=str(row.get("notes") or ""),
+        )
+
+    def load(self) -> list[Lead]:
+        leads: list[Lead] = []
         path = Path(self.path)
         if not path.exists():
             return leads
@@ -38,6 +55,7 @@ class LeadSourceCSV:
                         city=(row.get("city") or "").strip(),
                         state=(row.get("state") or "").strip(),
                         source=self.source,
+                        email_method=self._email_method(row, email),
                     )
                 )
         return leads
@@ -55,6 +73,31 @@ class EmailSender:
         self.config = config
         self.dry_run = dry_run
 
+    def preflight(self) -> dict[str, object]:
+        """Validate outbound email config before iterating through leads.
+
+        This prevents burning through leads when config is missing (e.g. SMTP password)
+        and adds a safety brake for Fastmail programmatic outreach.
+        """
+        if self.dry_run:
+            return {"ok": True, "reason": "dry-run"}
+
+        password_env = self.config.smtp_password_env
+        password = os.getenv(password_env, "")
+        if not password:
+            return {"ok": False, "reason": "missing-smtp-password", "smtp_password_env": password_env}
+
+        host = self.config.smtp_host
+        if _is_fastmail_smtp_host(host) and not truthy(os.getenv("ALLOW_FASTMAIL_OUTREACH", "")):
+            return {
+                "ok": False,
+                "reason": "blocked-fastmail-outreach",
+                "smtp_host": host,
+                "override_env": "ALLOW_FASTMAIL_OUTREACH",
+            }
+
+        return {"ok": True, "reason": "ok"}
+
     def send(self, to_email: str, subject: str, body: str, reply_to: str) -> str:
         if self.dry_run:
             return "dry-run"
@@ -70,9 +113,12 @@ class EmailSender:
         msg["Reply-To"] = reply_to
         msg.set_content(body)
 
-        with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port) as server:
-            server.starttls()
-            server.login(self.config.smtp_user, password)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port, timeout=20) as server:
+                server.starttls()
+                server.login(self.config.smtp_user, password)
+                server.send_message(msg)
+        except Exception:
+            return "send-error"
 
         return "sent"

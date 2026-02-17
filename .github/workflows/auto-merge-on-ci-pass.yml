@@ -84,8 +84,8 @@ jobs:
             });
 
             // Required checks (customize as needed)
-            const requiredChecks = ['Quality', 'test', 'Security'];
-            const optionalChecks = ['SonarCloud', 'Claude Review', 'Seer Code Review'];
+            const requiredChecks = ['Python Quality', 'Security'];
+            const optionalChecks = ['SonarCloud', 'Snyk', 'Claude Review', 'Seer Code Review'];
 
             let allRequiredPassed = true;
             let pendingRequired = false;

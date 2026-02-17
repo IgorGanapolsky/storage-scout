@@ -65,6 +65,7 @@ Capture and learn from human feedback (thumbs up/down) to improve future respons
 - `capture-feedback.js` - Records feedback with context
 - `auto-lesson-creator.js` - Generates lessons from mistakes
 - `semantic-memory.py` - LanceDB vector search + BM25 hybrid
+- `strategy_truth_loop.py` - Logs strategic Q/A, checks consistency, generates plan
 - `user-prompt-submit.sh` - Hook for automatic detection
 - `session-start.sh` - Injects lessons at session start
 
@@ -89,6 +90,7 @@ python .claude/scripts/feedback/semantic-memory.py --query "spread calculation"
 python .claude/scripts/feedback/semantic-memory.py --context  # Session context
 python .claude/scripts/feedback/semantic-memory.py --status   # Index status
 python .claude/scripts/feedback/semantic-memory.py --metrics  # Query metrics
+python .claude/scripts/feedback/strategy_truth_loop.py --question "..." --response "..." --source "https://..."
 ```
 
 ## Usage

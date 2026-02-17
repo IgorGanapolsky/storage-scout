@@ -3,16 +3,28 @@
   "company": {
     "name": "CallCatcher HQ",
     "website": "https://callcatcherhq.com",
+    "intake_url": "https://callcatcherhq.com/intake",
     "reply_to": "hello@callcatcherhq.com",
     "mailing_address": "123 Main St, City, ST 00000",
-    "signature": "— CallCatcher HQ"
+    "signature": "— CallCatcher HQ",
+    "booking_url": "https://calendly.com/example/audit-call",
+    "kickoff_url": "https://buy.stripe.com/example"
   },
   "agents": {
     "outreach": {
       "agent_id": "agent.outreach.v1",
       "permissions": ["lead.read", "lead.write", "email.send"],
       "daily_send_limit": 30,
-      "min_score": 50
+      "min_score": 50,
+      "allowed_email_methods": ["direct", "scrape"],
+      "blocked_local_parts": ["info", "contact", "hello", "office", "support", "sales", "service", "team", "admin"],
+      "bounce_pause": { "enabled": true, "window_days": 7, "threshold": 0.25, "min_emailed": 20 },
+      "followup": {
+        "enabled": true,
+        "min_days_since_last_email": 2,
+        "max_emails_per_lead": 3,
+        "daily_send_limit": 15
+      }
     }
   },
   "lead_sources": [
