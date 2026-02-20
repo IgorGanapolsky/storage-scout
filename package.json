@@ -32,7 +32,7 @@
   "homepage": "https://github.com/IgorGanapolsky/storage-scout#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "agent-browser": "^0.12.0"
+    "agent-browser": "^0.13.0"
   },
   "overrides": {
     "@appium/logger": {
