@@ -49,7 +49,7 @@ def _state_tz(state: str) -> str:
     return state_tz(state)
 
 
-def _is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
+def _is_business_hours(*, state: str, start_hour: int, end_hour: int, allow_weekends: bool = False) -> bool:
     """Local business-hours check that remains monkeypatch-friendly in tests."""
     try:
         from zoneinfo import ZoneInfo
@@ -63,7 +63,7 @@ def _is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
         tz = ZoneInfo("America/New_York")
 
     now_local = datetime.now(tz)
-    if now_local.weekday() >= 5:
+    if not bool(allow_weekends) and now_local.weekday() >= 5:
         return False
     return int(start_hour) <= int(now_local.hour) < int(end_hour)
 
@@ -328,6 +328,7 @@ def run_auto_calls(
     cooldown_days = int((env.get("AUTO_CALLS_COOLDOWN_DAYS") or "7").strip() or 7)
     start_hour = int((env.get("AUTO_CALLS_START_HOUR_LOCAL") or "9").strip() or 9)
     end_hour = int((env.get("AUTO_CALLS_END_HOUR_LOCAL") or "17").strip() or 17)
+    allow_weekends = truthy(env.get("AUTO_CALLS_ALLOW_WEEKENDS"), default=False)
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
 
@@ -364,7 +365,12 @@ def run_auto_calls(
                 continue
 
             state = str(row_map.get("state") or "").strip()
-            if not _is_business_hours(state=state, start_hour=start_hour, end_hour=end_hour):
+            if not _is_business_hours(
+                state=state,
+                start_hour=start_hour,
+                end_hour=end_hour,
+                allow_weekends=allow_weekends,
+            ):
                 skipped += 1
                 continue
 

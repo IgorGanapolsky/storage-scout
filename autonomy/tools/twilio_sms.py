@@ -33,7 +33,7 @@ from autonomy.utils import UTC, normalize_us_phone, state_tz, truthy
 normalize_phone = normalize_us_phone
 
 
-def _is_business_hours(state: str, start_hour: int, end_hour: int) -> bool:
+def _is_business_hours(state: str, start_hour: int, end_hour: int, *, allow_weekends: bool = False) -> bool:
     """Keep local wrapper for monkeypatch-friendly tests and stable behavior."""
     try:
         from zoneinfo import ZoneInfo
@@ -47,7 +47,7 @@ def _is_business_hours(state: str, start_hour: int, end_hour: int) -> bool:
         tz = ZoneInfo("America/New_York")
 
     now_local = datetime.now(tz)
-    if now_local.weekday() >= 5:
+    if not bool(allow_weekends) and now_local.weekday() >= 5:
         return False
     return int(start_hour) <= int(now_local.hour) < int(end_hour)
 
@@ -80,6 +80,7 @@ class TwilioSmsConfig:
     cooldown_days: int = 7
     start_hour: int = 9
     end_hour: int = 17
+    allow_weekends: bool = False
 
 
 def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConfig | None:
@@ -105,6 +106,7 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
         cooldown_days=int((env.get("AUTO_SMS_COOLDOWN_DAYS") or "7").strip() or 7),
         start_hour=int((env.get("AUTO_SMS_START_HOUR_LOCAL") or "9").strip() or 9),
         end_hour=int((env.get("AUTO_SMS_END_HOUR_LOCAL") or "17").strip() or 17),
+        allow_weekends=truthy(env.get("AUTO_SMS_ALLOW_WEEKENDS"), default=False),
     )
 
 
@@ -219,7 +221,7 @@ def run_sms_followup(
             result.skipped += 1
             continue
 
-        if not _is_business_hours(state, cfg.start_hour, cfg.end_hour):
+        if not _is_business_hours(state, cfg.start_hour, cfg.end_hour, allow_weekends=cfg.allow_weekends):
             result.skipped += 1
             continue
 
