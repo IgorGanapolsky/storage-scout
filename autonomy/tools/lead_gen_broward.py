@@ -549,6 +549,25 @@ def main() -> None:
     if not leads:
         raise SystemExit("No new leads generated. Try different categories or rerun later.")
 
+    # Enrich leads with Anchor Browser (fills missing names + upgrades guessed emails).
+    # Gracefully skips if ANCHOR_API_KEY is not set.
+    try:
+        from autonomy.tools.anchor_scraper import enrich_leads_batch, is_available
+
+        if is_available():
+            needs_enrichment = [
+                row for row in leads
+                if not (row.get("name") or "").strip()
+                or "email=guess" in (row.get("notes") or "")
+            ]
+            if needs_enrichment:
+                print(f"Enriching {len(needs_enrichment)} leads via Anchor Browser...")
+                enrich_leads_batch(needs_enrichment)
+                enriched = sum(1 for row in needs_enrichment if (row.get("name") or "").strip())
+                print(f"Anchor Browser: {enriched}/{len(needs_enrichment)} leads enriched with names")
+    except ImportError:
+        pass
+
     write_leads(args.output, leads, replace=args.replace)
     save_city_index(new_index)
 
