@@ -3,6 +3,7 @@ import csv
 import json
 import os
 import re
+import subprocess
 import time
 from html import unescape
 from pathlib import Path
@@ -61,6 +62,42 @@ EXCLUDED_EMAIL_DOMAINS = {
     "weebly.com",
     "godaddy.com",
 }
+
+# Cache verified domains to avoid repeated DNS lookups within a single run.
+_MX_CACHE: dict[str, bool] = {}
+
+
+def verify_email_mx(email: str) -> bool:
+    """Check if the email domain has MX records (basic deliverability gate).
+
+    Returns True if the domain has MX records or if verification fails open.
+    Returns False only when we can confirm the domain has NO mail server.
+    """
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@", 1)[1].strip().lower()
+    if not domain:
+        return False
+    if domain in EXCLUDED_EMAIL_DOMAINS:
+        return False
+
+    if domain in _MX_CACHE:
+        return _MX_CACHE[domain]
+
+    try:
+        result = subprocess.run(
+            ["dig", "+short", "MX", domain],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        has_mx = bool(result.stdout.strip())
+        _MX_CACHE[domain] = has_mx
+        return has_mx
+    except Exception:
+        # Fail open — if we can't check, don't block the lead.
+        _MX_CACHE[domain] = True
+        return True
 
 
 def get_api_key() -> str:
@@ -363,6 +400,10 @@ def build_lead_from_place(
         return None
 
     if "%" in email or " " in email or "@sentry" in email:
+        return None
+
+    # Verify the email domain has MX records before adding to pipeline.
+    if not verify_email_mx(email):
         return None
 
     email_key = email.lower()
