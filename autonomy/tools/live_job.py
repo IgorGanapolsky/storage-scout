@@ -85,6 +85,25 @@ def _resolve_store_paths(*, cfg, repo_root: Path) -> tuple[Path, Path]:
     return sqlite_path, audit_log
 
 
+def _resolve_config_path(*, repo_root: Path, config_arg: str) -> Path:
+    """
+    Resolve the config path with a developer-friendly fallback.
+
+    If the default live config is requested (even via an absolute path) but missing
+    (fresh clone/worktree or LaunchAgent), fall back to the tracked config in the repo.
+    """
+
+    requested = (repo_root / config_arg).resolve()
+    default_live = (repo_root / "autonomy" / "state" / "config.callcatcherops.live.json").resolve()
+
+    if requested == default_live and not requested.exists():
+        alt = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
+        if alt.exists():
+            return alt
+
+    return requested
+
+
 def _count_actions_since(store: ContextStore, *, action_type: str, since_iso: str) -> int:
     row = store.conn.execute(
         "SELECT COUNT(1) FROM actions WHERE action_type=? AND ts >= ?",
@@ -261,8 +280,14 @@ def _evaluate_paid_stop_loss(
     if first_zero_date is None:
         first_zero_date = today
 
-    zero_runs = _int_env(str(state.get("zero_revenue_runs", 0)), 0) + 1
+    last_eval_date = _parse_iso_date(str(state.get("last_eval_date_utc") or ""))
+    prior_runs = _int_env(str(state.get("zero_revenue_runs", 0)), 0)
+    # Make same-day runs idempotent so scheduler frequency does not inflate
+    # the run counter and permanently lock paid channels.
+    zero_runs = prior_runs if last_eval_date == today else (prior_runs + 1)
     zero_days = int((today - first_zero_date).days) + 1
+    # Normalize legacy inflated counters from pre-idempotent behavior.
+    zero_runs = min(int(zero_runs), int(zero_days))
 
     blocked = bool(enabled) and (zero_runs >= max_zero_runs or zero_days >= max_zero_days)
     block_reason = ""
@@ -625,9 +650,16 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     statuses = [s.strip() for s in raw_statuses.split(",") if s.strip()]
     if not statuses and high_intent_only:
         statuses = ["replied", "contacted", "new"]
+    if high_intent_only:
+        statuses = [s for s in statuses if s.strip().lower() != "bounced"]
+        if not statuses:
+            statuses = ["replied", "contacted", "new"]
 
     default_min_score = 80 if high_intent_only else 0
     min_score = max(0, _int_env(env.get("DAILY_CALL_LIST_MIN_SCORE"), default_min_score))
+    if high_intent_only:
+        call_floor = max(0, _int_env(env.get("HIGH_INTENT_CALL_MIN_SCORE"), default_min_score))
+        min_score = max(min_score, call_floor)
     exclude_role_inbox = truthy(env.get("DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX"), default=high_intent_only)
 
     output_rel = (env.get("DAILY_CALL_LIST_OUTPUT") or "").strip()
@@ -677,7 +709,11 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="CallCatcher Ops live daily job: inbox sync + outreach + report.")
     parser.add_argument("--config", default="autonomy/state/config.callcatcherops.live.json", help="Live config path.")
-    parser.add_argument("--dotenv", default=".env", help="Local .env path (gitignored).")
+    parser.add_argument(
+        "--dotenv",
+        default=".env",
+        help="Local .env path (gitignored). Supports multiple, comma-separated paths (later wins).",
+    )
     parser.add_argument("--scoreboard-days", type=int, default=30, help="Scoreboard window.")
     parser.add_argument("--report-to", default="", help="Override report recipient email.")
     parser.add_argument(
@@ -688,8 +724,12 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
-    dotenv_path = (repo_root / args.dotenv).resolve()
-    env = load_dotenv(dotenv_path)
+    env: dict[str, str] = {}
+    dotenv_paths = [p.strip() for p in str(args.dotenv or "").split(",") if p.strip()]
+    if not dotenv_paths:
+        dotenv_paths = [".env"]
+    for rel in dotenv_paths:
+        env.update(load_dotenv((repo_root / rel).resolve()))
 
     lock_enabled = truthy(env.get("LIVE_JOB_LOCK"), default=True)
     lock_fh = None
@@ -727,7 +767,7 @@ def main() -> None:
     # Ensure the outreach engine can read SMTP_PASSWORD via config.email.smtp_password_env.
     os.environ.setdefault("SMTP_PASSWORD", smtp_password)
 
-    cfg_path = (repo_root / args.config).resolve()
+    cfg_path = _resolve_config_path(repo_root=repo_root, config_arg=args.config)
     cfg = load_config(str(cfg_path))
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
