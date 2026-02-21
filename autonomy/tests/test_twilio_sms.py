@@ -109,6 +109,19 @@ def test_load_sms_config_custom_body() -> None:
     assert cfg.body == "Custom message here"
 
 
+def test_load_sms_config_weekend_override() -> None:
+    env = {
+        "AUTO_SMS_ENABLED": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+        "AUTO_SMS_ALLOW_WEEKENDS": "1",
+    }
+    cfg = load_sms_config(env)
+    assert cfg is not None
+    assert cfg.allow_weekends is True
+
+
 # --- _is_business_hours ---
 
 
@@ -131,6 +144,7 @@ def test_is_business_hours_weekend(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_sms.datetime", FixedWeekend)
     assert _is_business_hours("FL", 9, 17) is False
+    assert _is_business_hours("FL", 9, 17, allow_weekends=True) is True
 
 
 # --- _lead_texted_recently ---
@@ -313,7 +327,7 @@ def test_run_sms_followup_end_to_end(monkeypatch) -> None:
     # Mock business hours to always be True
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
-        lambda state, start_hour, end_hour: True,
+        lambda state, start_hour, end_hour, allow_weekends=False: True,
     )
 
     sms_sent = {"n": 0}
@@ -395,7 +409,7 @@ def test_run_sms_followup_handles_http_error(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
-        lambda state, start_hour, end_hour: True,
+        lambda state, start_hour, end_hour, allow_weekends=False: True,
     )
 
     def fake_urlopen(req, timeout=20):
