@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
+import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -61,6 +62,14 @@ def _default_sms_body(booking_url: str) -> str:
     )
 
 
+def _default_sms_second_nudge_body(booking_url: str) -> str:
+    return (
+        "Quick follow-up from CallCatcher Ops. If missed-call recovery is still a priority, "
+        f"grab a 5-min baseline slot here: {booking_url} "
+        "Reply STOP to opt out."
+    )
+
+
 @dataclass
 class SmsResult:
     reason: str = "ok"
@@ -81,6 +90,10 @@ class TwilioSmsConfig:
     start_hour: int = 9
     end_hour: int = 17
     allow_weekends: bool = False
+    second_nudge_enabled: bool = False
+    second_nudge_min_hours: int = 6
+    second_nudge_max_per_run: int = 3
+    second_nudge_body: str = ""
 
 
 def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConfig | None:
@@ -96,6 +109,10 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
     if not body:
         url = booking_url or "https://calendly.com/igorganapolsky/audit-call"
         body = _default_sms_body(url)
+    second_nudge_body = (env.get("AUTO_SMS_SECOND_NUDGE_BODY") or "").strip()
+    if not second_nudge_body:
+        url = booking_url or "https://calendly.com/igorganapolsky/audit-call"
+        second_nudge_body = _default_sms_second_nudge_body(url)
 
     return TwilioSmsConfig(
         account_sid=sid,
@@ -107,6 +124,10 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
         start_hour=int((env.get("AUTO_SMS_START_HOUR_LOCAL") or "9").strip() or 9),
         end_hour=int((env.get("AUTO_SMS_END_HOUR_LOCAL") or "17").strip() or 17),
         allow_weekends=truthy(env.get("AUTO_SMS_ALLOW_WEEKENDS"), default=False),
+        second_nudge_enabled=truthy(env.get("AUTO_SMS_SECOND_NUDGE_ENABLED"), default=False),
+        second_nudge_min_hours=max(1, int((env.get("AUTO_SMS_SECOND_NUDGE_MIN_HOURS") or "6").strip() or 6)),
+        second_nudge_max_per_run=max(0, int((env.get("AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN") or "3").strip() or 3)),
+        second_nudge_body=second_nudge_body,
     )
 
 
@@ -116,12 +137,13 @@ def _auth_header(cfg: TwilioSmsConfig) -> str:
     return f"Basic {b64}"
 
 
-def send_sms(cfg: TwilioSmsConfig, *, to_number: str) -> dict[str, Any]:
+def send_sms(cfg: TwilioSmsConfig, *, to_number: str, body_override: str | None = None) -> dict[str, Any]:
+    body = (body_override or "").strip() or cfg.body
     url = f"https://api.twilio.com/2010-04-01/Accounts/{cfg.account_sid}/Messages.json"
     data = urllib.parse.urlencode({
         "To": to_number,
         "From": cfg.from_number,
-        "Body": cfg.body,
+        "Body": body,
     }).encode("utf-8")
     headers = {
         "Authorization": _auth_header(cfg),
@@ -155,6 +177,80 @@ def _is_opted_out(store: ContextStore, email: str) -> bool:
         (email,),
     ).fetchone()
     return row is not None
+
+
+def _has_inbound_reply_since(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
+    row = store.conn.execute(
+        """
+        SELECT 1
+        FROM actions
+        WHERE action_type='sms.inbound'
+          AND json_extract(payload_json, '$.lead_id') = ?
+          AND ts > ?
+        LIMIT 1
+        """,
+        (lead_id, since_iso),
+    ).fetchone()
+    return row is not None
+
+
+def _has_conversion_since(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
+    row = store.conn.execute(
+        """
+        SELECT 1
+        FROM actions
+        WHERE action_type IN ('conversion.booking', 'conversion.payment')
+          AND json_extract(payload_json, '$.lead_id') = ?
+          AND ts > ?
+        LIMIT 1
+        """,
+        (lead_id, since_iso),
+    ).fetchone()
+    return row is not None
+
+
+def _second_nudge_already_sent_since(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
+    row = store.conn.execute(
+        """
+        SELECT 1
+        FROM actions
+        WHERE action_type='sms.attempt'
+          AND json_extract(payload_json, '$.lead_id') = ?
+          AND COALESCE(json_extract(payload_json, '$.phase'), '') = 'second_nudge'
+          AND ts >= ?
+        LIMIT 1
+        """,
+        (lead_id, since_iso),
+    ).fetchone()
+    return row is not None
+
+
+def _load_second_nudge_candidates(store: ContextStore, *, min_hours: int, max_rows: int) -> list[sqlite3.Row]:
+    threshold_iso = (datetime.now(UTC) - timedelta(hours=max(1, int(min_hours)))).isoformat()
+    floor_iso = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    return store.conn.execute(
+        """
+        SELECT
+            json_extract(payload_json, '$.lead_id') as lead_id,
+            json_extract(payload_json, '$.phone') as phone,
+            json_extract(payload_json, '$.company') as company,
+            json_extract(payload_json, '$.service') as service,
+            json_extract(payload_json, '$.city') as city,
+            json_extract(payload_json, '$.state') as state,
+            MAX(ts) as last_sms_ts
+        FROM actions
+        WHERE action_type='sms.attempt'
+          AND agent_id='agent.sms.twilio.v1'
+          AND ts >= ?
+          AND ts <= ?
+          AND COALESCE(json_extract(payload_json, '$.outcome'), '') = 'delivered'
+          AND COALESCE(json_extract(payload_json, '$.phase'), 'initial') = 'initial'
+        GROUP BY json_extract(payload_json, '$.lead_id')
+        ORDER BY last_sms_ts ASC
+        LIMIT ?
+        """,
+        (floor_iso, threshold_iso, max(0, int(max_rows))),
+    ).fetchall()
 
 
 def run_sms_followup(
@@ -230,6 +326,7 @@ def run_sms_followup(
             "lead_id": lead_id,
             "attempted_at": now_iso,
             "outcome": "pending",
+            "phase": "initial",
             "company": company,
             "service": service,
             "phone": phone_raw,
@@ -293,6 +390,113 @@ def run_sms_followup(
             trace_id=f"twilio_sms:{payload['twilio'].get('sid', now_iso)}",
             payload=payload,
         )
+
+    if cfg.second_nudge_enabled and cfg.second_nudge_max_per_run > 0:
+        candidates = _load_second_nudge_candidates(
+            store,
+            min_hours=cfg.second_nudge_min_hours,
+            max_rows=cfg.second_nudge_max_per_run,
+        )
+        for row in candidates:
+            lead_id = str(row["lead_id"] or "").strip().lower()
+            if not lead_id:
+                result.skipped += 1
+                continue
+            phone_raw = str(row["phone"] or "")
+            phone = normalize_phone(phone_raw)
+            if not phone:
+                result.skipped += 1
+                continue
+            if _is_opted_out(store, lead_id):
+                result.skipped += 1
+                continue
+
+            last_sms_ts = str(row["last_sms_ts"] or "")
+            if not last_sms_ts:
+                result.skipped += 1
+                continue
+            if _has_inbound_reply_since(store, lead_id=lead_id, since_iso=last_sms_ts):
+                result.skipped += 1
+                continue
+            if _has_conversion_since(store, lead_id=lead_id, since_iso=last_sms_ts):
+                result.skipped += 1
+                continue
+            if _second_nudge_already_sent_since(store, lead_id=lead_id, since_iso=last_sms_ts):
+                result.skipped += 1
+                continue
+
+            state = str(row["state"] or "")
+            if not _is_business_hours(state, cfg.start_hour, cfg.end_hour, allow_weekends=cfg.allow_weekends):
+                result.skipped += 1
+                continue
+
+            now_iso = datetime.now(UTC).isoformat()
+            payload: dict[str, Any] = {
+                "lead_id": lead_id,
+                "attempted_at": now_iso,
+                "outcome": "pending",
+                "phase": "second_nudge",
+                "company": str(row["company"] or ""),
+                "service": str(row["service"] or ""),
+                "phone": phone_raw,
+                "city": str(row["city"] or ""),
+                "state": state,
+                "prior_sms_ts": last_sms_ts,
+                "twilio": {},
+            }
+
+            try:
+                resp = send_sms(cfg, to_number=phone, body_override=cfg.second_nudge_body)
+                sid = resp.get("sid", "")
+                status = resp.get("status", "")
+                payload["outcome"] = "delivered"
+                payload["twilio"] = {
+                    "sid": sid,
+                    "status": status,
+                    "error_code": resp.get("error_code"),
+                    "error_message": resp.get("error_message"),
+                }
+                result.delivered += 1
+            except urllib.error.HTTPError as exc:
+                error_body = ""
+                with contextlib.suppress(Exception):
+                    error_body = exc.read().decode("utf-8", errors="replace")
+                error_data: dict[str, Any] = {}
+                with contextlib.suppress(Exception):
+                    error_data = json.loads(error_body)
+                payload["outcome"] = "failed"
+                payload["twilio"] = {
+                    "sid": "",
+                    "status": "exception",
+                    "error_code": error_data.get("code"),
+                    "http_status": exc.code,
+                    "error_type": "HTTPError",
+                    "error_message": error_data.get("message", str(exc)),
+                }
+                payload["notes"] = (
+                    f"exception=HTTPError status={exc.code} "
+                    f"code={error_data.get('code', '')} "
+                    f"message={error_data.get('message', str(exc))}"
+                )
+                result.failed += 1
+            except Exception as exc:
+                payload["outcome"] = "failed"
+                payload["twilio"] = {
+                    "sid": "",
+                    "status": "exception",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                }
+                payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
+                result.failed += 1
+
+            result.attempted += 1
+            store.log_action(
+                agent_id="agent.sms.twilio.v1",
+                action_type="sms.attempt",
+                trace_id=f"twilio_sms:{payload['twilio'].get('sid', now_iso)}",
+                payload=payload,
+            )
 
     with contextlib.suppress(Exception):
         store.conn.close()
