@@ -3,10 +3,26 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-16T13:47:00Z
+2026-02-21T21:45:00Z
 
 ## Current Status
 🎯 **ACTIVE** - Phone-first pivot: dentist vertical, direct-email-only outreach
+
+## Revenue Recovery (2026-02-21)
+- ✅ Fixed paid stop-loss run counter inflation in `autonomy/tools/live_job.py`:
+  - same-day scheduler runs are now idempotent
+  - legacy inflated run counts are clamped to day span
+- ✅ Added regression tests:
+  - `test_stop_loss_is_idempotent_same_day_and_clamps_legacy_runs`
+  - `test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor`
+- ✅ Hardened high-intent call list generation:
+  - strips `bounced` from statuses in high-intent mode
+  - enforces `HIGH_INTENT_CALL_MIN_SCORE` floor (default 80)
+- ✅ Stabilized flaky auto-call tests that depended on real-time business hours.
+- ✅ Live run verified:
+  - `stop_loss_blocked=False`
+  - `zero_revenue_runs=0`
+  - call list now high-intent only (`replied,contacted,new`) with score floor active.
 
 ## Recently Completed (This Session)
 

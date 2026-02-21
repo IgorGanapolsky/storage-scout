@@ -310,6 +310,7 @@ def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
 
     rows = [
         CallListRow(
@@ -386,6 +387,7 @@ def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
         raise AssertionError("GET should not be called when POST fails")
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
 
     result = run_auto_calls(
         sqlite_path=sqlite_path,
