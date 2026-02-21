@@ -85,7 +85,9 @@ def create_session() -> dict:
             "max_duration": SESSION_MAX_DURATION,
         },
     }
-    return _api_request("POST", "/sessions", body)
+    resp = _api_request("POST", "/sessions", body)
+    # API wraps response under "data" key.
+    return resp.get("data", resp)
 
 
 def terminate_session(session_id: str) -> None:
