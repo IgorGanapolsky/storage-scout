@@ -3,6 +3,7 @@ import argparse
 import contextlib
 import imaplib
 import json
+import time
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -37,6 +38,8 @@ STRIPE_BODY_RE = re.compile(
 )
 
 IMAP_TIMEOUT_SECS = 20
+IMAP_CONNECT_RETRIES = 3
+IMAP_RETRY_DELAY_SECS = 5
 
 
 @dataclass
@@ -183,12 +186,22 @@ def sync_fastmail_inbox(
     stripe_payments = 0
     max_uid_seen = last_uid
 
-    # Ensure the daily job can't hang indefinitely on IMAP network issues.
-    try:
-        imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993, timeout=IMAP_TIMEOUT_SECS)
-    except TypeError:
-        # Older Python versions may not support the timeout kwarg.
-        imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993)
+    # Retry IMAP connection to handle intermittent TLS failures.
+    imap = None
+    last_err: Exception | None = None
+    for attempt in range(IMAP_CONNECT_RETRIES):
+        try:
+            imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993, timeout=IMAP_TIMEOUT_SECS)
+            break
+        except TypeError:
+            imap = imaplib.IMAP4_SSL("imap.fastmail.com", 993)
+            break
+        except Exception as exc:
+            last_err = exc
+            if attempt < IMAP_CONNECT_RETRIES - 1:
+                time.sleep(IMAP_RETRY_DELAY_SECS * (attempt + 1))
+    if imap is None:
+        raise last_err or OSError("IMAP connection failed after retries")
     try:
         imap.login(fastmail_user, fastmail_password)
         imap.select(mailbox)
