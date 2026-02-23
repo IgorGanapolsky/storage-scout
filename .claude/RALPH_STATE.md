@@ -3,92 +3,83 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-21T21:45:00Z
+2026-02-23T15:30:00Z
 
 ## Current Status
-🎯 **ACTIVE** — Strategic pivot: AI Receptionist for Dental Practices
+🎯 **ACTIVE** — Lead hygiene deployed, Retell AI agent wired, email gate unblocked
 
-## Strategic Pivot (2026-02-21)
+## Completed This Session (2026-02-23)
 
-### What Changed
-Deep research (4 parallel agents) confirmed:
-- Missed-call text-back alone is **commoditized** (competitors offer it at $3.99/mo)
-- AI receptionist is the differentiated product ($199-497/mo, 70% gross margin)
-- Dental is the best niche (highest revenue/patient, HIPAA moat, tech-willing)
-- Cold email via Fastmail SMTP is the wrong tool (use Clay + Instantly instead)
-- The current Twilio TwiML robocall approach produces 0 bookings
+### Lead Hygiene Filter (NEW)
+- Built `autonomy/tools/lead_hygiene.py` — MX validation + junk detection
+- Scanned 183 leads, found 27 invalid emails (25 no-MX, 2 junk artifacts like `asset-1@3x.png`)
+- Marked all 27 as `bad_email` status in SQLite — excluded from future outreach
+- Email deliverability gate: **UNBLOCKED** (7-day window has 0 bounces, old bounces aged out)
+- Clean rate: 85.2% (156/183 valid)
 
-### Research Findings (Key Data Points)
-- Dental practices lose ~$100K/yr from missed calls (42% of potential patients)
-- AI receptionist saves 70% vs. full-time front desk ($55-78K/yr)
-- Case study: Soothing Dental generated $30,877 in 30 days with AI receptionist
-- Broward County TAM: ~4,400 dental/medical establishments
-- Target pricing: $497/mo + $997 setup fee (need 2 clients for $1K MRR)
-- Best outbound: Clay + Instantly for cold email, NOT Fastmail SMTP
-- Florida FTSA has NO B2B exemption — limits automated calls to 3/24hrs
-- AI calls to business landlines are legal without consent (TCPA B2B exemption)
+### Retell AI Receptionist Wiring (NEW)
+- Built `autonomy/tools/wire_retell.py` — automated agent setup + web call creation
+- Discovered 3 existing Retell agents, reusing `Dental Receptionist` (agent_c142f005a895c3c43c1b3fa6aa)
+- Saved RETELL_AGENT_ID to .env
+- Web calls work on free tier (verified: call_8681fc5b2f737146d1c844b11ec)
+- Phone binding blocked: Retell requires billing (HTTP 402) for phone number registration
+- Workaround: web-based demos are free and functional
 
-### Completed Today (2026-02-21)
-- ✅ PR #172: MX email verification + call script rewrite (MERGED)
-  - Added DNS MX record check to lead gen pipeline (prevents 54% bounce rate)
-  - Rewrote Twilio call script: natural tone, Polly.Matthew voice, "text yes" CTA
-- ✅ Reset stop-loss state: 150 zero-revenue runs → 0, all paid channels unblocked
-- ✅ Updated live config: widened target services, re-enabled SMS followup (5/day)
-- ✅ PR #175: Missed-call audit tool + HTML report generator (auto-merge enabled)
-  - `missed_call_audit.py`: CLI that places N calls via Twilio, records dispositions
-  - `audit_report.py`: generates branded 1-page HTML report with revenue impact
+### Code Quality
+- Fixed 9 lint issues in ai_receptionist.py (unused imports, trailing whitespace, f-string placeholders)
+- All ruff checks passing across entire autonomy/ directory
 
-### 3-Phase Revenue Plan
+## Lead Status Breakdown
+- new: 85
+- contacted: 52
+- bad_email: 27
+- bounced: 19
+- opted_out: 1
 
-**Phase 1: Missed-Call Audit Tool (DONE)**
-- Automated audit: call a dental office 5x, record what happens
-- Generates branded HTML report showing estimated revenue loss
-- This is the foot-in-the-door / lead magnet
-- Usage: `python3 -m autonomy.tools.missed_call_audit --phone "+19541234567" --company "Name" --service dentist`
+## Monday Pipeline Status
 
-**Phase 2: AI Receptionist MVP (NEXT)**
-- Build conversational AI voice agent using Retell AI or Vapi
-- Handles: scheduling, FAQ, caller qualification, routing
-- HIPAA-compliant call handling (the moat)
-- Target: $497/mo subscription
+### Call Pipeline: READY
+- 28 leads on today's call list (score >= 75, has phone)
+- 8 Priority 1 dentists with named contacts
+- AUTO_CALLS_ENABLED=1, MAX_PER_RUN=10
 
-**Phase 3: Outbound Engine Rebuild (WEEK 3)**
-- Replace Fastmail SMTP with Instantly.ai for cold email
-- Clay for dental practice data enrichment
-- Target 50 dental practices in Coral Springs / Parkland / Coconut Creek
-- Multichannel: email → LinkedIn → audit call
+### Email Pipeline: UNBLOCKED
+- 7-day bounce window is clear (0 emails sent since Feb 14)
+- 156 valid emails after hygiene cleanup
+- Ready to resume cold outreach to validated addresses
+
+### SMS Pipeline: PARTIALLY BLOCKED
+- 44% blocked (missing A2P 10DLC registration)
+- Fix: submit Primary Customer Profile via Twilio Console (manual step)
+
+## Blocking Items
+1. **Retell phone binding**: Requires adding card to Retell account ($0.10/min usage-based)
+2. **A2P 10DLC**: User must submit Customer Profile via Twilio Console (5 min manual step)
 
 ## System State
 
 ### Stop-Loss
-- `blocked: false` (reset 2026-02-21)
+- `blocked: false`
 - `zero_revenue_runs: 0`
-- 20 runs / 14 days before re-trigger
 
-### Live Config
-- `target_services`: med spa, dentist, plumber, chiropractor, hvac
-- `daily_send_limit`: 0 (email still paused — use Clay+Instantly instead)
-- `followup.enabled`: true (5/day, 3-day spacing)
-- SMS followup active
-
-### Lead Pipeline
-- 220 leads in SQLite (204 new, 15 contacted, 1 replied)
-- Email deliverability: BLOCKED (54% bounce rate) — MX verification now prevents new bad leads
-- Call list: 16 rows (all previously contacted/bounced — need fresh leads)
-
-## Open PRs
-- PR #175: Missed-call audit tool (auto-merge enabled, waiting CI)
+### Live Config (.env)
+- RETELL_AGENT_ID=agent_c142f005a895c3c43c1b3fa6aa (NEW)
+- DAILY_CALL_LIST_MIN_SCORE=70
+- AUTO_CALLS_MAX_PER_RUN=10
+- PAID_DAILY_CALL_CAP=50
+- PAID_DAILY_SMS_CAP=26
 
 ## Key Files
-- Audit tool: `autonomy/tools/missed_call_audit.py`
-- Audit report: `autonomy/tools/audit_report.py`
-- Live config: `autonomy/state/config.callcatcherops.live.json`
-- Stop-loss state: `autonomy/state/paid_stop_loss_state.json`
-- Call script: `autonomy/tools/twilio_autocall.py` (line 71, `_default_twiml()`)
+- Lead hygiene: `autonomy/tools/lead_hygiene.py` (NEW)
+- Retell wiring: `autonomy/tools/wire_retell.py` (NEW)
+- Anchor scraper: `autonomy/tools/anchor_scraper.py`
+- Call list: `autonomy/tools/call_list.py`
+- AI receptionist: `autonomy/tools/ai_receptionist.py`
+- Auto-call: `autonomy/tools/twilio_autocall.py`
+- Live job: `autonomy/tools/live_job.py`
 
 ## Notes for Next Session
-- Phase 2 (AI receptionist) is the priority — research Retell AI vs Vapi pricing
-- Need to sign up for Retell AI or Vapi and get API credentials
-- HIPAA BAA is required before handling dental calls — check if Retell/Vapi offer this
-- Consider Open Dental PMS integration for appointment booking
-- The free missed-call audit is the sales weapon — run it on 10 dental offices ASAP
+- Run lead hygiene before every outreach batch (cron-integrate into live_job.py)
+- Monitor email bounce rate after first validated send
+- When Retell billing is added: run `python3 -m autonomy.tools.wire_retell --bind-phone`
+- Check A2P Customer Profile approval status
