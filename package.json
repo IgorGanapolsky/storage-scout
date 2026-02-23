@@ -37,6 +37,7 @@
   "overrides": {
     "@appium/logger": {
       "lodash": "4.17.23"
-    }
+    },
+    "minimatch": ">=9.0.4"
   }
 }
