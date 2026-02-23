@@ -101,7 +101,7 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
         return None
     sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
     token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
-    from_num = (env.get("TWILIO_FROM_NUMBER") or "").strip()
+    from_num = (env.get("TWILIO_SMS_FROM_NUMBER") or env.get("TWILIO_FROM_NUMBER") or "").strip()
     if not sid or not token or not from_num or not from_num.startswith("+"):
         return None
 
