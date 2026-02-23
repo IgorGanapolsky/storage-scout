@@ -27,7 +27,7 @@ import hashlib
 
 # Set this to your deployed pixel endpoint URL.
 # Leave empty to disable open tracking (HTML emails still sent, just without pixel).
-PIXEL_ENDPOINT = ""
+PIXEL_ENDPOINT = "https://cc-email-pixel.iganapolsky.workers.dev/open"
 
 
 def generate_message_id(lead_id: str, step: int) -> str:
