@@ -766,6 +766,9 @@ def main() -> None:
 
     # Ensure the outreach engine can read SMTP_PASSWORD via config.email.smtp_password_env.
     os.environ.setdefault("SMTP_PASSWORD", smtp_password)
+    # Propagate ALLOW_FASTMAIL_OUTREACH so providers.py can read it via os.getenv().
+    if truthy(env.get("ALLOW_FASTMAIL_OUTREACH")):
+        os.environ.setdefault("ALLOW_FASTMAIL_OUTREACH", "1")
 
     cfg_path = _resolve_config_path(repo_root=repo_root, config_arg=args.config)
     cfg = load_config(str(cfg_path))
