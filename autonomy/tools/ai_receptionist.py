@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -97,14 +98,15 @@ def _http_request(
         import ssl
 
         ctx = ssl.create_default_context()
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         with urllib.request.urlopen(req, timeout=timeout_secs, context=ctx) as resp:
             raw = resp.read()
     except urllib.error.HTTPError as exc:
         raw = b""
         try:
             raw = exc.read()
-        except Exception:
-            pass
+        except Exception as read_err:
+            logging.getLogger(__name__).debug("Failed to read HTTP error body: %s", read_err)
         raise RuntimeError(
             f"HTTP {exc.code} from {url}: {raw.decode('utf-8', errors='replace')[:300]}"
         ) from exc

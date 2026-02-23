@@ -46,8 +46,9 @@ EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 CONTACT_PATHS = ("contact", "contact-us", "about", "about-us", "team", "our-team", "staff", "doctors")
 
-# SSL context that works with most sites.
+# SSL context — enforce TLS 1.2+ per security policy.
 _SSL_CTX = ssl.create_default_context()
+_SSL_CTX.minimum_version = ssl.TLSVersion.TLSv1_2
 
 
 def _get_api_key() -> str:
@@ -211,7 +212,7 @@ def enrich_lead(lead: dict) -> dict:
         session = create_session()
         session_id = session["id"]
         cdp_url = session["cdp_url"]
-        log.info("Anchor session %s created for %s", session_id, website)
+        log.info("Anchor session %s created for lead enrichment", session_id)
 
         result = scrape_website(website, cdp_url)
 
@@ -241,9 +242,9 @@ def enrich_lead(lead: dict) -> dict:
             lead["name"] = result["name"]
 
         log.info(
-            "Enriched: emails=%d, name=%s, pages=%d",
+            "Enriched: emails_found=%d, has_name=%s, pages=%d",
             len(result["emails"]),
-            result["name"] or "(none)",
+            bool(result["name"]),
             result["pages_scraped"],
         )
 
