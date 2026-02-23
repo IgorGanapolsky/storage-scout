@@ -317,6 +317,11 @@ def run_sms_followup(
             result.skipped += 1
             continue
 
+        # Skip if lead already replied via SMS today (avoid double-messaging)
+        if _has_inbound_reply_since(store, lead_id=lead_id, since_iso=today_start):
+            result.skipped += 1
+            continue
+
         if not _is_business_hours(state, cfg.start_hour, cfg.end_hour, allow_weekends=cfg.allow_weekends):
             result.skipped += 1
             continue
