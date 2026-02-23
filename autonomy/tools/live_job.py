@@ -280,8 +280,14 @@ def _evaluate_paid_stop_loss(
     if first_zero_date is None:
         first_zero_date = today
 
-    zero_runs = _int_env(str(state.get("zero_revenue_runs", 0)), 0) + 1
+    last_eval_date = _parse_iso_date(str(state.get("last_eval_date_utc") or ""))
+    prior_runs = _int_env(str(state.get("zero_revenue_runs", 0)), 0)
+    # Make same-day runs idempotent so scheduler frequency does not inflate
+    # the run counter and permanently lock paid channels.
+    zero_runs = prior_runs if last_eval_date == today else (prior_runs + 1)
     zero_days = int((today - first_zero_date).days) + 1
+    # Normalize legacy inflated counters from pre-idempotent behavior.
+    zero_runs = min(int(zero_runs), int(zero_days))
 
     blocked = bool(enabled) and (zero_runs >= max_zero_runs or zero_days >= max_zero_days)
     block_reason = ""
@@ -644,9 +650,16 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
     statuses = [s.strip() for s in raw_statuses.split(",") if s.strip()]
     if not statuses and high_intent_only:
         statuses = ["replied", "contacted", "new"]
+    if high_intent_only:
+        statuses = [s for s in statuses if s.strip().lower() != "bounced"]
+        if not statuses:
+            statuses = ["replied", "contacted", "new"]
 
     default_min_score = 80 if high_intent_only else 0
     min_score = max(0, _int_env(env.get("DAILY_CALL_LIST_MIN_SCORE"), default_min_score))
+    if high_intent_only:
+        call_floor = max(0, _int_env(env.get("HIGH_INTENT_CALL_MIN_SCORE"), default_min_score))
+        min_score = max(min_score, call_floor)
     exclude_role_inbox = truthy(env.get("DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX"), default=high_intent_only)
 
     output_rel = (env.get("DAILY_CALL_LIST_OUTPUT") or "").strip()

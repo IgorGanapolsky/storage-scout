@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.fastmail_inbox_sync import (
@@ -12,6 +15,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     _looks_like_stripe_payment,
 )
 from autonomy.tools.live_job import (
+    _maybe_write_call_list,
     _compute_sms_channel_budgets,
     _count_actions_today,
     _evaluate_paid_stop_loss,
@@ -264,6 +268,49 @@ def test_stop_loss_blocks_and_resets(tmp_path: Path) -> None:
     assert int(reset["zero_revenue_runs"]) == 0
 
 
+def test_stop_loss_is_idempotent_same_day_and_clamps_legacy_runs(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    state_dir = repo_root / "autonomy" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(timezone.utc).date()
+
+    # Simulate pre-fix inflated state from repeated same-day scheduler invocations.
+    (state_dir / "paid_stop_loss_state.json").write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "has_revenue_signal": False,
+                "zero_revenue_runs": 150,
+                "zero_revenue_days": 6,
+                "first_zero_revenue_date_utc": (today - timedelta(days=5)).isoformat(),
+                "last_eval_date_utc": today.isoformat(),
+                "blocked": True,
+                "block_reason": "stop_loss_zero_revenue_runs",
+                "max_zero_runs": 20,
+                "max_zero_days": 14,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    env = {
+        "STOP_LOSS_ENABLED": "1",
+        "STOP_LOSS_ZERO_REVENUE_RUNS": "20",
+        "STOP_LOSS_ZERO_REVENUE_DAYS": "14",
+    }
+
+    eval_1 = _evaluate_paid_stop_loss(repo_root=repo_root, env=env, has_revenue_signal=False)
+    assert int(eval_1["zero_revenue_days"]) == 6
+    assert int(eval_1["zero_revenue_runs"]) == 6
+    assert eval_1["blocked"] is False
+
+    # Re-evaluation the same day should not increment runs.
+    eval_2 = _evaluate_paid_stop_loss(repo_root=repo_root, env=env, has_revenue_signal=False)
+    assert int(eval_2["zero_revenue_runs"]) == 6
+    assert int(eval_2["zero_revenue_days"]) == 6
+    assert eval_2["blocked"] is False
+
+
 def test_leadgen_category_parsing() -> None:
     assert _parse_categories("") == []
     assert _parse_categories("  med spa, plumbing ,, Clinics  ") == ["med spa", "plumbing", "clinics"]
@@ -342,3 +389,40 @@ def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
     assert budgets2["total_remaining"] == 1
     assert budgets2["interest_reserve_remaining"] == 0
     assert budgets2["followup_remaining"] == 1
+
+
+def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path
+    (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
+
+    cfg = SimpleNamespace(
+        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_callcatcherops_real.csv"}],
+        agents={"outreach": {"target_services": ["Dentist"]}},
+        storage={"sqlite_path": "autonomy/state/autonomy_live.sqlite3"},
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_generate_call_list(**kwargs):  # noqa: ANN003
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("autonomy.tools.live_job.generate_call_list", fake_generate_call_list)
+    monkeypatch.setattr("autonomy.tools.live_job.write_call_list", lambda *_args, **_kwargs: None)
+
+    out = _maybe_write_call_list(
+        cfg=cfg,
+        env={
+            "HIGH_INTENT_OUTREACH_ONLY": "1",
+            "DAILY_CALL_LIST_SERVICES": "Dentist",
+            "DAILY_CALL_LIST_STATUSES": "replied,contacted,new,bounced",
+            "DAILY_CALL_LIST_MIN_SCORE": "60",
+            "DAILY_CALL_LIST_LIMIT": "10",
+        },
+        repo_root=repo_root,
+    )
+    assert out is not None
+    assert out["statuses"] == ["replied", "contacted", "new"]
+    assert int(out["min_score"] or 0) == 80
+    assert captured["statuses"] == ["replied", "contacted", "new"]
+    assert int(captured["min_score"] or 0) == 80

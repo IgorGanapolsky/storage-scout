@@ -126,6 +126,7 @@ def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekendDateTime)
     assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is False
+    assert _is_business_hours(state="FL", start_hour=9, end_hour=17, allow_weekends=True) is True
 
 
 def test_lead_called_recently_ignores_failed_attempts() -> None:
@@ -228,7 +229,7 @@ def test_run_auto_calls_end_to_end(monkeypatch) -> None:
         "TWILIO_FROM_NUMBER": "+19546211439",
     }
 
-    def fake_is_business_hours(*, state: str, start_hour: int, end_hour: int) -> bool:
+    def fake_is_business_hours(*, state: str, start_hour: int, end_hour: int, allow_weekends: bool = False) -> bool:
         return state != "TX"
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", fake_is_business_hours)
@@ -310,6 +311,7 @@ def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
 
     rows = [
         CallListRow(
@@ -386,6 +388,7 @@ def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
         raise AssertionError("GET should not be called when POST fails")
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
 
     result = run_auto_calls(
         sqlite_path=sqlite_path,
