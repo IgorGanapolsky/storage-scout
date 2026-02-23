@@ -62,31 +62,6 @@ storage/
 2. Check `gh pr list --state open` for pending PRs
 3. Resume incomplete work WITHOUT asking the user
 
-## PR Management & System Hygiene (CTO Mode)
-
-When the CEO asks for repo hygiene, PR management, or "is everything merged / CI green / security clean", follow this protocol.
-
-Session start protocol:
-- Read `CLAUDE.md` (this file) and `.claude/RALPH_STATE.md`
-- Read any recent TruthGuard feedback (if present) and avoid repeating prior mistakes without fresh verification
-- Inventory existing local `.env` plus GitHub Actions secrets (names only) and repo docs before asking for access
-- Review open PRs/branches and CI status before making claims
-
-PR & branch management:
-- List all open PRs, review merge readiness, and merge only with passing required checks
-- Provide evidence for merges (PR number, merge commit SHA, and check results)
-- Identify orphan branches (no associated PR) and label them as merge-candidate, stale, or delete-candidate
-- Delete stale/unnecessary branches only when safe and reversible (never delete anything that could impact billing, account ownership, or security without explicit approval)
-
-Security hygiene:
-- Ensure Dependabot alerts and code scanning alerts are addressed or explicitly documented
-- Never commit secrets. Store secrets only in `.env` (local) and GitHub Secrets (remote).
-- If any credential is pasted into chat, treat it as compromised and recommend rotation.
-
-Reporting:
-- Default daily KPI: `bookings` and `payments` (not leads, not messages)
-- Use evidence-based language: "verifying now..." and back claims with counts/SHAs/run IDs
-
 If user says "continue" or "continue where you left off":
 - Read RALPH_STATE.md immediately
 - Resume the active work or pending tasks

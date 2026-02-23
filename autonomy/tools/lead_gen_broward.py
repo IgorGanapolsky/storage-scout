@@ -1,8 +1,10 @@
 import argparse
 import csv
 import json
+import logging
 import os
 import re
+import subprocess
 import time
 from html import unescape
 from pathlib import Path
@@ -61,6 +63,43 @@ EXCLUDED_EMAIL_DOMAINS = {
     "weebly.com",
     "godaddy.com",
 }
+
+# Cache verified domains to avoid repeated DNS lookups within a single run.
+_MX_CACHE: dict[str, bool] = {}
+
+
+def verify_email_mx(email: str) -> bool:
+    """Check if the email domain has MX records (basic deliverability gate).
+
+    Returns True if the domain has MX records or if verification fails open.
+    Returns False only when we can confirm the domain has NO mail server.
+    """
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@", 1)[1].strip().lower()
+    if not domain:
+        return False
+    if domain in EXCLUDED_EMAIL_DOMAINS:
+        return False
+
+    if domain in _MX_CACHE:
+        return _MX_CACHE[domain]
+
+    try:
+        result = subprocess.run(
+            ["dig", "+short", "MX", domain],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        has_mx = bool(result.stdout.strip())
+        _MX_CACHE[domain] = has_mx
+        return has_mx
+    except Exception as exc:
+        # Fail open — if we can't check, don't block the lead.
+        logging.getLogger(__name__).debug("MX lookup failed for %s: %s", domain, exc)
+        _MX_CACHE[domain] = True
+        return True
 
 
 def get_api_key() -> str:
@@ -365,6 +404,10 @@ def build_lead_from_place(
     if "%" in email or " " in email or "@sentry" in email:
         return None
 
+    # Verify the email domain has MX records before adding to pipeline.
+    if not verify_email_mx(email):
+        return None
+
     email_key = email.lower()
     if email_key in existing_emails:
         return None
@@ -507,6 +550,25 @@ def main() -> None:
 
     if not leads:
         raise SystemExit("No new leads generated. Try different categories or rerun later.")
+
+    # Enrich leads with Anchor Browser (fills missing names + upgrades guessed emails).
+    # Gracefully skips if ANCHOR_API_KEY is not set.
+    try:
+        from autonomy.tools.anchor_scraper import enrich_leads_batch, is_available
+
+        if is_available():
+            needs_enrichment = [
+                row for row in leads
+                if not (row.get("name") or "").strip()
+                or "email=guess" in (row.get("notes") or "")
+            ]
+            if needs_enrichment:
+                print(f"Enriching {len(needs_enrichment)} leads via Anchor Browser...")
+                enrich_leads_batch(needs_enrichment)
+                enriched = sum(1 for row in needs_enrichment if (row.get("name") or "").strip())
+                print(f"Anchor Browser: {enriched}/{len(needs_enrichment)} leads enriched with names")
+    except ImportError:
+        pass
 
     write_leads(args.output, leads, replace=args.replace)
     save_city_index(new_index)

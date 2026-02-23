@@ -31,12 +31,13 @@
   },
   "homepage": "https://github.com/IgorGanapolsky/storage-scout#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
-    "agent-browser": "^0.10.0"
+    "@anthropic-ai/sdk": "^0.78.0",
+    "agent-browser": "^0.13.0"
   },
   "overrides": {
     "@appium/logger": {
       "lodash": "4.17.23"
-    }
+    },
+    "minimatch": ">=9.0.4"
   }
 }
