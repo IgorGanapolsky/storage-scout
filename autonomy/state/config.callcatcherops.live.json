@@ -1,37 +1,65 @@
 {
-  "mode": "dry-run",
+  "mode": "live",
   "company": {
     "name": "CallCatcher Ops",
     "website": "https://callcatcherops.com",
     "intake_url": "https://callcatcherops.com/callcatcherops/intake.html",
     "reply_to": "hello@callcatcherops.com",
-    "mailing_address": "Coral Springs, FL",
-    "signature": "— CallCatcher Ops",
+    "mailing_address": "11909 Glenmore Drive, Coral Springs, FL 33071",
+    "signature": "\u2014 CallCatcher Ops",
     "booking_url": "https://calendly.com/igorganapolsky/audit-call",
-    "kickoff_url": "https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01",
     "baseline_example_url": "https://callcatcherops.com/callcatcherops/baseline-example.pdf"
   },
   "agents": {
     "outreach": {
       "agent_id": "agent.outreach.v1",
-      "permissions": ["lead.read", "lead.write", "email.send"],
-      "daily_send_limit": 30,
+      "permissions": [
+        "lead.read",
+        "lead.write",
+        "email.send"
+      ],
+      "daily_send_limit": 10,
       "min_score": 60,
-      "target_services": ["med spa", "dentist"],
-      "allowed_email_methods": ["direct"],
-      "blocked_local_parts": ["info", "contact", "hello", "office", "support", "sales", "service", "team", "admin", "appointments", "booking", "inquiries"],
-      "bounce_pause": { "enabled": true, "window_days": 7, "threshold": 0.05, "min_emailed": 10 },
+      "target_services": [
+        "med spa",
+        "dentist",
+        "plumber",
+        "chiropractor",
+        "hvac",
+        "roofing",
+        "locksmith",
+        "pest control"
+      ],
+      "allowed_email_methods": [
+        "direct",
+        "scrape"
+      ],
+      "blocked_local_parts": [
+        "info",
+        "contact",
+        "hello",
+        "office",
+        "support",
+        "sales",
+        "service",
+        "team",
+        "admin",
+        "appointments",
+        "booking",
+        "inquiries"
+      ],
+      "bounce_pause": {
+        "enabled": true,
+        "window_days": 7,
+        "threshold": 0.25,
+        "min_emailed": 20
+      },
       "followup": {
         "enabled": true,
-        "min_days_since_last_email": 2,
+        "min_days_since_last_email": 3,
         "max_emails_per_lead": 5,
-        "daily_send_limit": 15
+        "daily_send_limit": 5
       }
-    },
-    "ai_writer": {
-      "enabled": false,
-      "model": "gpt-4o",
-      "api_key_env": "OPENAI_API_KEY"
     },
     "observer": {
       "observe_threshold": 3,
@@ -42,7 +70,7 @@
     {
       "type": "csv",
       "path": "autonomy/state/leads_callcatcherops_real.csv",
-      "source": "manual"
+      "source": "callcatcherops_live"
     }
   ],
   "email": {
@@ -58,7 +86,7 @@
     "can_spam_required": true
   },
   "storage": {
-    "sqlite_path": "autonomy/state/autonomy.sqlite3",
-    "audit_log": "autonomy/state/audit.jsonl"
+    "sqlite_path": "autonomy/state/autonomy_live.sqlite3",
+    "audit_log": "autonomy/state/audit_live.jsonl"
   }
 }

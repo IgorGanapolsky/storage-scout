@@ -73,6 +73,8 @@ class AIOutreachWriter:
             f"You write short, personalized cold outreach emails for {self.company_name}, "
             f"a missed-call recovery service for local businesses. "
             f"Keep emails under 100 words. Be conversational, not salesy. "
+            f"CTA must be 'Reply YES' — never include Calendly or intake form links. "
+            f"Frame as: free pilot, pay per recovered call ($25/call, no monthly fee). "
             f"Always include the unsubscribe link."
         )
         if observations:
