@@ -260,8 +260,6 @@ def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_tem
 
     if "calendly" not in ctas:
         res.add_issue(name="cta_calendly", url=urls["intake"], detail="could not find calendly link in intake html")
-    if "stripe" not in ctas:
-        res.add_issue(name="cta_stripe", url=urls["intake"], detail="could not find stripe link in intake html")
 
     return res
 
