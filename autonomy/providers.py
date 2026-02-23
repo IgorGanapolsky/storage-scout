@@ -102,7 +102,7 @@ class EmailSender:
     _SMTP_RETRIES = 2
     _SMTP_RETRY_DELAY = 3
 
-    def send(self, to_email: str, subject: str, body: str, reply_to: str) -> str:
+    def send(self, to_email: str, subject: str, body: str, reply_to: str, html_body: str = "") -> str:
         if self.dry_run:
             return "dry-run"
 
@@ -116,6 +116,8 @@ class EmailSender:
         msg["To"] = to_email
         msg["Reply-To"] = reply_to
         msg.set_content(body)
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
 
         for attempt in range(self._SMTP_RETRIES):
             try:
