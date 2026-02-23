@@ -42,7 +42,45 @@ from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_interest_nudge import InterestNudgeResult, run_interest_nudges
 from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
+from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
+
+
+def _run_missed_call_audits(*, call_list: list[dict], env: dict[str, str]) -> list[dict]:
+    """Run a single-probe audit for each lead in the call list to generate a fresh report."""
+    results = []
+    if not call_list:
+        return results
+
+    # Only audit 'new' or 'contacted' leads to save budget
+    to_audit = [row for row in call_list if getattr(row, "lead_status", None) in {"new", "contacted"}]
+    # Limit to 3 per run to stay within $10/mo budget
+    to_audit = to_audit[:3]
+
+    for row in to_audit:
+        phone = getattr(row, "phone", None)
+        company = getattr(row, "company", None)
+        if not phone or not company:
+            continue
+
+        print(f"live_job: auditing {company} ({phone})...", file=sys.stderr)
+        try:
+            # 1 probe is enough for the hook
+            res = run_audit(
+                phone=phone,
+                company=company,
+                service=getattr(row, "service", "dentist"),
+                state=getattr(row, "state", "FL"),
+                num_calls=1,
+                delay_between_secs=0,
+                env=env
+            )
+            save_audit(res)
+            results.append({"company": company, "miss_rate": res.miss_rate_pct, "html_report": f"audit_{company.lower().replace(' ', '-')}_{res.audit_date}.html"})
+        except Exception as e:
+            print(f"live_job: audit failed for {company}: {e}", file=sys.stderr)
+
+    return results
 
 
 def _read_json(path: Path) -> dict:
@@ -1006,6 +1044,11 @@ def main() -> None:
         guardrails["call_list_statuses"] = call_list.get("statuses") or []
         guardrails["call_list_min_score"] = int(call_list.get("min_score") or 0)
         guardrails["call_list_exclude_role_inbox"] = bool(call_list.get("exclude_role_inbox"))
+
+        # NEW: Run autonomous audits
+        audit_results = _run_missed_call_audits(call_list=call_list["data"], env=env)
+        guardrails["audits_generated"] = len(audit_results)
+
     auto_calls: AutoCallResult | None = None
     if call_list is not None and isinstance(call_list.get("data"), list):
         calls_block_reason = ""
