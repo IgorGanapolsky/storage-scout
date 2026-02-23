@@ -24,7 +24,7 @@
       "followup": {
         "enabled": true,
         "min_days_since_last_email": 2,
-        "max_emails_per_lead": 3,
+        "max_emails_per_lead": 5,
         "daily_send_limit": 15
       }
     },
