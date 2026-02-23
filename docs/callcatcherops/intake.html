@@ -253,8 +253,18 @@
         </div>
       </header>
 
-      <h1>Start Your Free 7-Day Trial</h1>
-      <p class="subhead">Set up in 10 minutes. See recovered calls in 24 hours. Share your details below and we activate your trial within one business day.</p>
+      <h1>Start Your Free Pilot</h1>
+      <p class="subhead">Set up in 10 minutes. See recovered calls in 24 hours. Share your details below and we activate your pilot within one business day.</p>
+      
+      <!-- DIRECT REVENUE CTA -->
+      <div style="background: var(--ink); color: #fff; padding: 24px; border-radius: var(--radius); margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; box-shadow: 0 20px 40px rgba(15,28,27,0.3);">
+        <div>
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem;">Skip the line: Deploy Sarah AI now</h2>
+          <p style="margin: 8px 0 0; opacity: 0.8; font-size: 0.95rem;">Get 24/7 AI Receptionist + Automated Missed Call Text-back.</p>
+        </div>
+        <a class="button" style="background: var(--ember); min-width: 180px;" href="https://buy.stripe.com/test_6oE7v9geU0">Deploy for $497/mo</a>
+      </div>
+
       <p class="note" style="margin-top: 12px;">
         Want to see what the results look like?
         <a class="inline-link" data-cta="intake_baseline_example" href="./baseline-example.pdf">Example baseline (PDF)</a>
@@ -262,11 +272,11 @@
 
       <div style="margin-bottom: 24px; padding: 18px 22px; border-radius: var(--radius); background: linear-gradient(150deg, rgba(92, 164, 169, 0.12), rgba(245, 215, 178, 0.25)); border: 1px solid rgba(15, 28, 27, 0.08);">
         <p style="margin: 0 0 6px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.05rem; color: var(--ember);">The average missed call costs your business $300&#8211;$1,200.</p>
-        <p style="margin: 0; color: #334a47; font-size: 0.95rem;">Fill out the form below to start your free 7-day trial. $197/mo after trial, or pay $25/booking. No credit card required.</p>
+        <p style="margin: 0; color: #334a47; font-size: 0.95rem;">Fill out the form below to start your free pilot. $25 per recovered call, no monthly fee. No credit card required.</p>
       </div>
       <div class="grid-2" style="margin-bottom: 24px;">
         <div class="step-card">
-          <div class="step-title">Option 1: Start the free trial (recommended)</div>
+          <div class="step-title">Option 1: Start the free pilot (recommended)</div>
           <p class="note">Fill out the form below. We activate missed-call recovery within one business day. See results in 24 hours.</p>
         </div>
         <div class="step-card">
@@ -278,7 +288,7 @@
 
       <div class="panel">
         <form action="https://formsubmit.co/hello@callcatcherops.com" method="POST">
-          <input type="hidden" name="_subject" value="CallCatcher Ops Free Trial Signup" />
+          <input type="hidden" name="_subject" value="CallCatcher Ops Free Pilot Signup" />
           <input type="hidden" name="_template" value="table" />
           <input type="hidden" name="_captcha" value="false" />
           <input type="hidden" name="_next" value="https://callcatcherops.com/callcatcherops/thanks.html?src=intake" />
@@ -354,16 +364,15 @@
             <textarea id="notes" name="notes" placeholder="Call routing tools, after-hours coverage, staff size, goals"></textarea>
           </div>
 
-          <button class="button" type="submit">Start My Free Trial</button>
-          <p class="note">By submitting, you agree to be contacted about your trial. We do not resell your data.</p>
+          <button class="button" type="submit">Start My Free Pilot</button>
+          <p class="note">By submitting, you agree to be contacted about your pilot. We do not resell your data.</p>
         </form>
         <div class="cta-panel">
           <h2>Your free pilot starts now.</h2>
-          <p class="note">We will activate your missed-call recovery within one business day. Prefer to secure priority onboarding first?</p>
+          <p class="note">We will activate your missed-call recovery within one business day. You can also just reply YES to any of our emails.</p>
           <div class="cta-row">
-            <a class="button" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Reserve priority kickoff ($249)</a>
-            <a class="button secondary" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book a call first</a>
-            <a class="button secondary" id="cta-subscription" href="./workflow-subscription.html">See $197/mo plan</a>
+            <a class="button" id="cta-reply-yes" href="mailto:hello@callcatcherops.com?subject=YES%20-%20Free%20Pilot&body=I%27m%20interested%20in%20the%20free%20pilot.">Reply YES by email</a>
+            <a class="button secondary" id="cta-subscription" href="./workflow-subscription.html">See pricing</a>
           </div>
           <p class="note small">Free pilot &middot; $25 per recovered call &middot; No monthly fee. No long-term contracts.</p>
         </div>
@@ -382,9 +391,8 @@
           gtag('event', 'cta_click', { event_category: 'intake', event_label: label });
         });
       };
-      trackCta('cta-pay', 'pay_249');
-      trackCta('cta-book', 'book_baseline');
-      trackCta('cta-subscription', 'view_workflow_subscription');
+      trackCta('cta-reply-yes', 'reply_yes_email');
+      trackCta('cta-subscription', 'view_pricing');
     </script>
   </body>
 </html>
