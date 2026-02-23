@@ -1,6 +1,7 @@
 import csv
 import os
 import smtplib
+import time
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
@@ -98,6 +99,9 @@ class EmailSender:
 
         return {"ok": True, "reason": "ok"}
 
+    _SMTP_RETRIES = 2
+    _SMTP_RETRY_DELAY = 3
+
     def send(self, to_email: str, subject: str, body: str, reply_to: str) -> str:
         if self.dry_run:
             return "dry-run"
@@ -113,12 +117,15 @@ class EmailSender:
         msg["Reply-To"] = reply_to
         msg.set_content(body)
 
-        try:
-            with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port, timeout=20) as server:
-                server.starttls()
-                server.login(self.config.smtp_user, password)
-                server.send_message(msg)
-        except Exception:
-            return "send-error"
+        for attempt in range(self._SMTP_RETRIES):
+            try:
+                with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port, timeout=20) as server:
+                    server.starttls()
+                    server.login(self.config.smtp_user, password)
+                    server.send_message(msg)
+                return "sent"
+            except Exception:
+                if attempt < self._SMTP_RETRIES - 1:
+                    time.sleep(self._SMTP_RETRY_DELAY)
 
-        return "sent"
+        return "send-error"
