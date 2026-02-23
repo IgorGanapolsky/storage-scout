@@ -210,9 +210,8 @@ def enrich_lead(lead: dict) -> dict:
     session = None
     try:
         session = create_session()
-        session_id = session["id"]
         cdp_url = session["cdp_url"]
-        log.info("Anchor session %s created for lead enrichment", session_id)
+        log.info("Anchor session created for lead enrichment")
 
         result = scrape_website(website, cdp_url)
 
