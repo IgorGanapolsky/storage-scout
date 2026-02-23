@@ -16,6 +16,11 @@ Usage:
         --agent-id <agent_id> \
         --area-code 954
 
+    python3 -m autonomy.tools.ai_receptionist \
+        --action register_phone \
+        --agent-id <agent_id> \
+        --phone-number <e164_number>
+
 Requires: RETELL_API_KEY in env.
 """
 
@@ -49,6 +54,18 @@ class RetellClient:
         try:
             # Note: requests uses system CA bundle and secure TLS defaults by default.
             resp = requests.post(url, headers=self.headers, json=data)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling {endpoint}: {e}")
+            if e.response is not None:
+                print(f"Response: {e.response.text}")
+            sys.exit(1)
+
+    def _patch(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.config.base_url}{endpoint}"
+        try:
+            resp = requests.patch(url, headers=self.headers, json=data)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.RequestException as e:
@@ -102,6 +119,14 @@ class RetellClient:
         resp = self._post("/create-agent", data)
         return resp
 
+    def update_agent(self, agent_id: str, max_duration_ms: int = 300000) -> Dict[str, Any]:
+        """Update agent settings, specifically for budget guardrails."""
+        data = {
+            "max_call_duration_ms": max_duration_ms,
+        }
+        resp = self._patch(f"/update-agent/{agent_id}", data)
+        return resp
+
     def list_agents(self) -> list[Dict[str, Any]]:
         """List existing agents."""
         resp = self._get("/list-agents")
@@ -110,19 +135,22 @@ class RetellClient:
     def buy_phone_number(self, agent_id: str, area_code: int = 954) -> Dict[str, Any]:
         """Buy a phone number and bind to an agent."""
         data = {
-            "agent_id": agent_id,
+            "inbound_agent_id": agent_id,
             "area_code": area_code,
         }
         resp = self._post("/create-phone-number", data)
         return resp
 
-    def register_phone_number(self, agent_id: str, phone_number: str) -> Dict[str, Any]:
+    def register_phone_number(self, agent_id: str, phone_number: str, twilio_sid: str, twilio_auth_token: str) -> Dict[str, Any]:
         """Register an existing Twilio phone number and bind to an agent."""
         data = {
             "agent_id": agent_id,
             "phone_number": phone_number,
+            "twilio_account_sid": twilio_sid,
+            "twilio_auth_token": twilio_auth_token,
         }
-        resp = self._post("/create-phone-number", data)
+        # Retell's actual endpoint for importing Twilio numbers
+        resp = self._post("/register-phone-number", data)
         return resp
 
 def load_prompt(file_path: str) -> str:
@@ -133,13 +161,14 @@ def load_prompt(file_path: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Manage Retell AI Receptionist Agents")
-    p.add_argument("--action", required=True, choices=["create_agent", "list_agents", "buy_number", "register_phone"], help="Action to perform")
+    p.add_argument("--action", required=True, choices=["create_agent", "list_agents", "buy_number", "register_phone", "set_budget"], help="Action to perform")
     p.add_argument("--name", help="Name of the agent (for create_agent)")
     p.add_argument("--prompt-file", help="Path to prompt markdown file (for create_agent)")
     p.add_argument("--voice-id", default="11labs-Adrian", help="Voice ID (default: 11labs-Adrian)")
-    p.add_argument("--agent-id", help="Agent ID (for buy_number/register_phone)")
+    p.add_argument("--agent-id", help="Agent ID (for buy_number/register_phone/set_budget)")
     p.add_argument("--phone-number", help="Phone number (for register_phone)")
     p.add_argument("--area-code", type=int, default=954, help="Area code for phone number (for buy_number)")
+    p.add_argument("--max-min", type=int, default=5, help="Max minutes per call (for set_budget)")
     return p.parse_args()
 
 def main() -> None:
@@ -195,10 +224,27 @@ def main() -> None:
              print("Error: --agent-id and --phone-number are required for register_phone")
              sys.exit(1)
 
-        print(f"Registering number {args.phone_number} for agent {args.agent_id}...")
-        number = client.register_phone_number(args.agent_id, args.phone_number)
+        twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        twilio_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        if not twilio_sid or not twilio_token:
+            print("Error: TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env.")
+            sys.exit(1)
+
+        print(f"Registering Twilio number {args.phone_number} for agent {args.agent_id}...")
+        number = client.register_phone_number(args.agent_id, args.phone_number, twilio_sid, twilio_token)
         print("Phone number registered successfully!")
         print(json.dumps(number, indent=2))
+
+    elif args.action == "set_budget":
+        if not args.agent_id:
+             print("Error: --agent-id is required for set_budget")
+             sys.exit(1)
+
+        ms = args.max_min * 60 * 1000
+        print(f"Setting max call duration to {args.max_min} minutes for agent {args.agent_id}...")
+        result = client.update_agent(args.agent_id, max_duration_ms=ms)
+        print("Budget guardrail set successfully!")
+        print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
     main()
