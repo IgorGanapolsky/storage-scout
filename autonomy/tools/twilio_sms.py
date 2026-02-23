@@ -101,7 +101,7 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
         return None
     sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
     token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
-    from_num = (env.get("TWILIO_FROM_NUMBER") or "").strip()
+    from_num = (env.get("TWILIO_SMS_FROM_NUMBER") or env.get("TWILIO_FROM_NUMBER") or "").strip()
     if not sid or not token or not from_num or not from_num.startswith("+"):
         return None
 
@@ -314,6 +314,11 @@ def run_sms_followup(
             continue
 
         if _lead_texted_recently(store, lead_id=lead_id, cooldown_days=cfg.cooldown_days):
+            result.skipped += 1
+            continue
+
+        # Skip if lead already replied via SMS today (avoid double-messaging)
+        if _has_inbound_reply_since(store, lead_id=lead_id, since_iso=today_start):
             result.skipped += 1
             continue
 
