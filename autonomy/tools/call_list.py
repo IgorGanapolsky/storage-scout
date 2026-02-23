@@ -170,13 +170,13 @@ def generate_call_list(
         ORDER BY
             CASE COALESCE(status,'')
                 WHEN 'replied' THEN 0
-                WHEN 'contacted' THEN 1
-                WHEN 'new' THEN 2
+                WHEN 'new' THEN 1
+                WHEN 'contacted' THEN 2
                 WHEN 'bounced' THEN 3
                 ELSE 9
             END,
-            email_sent_count DESC,
             score DESC,
+            email_sent_count ASC,
             updated_at DESC
         LIMIT ?
     """
