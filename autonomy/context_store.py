@@ -103,7 +103,8 @@ class ContextStore:
               subject TEXT,
               body TEXT,
               status TEXT,
-              ts TEXT
+              ts TEXT,
+              step INTEGER DEFAULT 0
             )
             """
         )
@@ -127,6 +128,8 @@ class ContextStore:
         )
         with contextlib.suppress(sqlite3.OperationalError):
             cur.execute("ALTER TABLE actions ADD COLUMN observed INTEGER DEFAULT 0")
+        with contextlib.suppress(sqlite3.OperationalError):
+            cur.execute("ALTER TABLE messages ADD COLUMN step INTEGER DEFAULT 0")
         self.conn.commit()
         self._migrate_leads_email_method()
 
@@ -291,13 +294,23 @@ class ContextStore:
         row = cur.execute("SELECT status FROM leads WHERE id=?", (normalized,)).fetchone()
         return str(row[0]) if row else None
 
-    def add_message(self, lead_id: str, channel: str, subject: str, body: str, status: str) -> None:
+    def add_message(self, lead_id: str, channel: str, subject: str, body: str, status: str, step: int = 0) -> int:
         cur = self.conn.cursor()
         cur.execute(
-            "INSERT INTO messages (lead_id, channel, subject, body, status, ts) VALUES (?, ?, ?, ?, ?, ?)",
-            (lead_id, channel, subject, body, status, now_iso()),
+            "INSERT INTO messages (lead_id, channel, subject, body, status, ts, step) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (lead_id, channel, subject, body, status, now_iso(), step),
         )
         self.conn.commit()
+        return cur.lastrowid or 0
+
+    def get_last_email_step(self, lead_id: str) -> int:
+        """Return the step number of the most recent email sent to this lead."""
+        cur = self.conn.cursor()
+        row = cur.execute(
+            "SELECT step FROM messages WHERE lead_id=? AND channel='email' AND status='sent' ORDER BY ts DESC LIMIT 1",
+            (lead_id,),
+        ).fetchone()
+        return int(row[0]) if row else 0
 
     def add_opt_out(self, email: str) -> None:
         normalized = (email or "").strip().lower()
