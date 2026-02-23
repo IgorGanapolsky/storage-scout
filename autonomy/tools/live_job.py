@@ -1294,6 +1294,12 @@ def main() -> None:
         with contextlib.suppress(OSError, ValueError):
             lock_fh.close()
 
+    try:
+        from autonomy.tools.generate_dashboard import generate
+        generate()
+    except Exception as e:
+        print(f"Failed to generate dashboard: {e}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()
