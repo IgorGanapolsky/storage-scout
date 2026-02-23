@@ -241,6 +241,32 @@ def sync_fastmail_inbox(
 
             processed += 1
 
+            # Bounces MUST be checked first — bounce bodies contain our original
+            # outreach email (with Calendly/Stripe links), which would otherwise
+            # trigger false-positive booking/payment detections.
+            if _is_bounce(from_name, from_email, subject, body_text):
+                failed = _extract_failed_recipients(body_text)
+                for email_addr in failed:
+                    # Only mark if the email exists as a lead.
+                    cur_status = store.get_lead_status(email_addr)
+                    if not cur_status:
+                        continue
+                    if cur_status == "replied":
+                        continue
+                    if cur_status == "bounced":
+                        continue
+                    if cur_status == "opted_out":
+                        continue
+                    if store.mark_status_by_email(email_addr, "bounced"):
+                        new_bounces += 1
+                        store.log_action(
+                            agent_id="agent.inbox_sync.v1",
+                            action_type="lead.bounce",
+                            trace_id=f"imap:{uid}",
+                            payload={"lead_id": email_addr, "mailbox": mailbox},
+                        )
+                continue
+
             # Intake submissions (formsubmit -> hello inbox)
             if "baseline intake" in subject.lower() and "callcatcher" in subject.lower():
                 intake_submissions += 1
@@ -267,29 +293,6 @@ def sync_fastmail_inbox(
                     trace_id=f"imap:payment:{uid}",
                     payload={"mailbox": mailbox, "source": "fastmail", "message_uid": uid},
                 )
-
-            if _is_bounce(from_name, from_email, subject, body_text):
-                failed = _extract_failed_recipients(body_text)
-                for email_addr in failed:
-                    # Only mark if the email exists as a lead.
-                    cur_status = store.get_lead_status(email_addr)
-                    if not cur_status:
-                        continue
-                    if cur_status == "replied":
-                        continue
-                    if cur_status == "bounced":
-                        continue
-                    if cur_status == "opted_out":
-                        continue
-                    if store.mark_status_by_email(email_addr, "bounced"):
-                        new_bounces += 1
-                        store.log_action(
-                            agent_id="agent.inbox_sync.v1",
-                            action_type="lead.bounce",
-                            trace_id=f"imap:{uid}",
-                            payload={"lead_id": email_addr, "mailbox": mailbox},
-                        )
-                continue
 
             # Replies from a lead email address.
             from_email_norm = (from_email or "").strip().lower()
