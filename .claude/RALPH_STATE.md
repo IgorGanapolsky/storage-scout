@@ -3,58 +3,65 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-23T15:30:00Z
+2026-02-23T05:35:00Z
 
 ## Current Status
-🎯 **ACTIVE** — Lead hygiene deployed, Retell AI agent wired, email gate unblocked
+**ACTIVE** — Email outreach unblocked and flowing, toll-free SMS pending verification
 
 ## Completed This Session (2026-02-23)
 
-### Lead Hygiene Filter (NEW)
-- Built `autonomy/tools/lead_hygiene.py` — MX validation + junk detection
-- Scanned 183 leads, found 27 invalid emails (25 no-MX, 2 junk artifacts like `asset-1@3x.png`)
-- Marked all 27 as `bad_email` status in SQLite — excluded from future outreach
-- Email deliverability gate: **UNBLOCKED** (7-day window has 0 bounces, old bounces aged out)
-- Clean rate: 85.2% (156/183 valid)
+### Email Outreach Unblocked (CRITICAL FIX)
+- Root cause: 4 separate blockers preventing any email from sending for 7 days
+  1. `ALLOW_FASTMAIL_OUTREACH` not propagated to `os.environ` (PR #195)
+  2. `daily_send_limit: 0` in live config (fixed locally)
+  3. `allowed_email_methods: ["direct"]` — 0 leads qualified (added `scrape`)
+  4. `HIGH_INTENT_SKIP_COLD_EMAIL` defaulting True (set to 0 in .env)
+  5. `HIGH_INTENT_EMAIL_MIN_SCORE: 80` but all leads scored 75 (lowered to 70)
+- **Result: 15 emails sent** (10 initial cold + 5 followup) to Med Spas, Plumbers, Dentists
+- Target services expanded: added Roofing, Locksmith, Pest Control
 
-### Retell AI Receptionist Wiring (NEW)
-- Built `autonomy/tools/wire_retell.py` — automated agent setup + web call creation
-- Discovered 3 existing Retell agents, reusing `Dental Receptionist` (agent_c142f005a895c3c43c1b3fa6aa)
-- Saved RETELL_AGENT_ID to .env
-- Web calls work on free tier (verified: call_8681fc5b2f737146d1c844b11ec)
-- Phone binding blocked: Retell requires billing (HTTP 402) for phone number registration
-- Workaround: web-based demos are free and functional
+### Toll-Free SMS Setup (Previous Session)
+- Bought +18446480144 (toll-free) for SMS delivery
+- Added to Messaging Service MG68d8c0141190ed17eaf1d6caa8a24842
+- Verification submitted: HH46161887e2818c0b7412e55c5e03c70f (IN_REVIEW)
+- SMS code updated: `TWILIO_SMS_FROM_NUMBER` takes priority (PR #193 merged)
 
-### Code Quality
-- Fixed 9 lint issues in ai_receptionist.py (unused imports, trailing whitespace, f-string placeholders)
-- All ruff checks passing across entire autonomy/ directory
+### PR Cleanup
+- PR #189 (Final Admin Sync) merged
+- PR #193 (toll-free SMS) merged
+- PR #195 (ALLOW_FASTMAIL_OUTREACH propagation) auto-merge enabled
 
 ## Lead Status Breakdown
-- new: 85
-- contacted: 52
+- new: 75
+- contacted: 62
 - bad_email: 27
 - bounced: 19
 - opted_out: 1
+- TOTAL: 184
 
-## Monday Pipeline Status
+## Pipeline Status
 
-### Call Pipeline: READY
-- 28 leads on today's call list (score >= 75, has phone)
-- 8 Priority 1 dentists with named contacts
+### Email Pipeline: FLOWING
+- 15 emails sent this run (10 initial + 5 followup)
+- daily_send_limit: 10
+- allowed_email_methods: direct, scrape
+- Deliverability gate: clear (0 emails in 7-day bounce window)
+- Next run will send up to 10 more
+
+### Call Pipeline: READY (business hours only)
+- 47 leads on call list across 7 services
 - AUTO_CALLS_ENABLED=1, MAX_PER_RUN=10
+- Skipped at midnight — will fire during 9AM-5PM EST
 
-### Email Pipeline: UNBLOCKED
-- 7-day bounce window is clear (0 emails sent since Feb 14)
-- 156 valid emails after hygiene cleanup
-- Ready to resume cold outreach to validated addresses
-
-### SMS Pipeline: PARTIALLY BLOCKED
-- 44% blocked (missing A2P 10DLC registration)
-- Fix: submit Primary Customer Profile via Twilio Console (manual step)
+### SMS Pipeline: PENDING VERIFICATION
+- Toll-free +18446480144 verification IN_REVIEW
+- Error 30032 until approved (typically 1-5 business days)
+- A2P 10DLC still blocked (needs Primary Customer Profile via Console)
 
 ## Blocking Items
-1. **Retell phone binding**: Requires adding card to Retell account ($0.10/min usage-based)
-2. **A2P 10DLC**: User must submit Customer Profile via Twilio Console (5 min manual step)
+1. **Toll-free verification**: IN_REVIEW — SMS delivery blocked until approved
+2. **A2P 10DLC**: Primary Customer Profile can only be submitted via Twilio Console (CAPTCHA blocks automation)
+3. **Retell phone binding**: Requires billing ($0.10/min)
 
 ## System State
 
@@ -63,23 +70,33 @@
 - `zero_revenue_runs: 0`
 
 ### Live Config (.env)
-- RETELL_AGENT_ID=agent_c142f005a895c3c43c1b3fa6aa (NEW)
-- DAILY_CALL_LIST_MIN_SCORE=70
+- ALLOW_FASTMAIL_OUTREACH=1 (NEW)
+- HIGH_INTENT_SKIP_COLD_EMAIL=0 (NEW)
+- HIGH_INTENT_EMAIL_MIN_SCORE=70 (NEW)
+- TWILIO_SMS_FROM_NUMBER=+18446480144 (NEW)
+- DAILY_CALL_LIST_SERVICES includes all 7 service types
 - AUTO_CALLS_MAX_PER_RUN=10
 - PAID_DAILY_CALL_CAP=50
 - PAID_DAILY_SMS_CAP=26
 
+### Twilio Resources
+- Toll-free: PNd737679bdedb7d723592fee316f616cd (+18446480144)
+- Toll-free verification: HH46161887e2818c0b7412e55c5e03c70f (IN_REVIEW)
+- Trust Product: BU8923bca310b8e576aeac9ce080a884e3 (in-review)
+- Messaging Service: MG68d8c0141190ed17eaf1d6caa8a24842
+- Studio Flow: FW9ea1354f8c4d4a0443929f3464c48a57
+
 ## Key Files
-- Lead hygiene: `autonomy/tools/lead_hygiene.py` (NEW)
-- Retell wiring: `autonomy/tools/wire_retell.py` (NEW)
-- Anchor scraper: `autonomy/tools/anchor_scraper.py`
+- Live job: `autonomy/tools/live_job.py` (MODIFIED — ALLOW_FASTMAIL fix)
+- Live config: `autonomy/state/config.callcatcherops.live.json` (MODIFIED — send limits, methods, services)
+- SMS module: `autonomy/tools/twilio_sms.py`
+- Inbox sync: `autonomy/tools/twilio_inbox_sync.py`
+- Lead hygiene: `autonomy/tools/lead_hygiene.py`
 - Call list: `autonomy/tools/call_list.py`
-- AI receptionist: `autonomy/tools/ai_receptionist.py`
-- Auto-call: `autonomy/tools/twilio_autocall.py`
-- Live job: `autonomy/tools/live_job.py`
 
 ## Notes for Next Session
-- Run lead hygiene before every outreach batch (cron-integrate into live_job.py)
-- Monitor email bounce rate after first validated send
-- When Retell billing is added: run `python3 -m autonomy.tools.wire_retell --bind-phone`
-- Check A2P Customer Profile approval status
+- Monitor email bounce rate from today's 15-email batch
+- Check toll-free verification status (HH46161887e2818c0b7412e55c5e03c70f)
+- Run live_job during business hours to test call pipeline
+- When toll-free approved: send test SMS to verify delivery
+- 75 new leads still waiting for first outreach (will be contacted in subsequent runs)
