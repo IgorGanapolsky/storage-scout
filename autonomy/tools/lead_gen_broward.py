@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -94,8 +95,9 @@ def verify_email_mx(email: str) -> bool:
         has_mx = bool(result.stdout.strip())
         _MX_CACHE[domain] = has_mx
         return has_mx
-    except Exception:
+    except Exception as exc:
         # Fail open — if we can't check, don't block the lead.
+        logging.getLogger(__name__).debug("MX lookup failed for %s: %s", domain, exc)
         _MX_CACHE[domain] = True
         return True
 
