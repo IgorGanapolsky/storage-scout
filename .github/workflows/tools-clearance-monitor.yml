@@ -1,0 +1,47 @@
+name: Tools Clearance Monitor
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install patchright
+          patchright install chromium
+
+      - name: Run clearance scraper
+        working-directory: tools_rental
+        run: python clearance_scraper.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+
+      - name: Upload results
+        uses: actions/upload-artifact@v6
+        with:
+          name: clearance-deals
+          path: tools_rental/clearance_deals.json
+          retention-days: 7
+
+      - name: Commit if deals found
+        run: |
+          if [ -f tools_rental/clearance_deals.json ]; then
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add tools_rental/clearance_deals.json || true
+            git diff --staged --quiet || git commit -m "Update clearance deals $(date +%Y-%m-%d)"
+            git push || true
+          fi
