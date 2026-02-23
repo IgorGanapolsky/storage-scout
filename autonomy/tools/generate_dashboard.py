@@ -1,4 +1,3 @@
-import os
 import json
 import sqlite3
 from pathlib import Path
@@ -12,7 +11,7 @@ OUTPUT_PATH = REPO_ROOT / "docs" / "status.html"
 def generate():
     total_leads = contacted = audits = 0
     actions = []
-    
+
     # Try to find the DB in common locations
     actual_db = DB_PATH
     if not actual_db.exists():
@@ -28,7 +27,7 @@ def generate():
             actions = conn.execute("SELECT ts, action_type, payload_json FROM actions ORDER BY ts DESC LIMIT 10").fetchall()
         except sqlite3.OperationalError:
             pass
-    
+
     html = f"""
     <html>
     <head>
@@ -45,10 +44,10 @@ def generate():
         </style>
     </head>
     <body>
-        <h1>🚀 CallCatcher Ops: Engine Status</h1>
-        <p class="status-live">● ENGINE IS LIVE & AUTONOMOUS</p>
+        <h1>CallCatcher Ops: Engine Status</h1>
+        <p class="status-live">ENGINE IS LIVE & AUTONOMOUS</p>
         <p>Last updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
-        
+
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
             <div class="card"><div class="label">Total Leads</div><div class="stat">{total_leads}</div></div>
             <div class="card"><div class="label">Pitches Sent</div><div class="stat">{contacted}</div></div>
@@ -60,14 +59,15 @@ def generate():
             <table>
                 <tr><th>Time</th><th>Action</th><th>Details</th></tr>
     """
-    
+
     for a in actions:
         try:
             payload = json.loads(a['payload_json'])
             detail = payload.get('company') or payload.get('lead_id') or ""
             html += f"<tr><td>{a['ts']}</td><td>{a['action_type']}</td><td>{detail}</td></tr>"
-        except: continue
-        
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+
     html += """
             </table>
         </div>
@@ -75,7 +75,7 @@ def generate():
     </body>
     </html>
     """
-    
+
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(html)
     print(f"Dashboard generated at {OUTPUT_PATH}")
