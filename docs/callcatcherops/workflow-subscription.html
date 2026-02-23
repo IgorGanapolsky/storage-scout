@@ -186,7 +186,7 @@
         </div>
         <div class="nav">
           <a class="button" href="./index.html">Main site</a>
-          <a class="button" href="./intake.html">Free baseline</a>
+          <a class="button" href="./intake.html">Free trial</a>
         </div>
       </header>
 
@@ -199,15 +199,16 @@
             not custom consulting.
           </p>
           <div class="cta-row">
-            <a class="button primary" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book free baseline</a>
-            <a class="button" id="cta-pay" href="https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01">Pay $249 kickoff</a>
+            <a class="button primary" id="cta-trial" href="./intake.html">Start Your Free 7-Day Trial</a>
+            <a class="button" id="cta-book" href="https://calendly.com/igorganapolsky/audit-call">Book a call instead</a>
           </div>
-          <p class="muted" style="margin-top: 10px; font-size: 0.95rem;">Kickoff is credited toward implementation.</p>
+          <p class="muted" style="margin-top: 8px; font-size: 0.95rem;">Set up in 10 minutes. See recovered calls in 24 hours.</p>
+          <p class="muted" style="margin-top: 4px; font-size: 0.95rem;">$197/mo after trial &middot; or pay $25/booking.</p>
         </div>
 
         <div class="card">
           <h2>Subscription</h2>
-          <div class="price">$497/mo</div>
+          <div class="price">$197/mo</div>
           <ul>
             <li>Weekly optimization + owner reporting</li>
             <li>Automated SMS/call follow-up tuning</li>
@@ -215,7 +216,7 @@
             <li>Compliance guardrails and monitoring</li>
           </ul>
           <p class="muted" style="margin-top: 14px;">
-            Typical flow: baseline -> priority kickoff -> QuickStart build -> recurring subscription.
+            Start with a free 7-day trial. $197/mo after trial, or pay $25/booking instead.
           </p>
         </div>
       </section>
@@ -242,10 +243,10 @@
         <div class="card">
           <h3>Commercial model</h3>
           <ul>
-            <li>Free baseline to quantify leakage</li>
-            <li>$249 kickoff to reserve priority setup</li>
-            <li>Implementation and launch support</li>
-            <li>$497/mo subscription for ongoing gains</li>
+            <li>7-day free trial to see results first</li>
+            <li>$197/mo subscription after trial</li>
+            <li>Or pay per appointment: $25/booking</li>
+            <li>No long-term contracts. Cancel anytime.</li>
           </ul>
         </div>
       </section>
@@ -268,8 +269,8 @@
           gtag('event', 'cta_click', { event_category: 'workflow_subscription', event_label: label });
         });
       };
+      trackCta('cta-trial', 'start_trial');
       trackCta('cta-book', 'book_baseline');
-      trackCta('cta-pay', 'pay_249');
     </script>
   </body>
 </html>
