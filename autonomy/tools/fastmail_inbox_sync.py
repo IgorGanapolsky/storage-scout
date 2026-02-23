@@ -316,11 +316,16 @@ def sync_fastmail_inbox(
                     elif cur_status != "replied":
                         store.mark_status_by_email(from_email_norm, "replied")
                         new_replies += 1
+                        triggered_by_step = store.get_last_email_step(from_email_norm)
                         store.log_action(
                             agent_id="agent.inbox_sync.v1",
                             action_type="lead.reply",
                             trace_id=f"imap:{uid}",
-                            payload={"lead_id": from_email_norm, "mailbox": mailbox},
+                            payload={
+                                "lead_id": from_email_norm,
+                                "mailbox": mailbox,
+                                "triggered_by_step": triggered_by_step,
+                            },
                         )
 
         # Persist state only after processing.

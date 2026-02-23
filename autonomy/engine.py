@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from .agents import LeadScorer, OutreachWriter
 from .ai_writer import AIOutreachWriter
 from .context_store import ContextStore, Lead
+from .tracking import tracking_pixel_url, generate_message_id, wrap_html_email
 from .goal_executor import GoalExecutor
 from .goal_planner import GoalPlanner
 from .observer import Observer, ObserverConfig, Reflector
@@ -214,11 +215,15 @@ class Engine:
 
             trace_id = str(uuid.uuid4())
             msg = self.writer.render(lead)
+            mid = generate_message_id(lead.id, 1)
+            pixel_url = tracking_pixel_url(mid)
+            html_body = wrap_html_email(msg["body"], pixel_url)
             status = self.sender.send(
                 to_email=lead.email,
                 subject=msg["subject"],
                 body=msg["body"],
                 reply_to=self.config.company["reply_to"],
+                html_body=html_body,
             )
 
             self.store.add_message(
@@ -227,6 +232,7 @@ class Engine:
                 subject=msg["subject"],
                 body=msg["body"],
                 status=status,
+                step=1,
             )
             if status == "sent":
                 self.store.mark_contacted(lead.id)
@@ -239,6 +245,7 @@ class Engine:
                     "lead_id": lead.id,
                     "email": lead.email,
                     "status": status,
+                    "step": 1,
                     "mode": self.config.mode,
                 },
             )
@@ -310,11 +317,15 @@ class Engine:
 
             trace_id = str(uuid.uuid4())
             msg = self.writer.render_followup(lead, step=step)
+            mid = generate_message_id(lead.id, step)
+            pixel_url = tracking_pixel_url(mid)
+            html_body = wrap_html_email(msg["body"], pixel_url)
             status = self.sender.send(
                 to_email=lead.email,
                 subject=msg["subject"],
                 body=msg["body"],
                 reply_to=self.config.company["reply_to"],
+                html_body=html_body,
             )
 
             self.store.add_message(
@@ -323,6 +334,7 @@ class Engine:
                 subject=msg["subject"],
                 body=msg["body"],
                 status=status,
+                step=step,
             )
             self.store.log_action(
                 agent_id=agent_id,
@@ -333,6 +345,7 @@ class Engine:
                     "lead_id": lead.id,
                     "email": lead.email,
                     "status": status,
+                    "step": step,
                     "mode": self.config.mode,
                 },
             )
