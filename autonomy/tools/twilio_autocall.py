@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.agent_commerce import request_json
 from autonomy.utils import UTC, normalize_us_phone, now_utc_iso, state_tz, truthy
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -184,6 +185,7 @@ def _twilio_request(
     path: str,
     data: dict[str, str] | None = None,
     timeout_secs: int = 20,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     url = f"https://api.twilio.com{path}"
     payload = None
@@ -191,13 +193,19 @@ def _twilio_request(
     if data is not None:
         payload = urllib.parse.urlencode(data).encode("utf-8")
         headers["Content-Type"] = "application/x-www-form-urlencoded"
-    req = urllib.request.Request(url, data=payload, headers=headers, method=method.upper())
-    with urllib.request.urlopen(req, timeout=timeout_secs) as resp:
-        body = resp.read()
-    return json.loads(body.decode("utf-8"))
+    return request_json(
+        method=method,
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout_secs=timeout_secs,
+        agent_id="agent.autocall.twilio.v1",
+        env=env,
+        urlopen_func=urllib.request.urlopen,
+    )
 
 
-def create_call(cfg: TwilioConfig, *, to_number: str) -> dict[str, Any]:
+def create_call(cfg: TwilioConfig, *, to_number: str, env: dict[str, str] | None = None) -> dict[str, Any]:
     data: dict[str, str] = {
         "To": to_number,
         "From": cfg.from_number,
@@ -211,24 +219,31 @@ def create_call(cfg: TwilioConfig, *, to_number: str) -> dict[str, Any]:
         method="POST",
         path=f"/2010-04-01/Accounts/{cfg.account_sid}/Calls.json",
         data=data,
+        env=env,
     )
 
 
-def fetch_call(cfg: TwilioConfig, *, call_sid: str) -> dict[str, Any]:
+def fetch_call(cfg: TwilioConfig, *, call_sid: str, env: dict[str, str] | None = None) -> dict[str, Any]:
     return _twilio_request(
         cfg=cfg,
         method="GET",
         path=f"/2010-04-01/Accounts/{cfg.account_sid}/Calls/{call_sid}.json",
         data=None,
+        env=env,
     )
 
 
-def wait_for_call_terminal_status(cfg: TwilioConfig, *, call_sid: str) -> dict[str, Any]:
+def wait_for_call_terminal_status(
+    cfg: TwilioConfig,
+    *,
+    call_sid: str,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     terminal = {"completed", "busy", "failed", "no-answer", "canceled"}
     deadline = time.monotonic() + float(cfg.poll_timeout_secs)
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
-        last = fetch_call(cfg, call_sid=call_sid)
+        last = fetch_call(cfg, call_sid=call_sid, env=env)
         status = str(last.get("status") or "").strip().lower()
         if status in terminal:
             return last
@@ -382,9 +397,9 @@ def run_auto_calls(
             # Place call and wait for terminal status (best-effort).
             attempted_at = now_utc_iso()
             try:
-                created = create_call(cfg, to_number=to_phone)
+                created = create_call(cfg, to_number=to_phone, env=env)
                 call_sid = str(created.get("sid") or "")
-                final = wait_for_call_terminal_status(cfg, call_sid=call_sid) if call_sid else created
+                final = wait_for_call_terminal_status(cfg, call_sid=call_sid, env=env) if call_sid else created
                 outcome, notes = map_twilio_call_to_outcome(final)
             except Exception as exc:
                 notes, error_details = _format_exception_notes(exc)

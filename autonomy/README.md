@@ -149,3 +149,18 @@ Set in local `.env`:
 - `REPORT_DELIVERY=email|ntfy|both|none` (default: `email`)
 - `NTFY_SERVER=https://ntfy.sh` (optional; for `REPORT_DELIVERY=ntfy|both`)
 - `NTFY_TOPIC=topic-name[,another-topic]` (required for `REPORT_DELIVERY=ntfy|both`)
+
+## Agent Commerce (Lightweight, Non-Crypto)
+Twilio API calls now include lightweight agent identity headers plus optional request signing and per-call metering.
+
+Set in local `.env`:
+- `AGENT_COMMERCE_AGENT_ID=agent.callcatcherops.v1` (optional override)
+- `AGENT_COMMERCE_PROTOCOL=acp-lite/2026-02` (optional override)
+- `AGENT_COMMERCE_SIGNING_KEY=...` (optional; enables `X-Agent-Signature` HMAC header)
+- `AGENT_COMMERCE_METERING_ENABLED=1` (default on)
+- `AGENT_API_METER_FILE=autonomy/state/agent_api_metering.jsonl` (optional override; must stay under `autonomy/state`)
+
+This provides:
+- request-level API metering (`status_code`, `duration_ms`, `request_bytes`)
+- consistent agent identity headers across autonomous Twilio traffic
+- compatibility with future pay-per-call/accounting models without adopting crypto rails today

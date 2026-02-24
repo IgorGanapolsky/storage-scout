@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.agent_commerce import request_json
 from autonomy.utils import UTC, normalize_us_phone, state_tz, truthy
 
 # Re-export for backward compatibility (tests import this name).
@@ -137,7 +138,13 @@ def _auth_header(cfg: TwilioSmsConfig) -> str:
     return f"Basic {b64}"
 
 
-def send_sms(cfg: TwilioSmsConfig, *, to_number: str, body_override: str | None = None) -> dict[str, Any]:
+def send_sms(
+    cfg: TwilioSmsConfig,
+    *,
+    to_number: str,
+    body_override: str | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     body = (body_override or "").strip() or cfg.body
     url = f"https://api.twilio.com/2010-04-01/Accounts/{cfg.account_sid}/Messages.json"
     data = urllib.parse.urlencode({
@@ -149,10 +156,16 @@ def send_sms(cfg: TwilioSmsConfig, *, to_number: str, body_override: str | None 
         "Authorization": _auth_header(cfg),
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read()
-    return json.loads(body.decode("utf-8"))
+    return request_json(
+        method="POST",
+        url=url,
+        headers=headers,
+        payload=data,
+        timeout_secs=20,
+        agent_id="agent.sms.twilio.v1",
+        env=env,
+        urlopen_func=urllib.request.urlopen,
+    )
 
 
 def _lead_texted_recently(store: ContextStore, *, lead_id: str, cooldown_days: int) -> bool:
@@ -342,7 +355,7 @@ def run_sms_followup(
         }
 
         try:
-            resp = send_sms(cfg, to_number=phone)
+            resp = send_sms(cfg, to_number=phone, env=env)
             sid = resp.get("sid", "")
             status = resp.get("status", "")
             payload["outcome"] = "delivered"
@@ -451,7 +464,7 @@ def run_sms_followup(
             }
 
             try:
-                resp = send_sms(cfg, to_number=phone, body_override=cfg.second_nudge_body)
+                resp = send_sms(cfg, to_number=phone, body_override=cfg.second_nudge_body, env=env)
                 sid = resp.get("sid", "")
                 status = resp.get("status", "")
                 payload["outcome"] = "delivered"
