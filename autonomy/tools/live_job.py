@@ -41,6 +41,10 @@ from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_interest_nudge import InterestNudgeResult, run_interest_nudges
 from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
+from autonomy.tools.twilio_tollfree_watchdog import (
+    TwilioTollfreeWatchdogResult,
+    run_twilio_tollfree_watchdog,
+)
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
@@ -452,6 +456,7 @@ def _format_report(
     sms_followup: SmsResult | None = None,
     interest_nudge: InterestNudgeResult | None = None,
     twilio_inbox: TwilioInboxResult | None = None,
+    twilio_tollfree: TwilioTollfreeWatchdogResult | None = None,
     revenue_learning: dict | None = None,
     guardrails: dict | None = None,
     engine_result: dict,
@@ -531,6 +536,18 @@ def _format_report(
         lines.append("Inbox sync (Twilio SMS)")
         for k, v in asdict(twilio_inbox).items():
             lines.append(f"- {k}: {v}")
+    if twilio_tollfree is not None:
+        lines.append("")
+        lines.append("Twilio toll-free verification")
+        lines.append(f"- reason: {twilio_tollfree.reason}")
+        lines.append(f"- status: {twilio_tollfree.status}")
+        lines.append(f"- verification_sid: {twilio_tollfree.verification_sid}")
+        lines.append(f"- error_code: {twilio_tollfree.error_code}")
+        lines.append(f"- rejection_reason: {twilio_tollfree.rejection_reason}")
+        lines.append(f"- auto_fix_attempted: {twilio_tollfree.auto_fix_attempted}")
+        lines.append(f"- auto_fix_applied: {twilio_tollfree.auto_fix_applied}")
+        lines.append(f"- should_alert: {twilio_tollfree.should_alert}")
+        lines.append(f"- alert_reason: {twilio_tollfree.alert_reason}")
     if revenue_learning:
         lines.append("")
         lines.append("Revenue learning (RAG)")
@@ -814,6 +831,7 @@ def main() -> None:
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     guardrails: dict[str, object] = {}
     twilio_inbox_result = TwilioInboxResult(reason="not_run")
+    twilio_tollfree_result: TwilioTollfreeWatchdogResult | None = None
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -856,6 +874,36 @@ def main() -> None:
     else:
         twilio_inbox_result = TwilioInboxResult(reason="disabled")
     print(f"live_job: twilio_inbox done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    if truthy(env.get("TWILIO_TOLLFREE_WATCHDOG_ENABLED"), default=True):
+        twilio_tollfree_result = run_twilio_tollfree_watchdog(
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
+            env=env,
+            company_name=cfg.company.get("name", ""),
+        )
+    else:
+        twilio_tollfree_result = TwilioTollfreeWatchdogResult(reason="disabled")
+    print(f"live_job: twilio_tollfree done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
+
+    if twilio_tollfree_result is not None:
+        guardrails["twilio_tollfree_reason"] = twilio_tollfree_result.reason
+        guardrails["twilio_tollfree_status"] = twilio_tollfree_result.status
+        guardrails["twilio_tollfree_error_code"] = twilio_tollfree_result.error_code
+        guardrails["twilio_tollfree_auto_fix_applied"] = bool(twilio_tollfree_result.auto_fix_applied)
+        guardrails["twilio_tollfree_alert"] = bool(twilio_tollfree_result.should_alert)
+        guardrails["twilio_tollfree_alert_reason"] = twilio_tollfree_result.alert_reason
+        if twilio_tollfree_result.should_alert:
+            _log_guard_block(
+                store=guard_store,
+                channel="twilio.tollfree_verification",
+                reason=twilio_tollfree_result.alert_reason or "twilio_tollfree_alert",
+                details={
+                    "status": twilio_tollfree_result.status,
+                    "error_code": twilio_tollfree_result.error_code,
+                    "verification_sid": twilio_tollfree_result.verification_sid,
+                },
+            )
 
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
@@ -1177,6 +1225,7 @@ def main() -> None:
         sms_followup=sms_result,
         interest_nudge=interest_nudge_result,
         twilio_inbox=twilio_inbox_result,
+        twilio_tollfree=twilio_tollfree_result,
         revenue_learning=revenue_learning,
         guardrails=guardrails,
         engine_result=engine_result,
@@ -1202,6 +1251,7 @@ def main() -> None:
         "engine_result": engine_result,
         "inbox_result": asdict(inbox_result),
         "twilio_inbox_result": asdict(twilio_inbox_result),
+        "twilio_tollfree_result": asdict(twilio_tollfree_result) if twilio_tollfree_result is not None else None,
         "interest_nudge_result": asdict(interest_nudge_result) if interest_nudge_result is not None else None,
         "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
@@ -1227,6 +1277,8 @@ def main() -> None:
     if truthy(env.get("REPORT_URGENT_ON_REPLY"), default=False) and int(inbox_result.new_replies or 0) > 0:
         urgent_change = True
     if truthy(env.get("REPORT_URGENT_ON_TWILIO_INTEREST"), default=False) and int(twilio_inbox_result.interested or 0) > 0:
+        urgent_change = True
+    if twilio_tollfree_result is not None and bool(twilio_tollfree_result.should_alert):
         urgent_change = True
     if truthy(env.get("REPORT_URGENT_ON_FUNNEL_ISSUES"), default=True) and funnel_result is not None and not funnel_result.is_healthy:
         urgent_change = True
