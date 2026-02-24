@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,9 +87,24 @@ def _write_meter_event(*, env: dict[str, str] | None, event: dict[str, object]) 
         out = _meter_path(env)
     except Exception:
         return
+    # Persist only a fixed, sanitized schema to avoid writing sensitive details.
+    safe_event = {
+        "ts": str(event.get("ts") or ""),
+        "agent_id": str(event.get("agent_id") or ""),
+        "request_id": str(event.get("request_id") or ""),
+        "method": str(event.get("method") or ""),
+        "endpoint_host": str(event.get("endpoint_host") or ""),
+        "endpoint_path_sha256": str(event.get("endpoint_path_sha256") or ""),
+        "status_code": int(event.get("status_code") or 0),
+        "ok": bool(event.get("ok")),
+        "error_type": str(event.get("error_type") or ""),
+        "duration_ms": int(event.get("duration_ms") or 0),
+        "request_bytes": int(event.get("request_bytes") or 0),
+        "response_bytes": int(event.get("response_bytes") or 0),
+    }
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event, sort_keys=True) + "\n")
+        fh.write(json.dumps(safe_event, sort_keys=True) + "\n")
 
 
 def request_json(
@@ -110,12 +126,14 @@ def request_json(
 
     def _base_event(*, ok: bool, status_code: int, error_type: str = "") -> dict[str, object]:
         duration_ms = int((time.perf_counter() - t0) * 1000)
+        parts = urllib.parse.urlsplit(url)
         return {
             "ts": _now_iso_utc(),
             "agent_id": agent_id,
             "request_id": request_id,
             "method": method.upper(),
-            "url": url,
+            "endpoint_host": (parts.netloc or "").lower(),
+            "endpoint_path_sha256": hashlib.sha256((parts.path or "").encode("utf-8")).hexdigest(),
             "status_code": int(status_code),
             "ok": bool(ok),
             "error_type": error_type,
