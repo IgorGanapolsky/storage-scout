@@ -218,10 +218,10 @@ def main() -> None:
         if not args.llm_id or not args.prompt_file:
             print("Error: --llm-id and --prompt-file are required for update_llm")
             sys.exit(1)
-        
+
         print(f"Loading updated prompt from {args.prompt_file}...")
         prompt_text = load_prompt(args.prompt_file)
-        
+
         print(f"Updating LLM {args.llm_id}...")
         result = client.update_retell_llm(args.llm_id, prompt_text)
         print("LLM updated successfully!")

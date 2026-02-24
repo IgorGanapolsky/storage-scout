@@ -33,7 +33,7 @@ STRIPE_SUBJECT_RE = re.compile(
     re.IGNORECASE,
 )
 STRIPE_BODY_RE = re.compile(
-    r"(stripe\.com/receipts|view your invoice|payment_intent\.succeeded|checkout\.session\.completed)",
+    r"(stripe\.com/receipts|checkout\.stripe\.com/pay/|view your invoice|payment_intent\.succeeded|checkout\.session\.completed)",
     re.IGNORECASE,
 )
 
