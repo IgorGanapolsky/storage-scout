@@ -30,8 +30,10 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/tools/opt_out.py` - record opt-outs into sqlite
 - `autonomy/tools/fastmail_inbox_sync.py` - mark bounces/replies from inbox signals (no PII output)
 - `autonomy/tools/twilio_interest_nudge.py` - nudge inbound "interested" SMS leads toward booking/kickoff (fully automated)
+- `autonomy/tools/twilio_tollfree_watchdog.py` - monitor + auto-remediate Twilio toll-free verification status
 - `autonomy/tools/live_job.py` - live daily job: inbox sync + outreach + report delivery (email or ntfy)
 - `autonomy/tools/install_launchd_daily.py` - install macOS LaunchAgent for daily automation
+- `autonomy/tools/install_launchd_tollfree_watchdog.py` - install hourly macOS LaunchAgent for toll-free verification monitoring
 
 ## Notes
 - No secrets are committed.
@@ -85,6 +87,13 @@ Optional tuning:
 - `AUTO_INTEREST_NUDGE_COOLDOWN_HOURS=24`
 - `AUTO_INTEREST_NUDGE_LOOKBACK_DAYS=14`
 - `PAID_DAILY_SMS_INTEREST_RESERVE=3` (reserve SMS quota/day for inbound "interested" nudges)
+- `TWILIO_TOLLFREE_WATCHDOG_ENABLED=1` (default on in live job)
+- `TWILIO_TOLLFREE_AUTOFIX_ENABLED=1` (default on; fix known editable rejection patterns such as `30485`)
+- `TWILIO_TOLLFREE_AUTOFIX_ERROR_CODES=30485`
+- `TWILIO_TOLLFREE_STALE_REVIEW_HOURS=24`
+- `TWILIO_TOLLFREE_ALERT_COOLDOWN_HOURS=12` (dedupe repeated identical alerts)
+- `TWILIO_TOLLFREE_NOTIFY_ON_STATUS_CHANGE=1`
+- `TWILIO_TOLLFREE_NOTIFY_ON_APPROVED=1`
 - `PRIORITY_KICKOFF_URL=https://buy.stripe.com/...` (optional override for payment CTA in interested auto-replies)
 - `HIGH_INTENT_OUTREACH_ONLY=1` (default on; tighten to warmer leads)
 - `HIGH_INTENT_SKIP_COLD_EMAIL=1` (default on; suppress initial cold emails in high-intent mode)
@@ -92,6 +101,16 @@ Optional tuning:
 - `DAILY_CALL_LIST_STATUSES=replied,contacted,new`
 - `DAILY_CALL_LIST_MIN_SCORE=80`
 - `DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX=1`
+
+Run the toll-free watchdog on demand:
+```bash
+python3 autonomy/tools/twilio_tollfree_watchdog.py --dotenv .env --exit-on-alert
+```
+
+Install hourly watchdog scheduling (macOS launchd):
+```bash
+python3 autonomy/tools/install_launchd_tollfree_watchdog.py
+```
 
 ## Lead Generation (Broward County)
 `autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
