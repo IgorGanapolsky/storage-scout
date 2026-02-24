@@ -6,7 +6,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-export GITHUB_TOKEN="${GITHUB_TOKEN:-REMOVED_GITHUB_TOKEN}"
+if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+    export GITHUB_TOKEN="$(gh auth token 2>/dev/null || true)"
+fi
 
 echo "🚀 Initiating GSD Autonomous Deployment & Hybrid RLHF Sync..."
 
