@@ -492,8 +492,12 @@ def run_twilio_tollfree_watchdog(
 
 
 def _resolve_path(repo_root: Path, raw: str) -> Path:
-    path = Path(raw)
-    return path if path.is_absolute() else (repo_root / path).resolve()
+    root = repo_root.resolve()
+    path = Path(raw).expanduser()
+    resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"path must stay inside repo root: {raw}")
+    return resolved
 
 
 def main() -> None:

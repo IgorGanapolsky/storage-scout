@@ -6,8 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from autonomy.utils import UTC
-from autonomy.tools.twilio_tollfree_watchdog import run_twilio_tollfree_watchdog
+from autonomy.tools.twilio_tollfree_watchdog import _resolve_path, run_twilio_tollfree_watchdog
 
 
 class _FakeHTTPResponse:
@@ -310,3 +312,18 @@ def test_watchdog_suppresses_duplicate_stale_alert_within_cooldown(monkeypatch, 
     assert result.alert_reason == "stale_in_review"
     assert result.should_alert is False
     assert result.alert_suppressed is True
+
+
+def test_resolve_path_keeps_paths_inside_repo(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    resolved = _resolve_path(repo_root, "autonomy/state/watchdog.json")
+    assert resolved == (repo_root / "autonomy/state/watchdog.json").resolve()
+
+    with pytest.raises(ValueError, match="path must stay inside repo root"):
+        _resolve_path(repo_root, "../outside.json")
+
+    outside = tmp_path / "outside.json"
+    with pytest.raises(ValueError, match="path must stay inside repo root"):
+        _resolve_path(repo_root, str(outside))
