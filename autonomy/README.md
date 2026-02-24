@@ -101,6 +101,13 @@ Optional tuning:
 - `DAILY_CALL_LIST_STATUSES=replied,contacted,new`
 - `DAILY_CALL_LIST_MIN_SCORE=80`
 - `DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX=1`
+- `AUTO_LEAD_HYGIENE_ENABLED=1` (default on; marks invalid emails as `bad_email` before deliverability gating)
+- `AUTO_LEAD_HYGIENE_MX_CHECK=1` (default on; can disable for faster/lighter runs)
+- `AUTO_LEAD_HYGIENE_SMTP_PROBE=0` (default off; slow)
+- `AUTO_LEAD_HYGIENE_CALL_FILTER_ENABLED=1` (default on; drops bad-phone/bad-email artifacts from pre-dial list)
+- `AUTO_LEAD_HYGIENE_SAMPLE_LIMIT=20` (max sanitized samples retained in daily report)
+- `AUTO_LEAD_HYGIENE_REPORT_PATH=autonomy/state/lead_hygiene_removal_<YYYY-MM-DD>.json` (daily artifact)
+- `AUTO_LEAD_HYGIENE_REPORT_LATEST_PATH=autonomy/state/lead_hygiene_removal_latest.json`
 
 Run the toll-free watchdog on demand:
 ```bash

@@ -27,6 +27,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     sync_fastmail_inbox,
 )
 from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
+from autonomy.tools.lead_hygiene import clean_leads_db, validate_email
 from autonomy.tools.lead_gen_broward import (
     DEFAULT_CATEGORIES,
     build_leads,
@@ -99,6 +100,186 @@ def _read_json(path: Path) -> dict:
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _resolve_state_output_path(*, repo_root: Path, raw: str | None, default_rel: str) -> Path:
+    state_root = (repo_root / "autonomy" / "state").resolve()
+    selected = (raw or "").strip() or str(default_rel)
+    candidate = Path(selected)
+    resolved = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
+    if resolved == state_root or state_root in resolved.parents:
+        return resolved
+    return (repo_root / default_rel).resolve()
+
+
+def _email_sha256(email: str) -> str:
+    return hashlib.sha256((email or "").strip().lower().encode("utf-8")).hexdigest()
+
+
+def _email_domain(email: str) -> str:
+    value = (email or "").strip().lower()
+    if "@" not in value:
+        return ""
+    return value.split("@", 1)[1]
+
+
+def _phone_last4(phone: str) -> str:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return digits[-4:] if len(digits) >= 4 else ""
+
+
+def _is_viable_phone(phone: str) -> bool:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return len(digits) >= 10
+
+
+def _filter_call_list_rows_for_hygiene(
+    *,
+    rows: list[object],
+    enabled: bool,
+    sample_limit: int,
+) -> tuple[list[object], dict[str, object]]:
+    if not enabled:
+        return list(rows), {
+            "enabled": False,
+            "reason": "disabled",
+            "removed_count": 0,
+            "kept_count": len(rows),
+            "reason_counts": {},
+            "samples": [],
+        }
+
+    max_samples = max(0, int(sample_limit))
+    kept: list[object] = []
+    reason_counts: dict[str, int] = {}
+    samples: list[dict[str, object]] = []
+
+    for row in rows:
+        reasons: list[str] = []
+        email = str(getattr(row, "email", "") or "").strip().lower()
+        phone = str(getattr(row, "phone", "") or "").strip()
+
+        if not _is_viable_phone(phone):
+            reasons.append("bad_phone")
+        if email:
+            is_valid, reason = validate_email(email, smtp=False, check_mx=False)
+            if not is_valid:
+                reasons.append(f"email_{reason}")
+
+        if not reasons:
+            kept.append(row)
+            continue
+
+        for reason in reasons:
+            reason_counts[reason] = int(reason_counts.get(reason, 0)) + 1
+        if len(samples) < max_samples:
+            samples.append(
+                {
+                    "company": str(getattr(row, "company", "") or ""),
+                    "service": str(getattr(row, "service", "") or ""),
+                    "lead_status": str(getattr(row, "lead_status", "") or ""),
+                    "email_domain": _email_domain(email),
+                    "email_sha256": _email_sha256(email),
+                    "phone_last4": _phone_last4(phone),
+                    "reasons": reasons,
+                }
+            )
+
+    removed = max(0, len(rows) - len(kept))
+    return kept, {
+        "enabled": True,
+        "reason": "ok",
+        "removed_count": int(removed),
+        "kept_count": int(len(kept)),
+        "reason_counts": reason_counts,
+        "samples": samples,
+    }
+
+
+def _run_autonomous_lead_hygiene(*, sqlite_path: Path, env: dict[str, str]) -> dict[str, object]:
+    enabled = truthy(env.get("AUTO_LEAD_HYGIENE_ENABLED"), default=True)
+    dry_run = truthy(env.get("AUTO_LEAD_HYGIENE_DRY_RUN"), default=False)
+    smtp_probe = truthy(env.get("AUTO_LEAD_HYGIENE_SMTP_PROBE"), default=False)
+    check_mx = truthy(env.get("AUTO_LEAD_HYGIENE_MX_CHECK"), default=True)
+    sample_limit = max(0, _int_env(env.get("AUTO_LEAD_HYGIENE_SAMPLE_LIMIT"), 20))
+
+    result: dict[str, object] = {
+        "enabled": bool(enabled),
+        "reason": "disabled" if not enabled else "ok",
+        "dry_run": bool(dry_run),
+        "smtp_probe": bool(smtp_probe),
+        "mx_check": bool(check_mx),
+        "total": 0,
+        "valid": 0,
+        "invalid": 0,
+        "skipped": 0,
+        "invalid_reasons": {},
+        "invalid_samples": [],
+    }
+    if not enabled:
+        return result
+
+    try:
+        cleaned = clean_leads_db(
+            str(sqlite_path),
+            dry_run=dry_run,
+            smtp=smtp_probe,
+            check_mx=check_mx,
+            sample_limit=sample_limit,
+        )
+        result.update(cleaned)
+        result["reason"] = "ok"
+    except Exception as exc:
+        result["reason"] = f"error:{type(exc).__name__}"
+        result["error"] = str(exc)
+    return result
+
+
+def _write_lead_hygiene_daily_report(
+    *,
+    repo_root: Path,
+    env: dict[str, str],
+    sqlite_path: Path,
+    lead_hygiene: dict[str, object],
+    call_list: dict | None,
+) -> dict[str, str]:
+    today_utc = datetime.now(UTC).date().isoformat()
+    default_daily_rel = f"autonomy/state/lead_hygiene_removal_{today_utc}.json"
+    daily_report = _resolve_state_output_path(
+        repo_root=repo_root,
+        raw=env.get("AUTO_LEAD_HYGIENE_REPORT_PATH"),
+        default_rel=default_daily_rel,
+    )
+    latest_report = _resolve_state_output_path(
+        repo_root=repo_root,
+        raw=env.get("AUTO_LEAD_HYGIENE_REPORT_LATEST_PATH"),
+        default_rel="autonomy/state/lead_hygiene_removal_latest.json",
+    )
+
+    call_filter = {}
+    if isinstance(call_list, dict):
+        call_filter = dict(call_list.get("hygiene_filter") or {})
+
+    payload = {
+        "as_of_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "date_utc": today_utc,
+        "sqlite_path": str(sqlite_path),
+        "lead_hygiene": dict(lead_hygiene),
+        "call_list_filter": call_filter,
+    }
+    _write_json(daily_report, payload)
+    _write_json(latest_report, payload)
+
+    def _rel(path: Path) -> str:
+        try:
+            return str(path.relative_to(repo_root))
+        except Exception:
+            return str(path)
+
+    return {
+        "daily_report_path": _rel(daily_report),
+        "latest_report_path": _rel(latest_report),
+    }
 
 
 def _int_env(raw: str | None, default: int) -> int:
@@ -451,6 +632,7 @@ def _send_ntfy(
 def _format_report(
     *,
     leadgen_new: int,
+    lead_hygiene: dict[str, object] | None = None,
     call_list: dict | None = None,
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
@@ -474,6 +656,17 @@ def _format_report(
     lines.append("")
     lines.append("Lead gen")
     lines.append(f"- new_leads_generated: {int(leadgen_new)}")
+    if lead_hygiene is not None:
+        lines.append("")
+        lines.append("Lead hygiene")
+        lines.append(f"- status: {lead_hygiene.get('reason') or ''}")
+        lines.append(f"- enabled: {bool(lead_hygiene.get('enabled', False))}")
+        lines.append(f"- scanned: {int(lead_hygiene.get('total') or 0)}")
+        lines.append(f"- invalid_marked: {int(lead_hygiene.get('invalid') or 0)}")
+        lines.append(f"- skipped: {int(lead_hygiene.get('skipped') or 0)}")
+        lines.append(f"- call_list_removed: {int(lead_hygiene.get('call_list_removed') or 0)}")
+        lines.append(f"- daily_report_path: {lead_hygiene.get('daily_report_path') or ''}")
+        lines.append(f"- latest_report_path: {lead_hygiene.get('latest_report_path') or ''}")
     if call_list is not None:
         lines.append("")
         lines.append("Call list (phone-first)")
@@ -746,6 +939,11 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         include_opt_outs=False,
         source_csv=source_csv_path,
     )
+    rows, hygiene_filter = _filter_call_list_rows_for_hygiene(
+        rows=list(rows),
+        enabled=truthy(env.get("AUTO_LEAD_HYGIENE_CALL_FILTER_ENABLED"), default=True),
+        sample_limit=max(0, _int_env(env.get("AUTO_LEAD_HYGIENE_SAMPLE_LIMIT"), 20)),
+    )
     output_path = (repo_root / output_rel).resolve()
     write_call_list(output_path, rows)
 
@@ -758,6 +956,7 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         "statuses": statuses,
         "min_score": min_score,
         "exclude_role_inbox": bool(exclude_role_inbox),
+        "hygiene_filter": hygiene_filter,
     }
 
 
@@ -832,6 +1031,7 @@ def main() -> None:
     guardrails: dict[str, object] = {}
     twilio_inbox_result = TwilioInboxResult(reason="not_run")
     twilio_tollfree_result: TwilioTollfreeWatchdogResult | None = None
+    lead_hygiene_result: dict[str, object] = {}
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -904,6 +1104,15 @@ def main() -> None:
                     "verification_sid": twilio_tollfree_result.verification_sid,
                 },
             )
+
+    # 1.5) Hygiene pass before deliverability/call sequencing.
+    lead_hygiene_result = _run_autonomous_lead_hygiene(sqlite_path=sqlite_path, env=env)
+    guardrails["lead_hygiene_enabled"] = bool(lead_hygiene_result.get("enabled", False))
+    guardrails["lead_hygiene_reason"] = str(lead_hygiene_result.get("reason") or "")
+    guardrails["lead_hygiene_scanned"] = int(lead_hygiene_result.get("total") or 0)
+    guardrails["lead_hygiene_invalid_marked"] = int(lead_hygiene_result.get("invalid") or 0)
+    guardrails["lead_hygiene_call_rows_removed"] = 0
+    print(f"live_job: lead_hygiene done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     board_pre = load_scoreboard(sqlite_path, days=int(args.scoreboard_days))
 
@@ -1092,10 +1301,27 @@ def main() -> None:
         guardrails["call_list_statuses"] = call_list.get("statuses") or []
         guardrails["call_list_min_score"] = int(call_list.get("min_score") or 0)
         guardrails["call_list_exclude_role_inbox"] = bool(call_list.get("exclude_role_inbox"))
+        hygiene_filter = dict(call_list.get("hygiene_filter") or {})
+        guardrails["lead_hygiene_call_rows_removed"] = int(hygiene_filter.get("removed_count") or 0)
+        guardrails["lead_hygiene_call_rows_kept"] = int(hygiene_filter.get("kept_count") or 0)
+        guardrails["lead_hygiene_call_filter_enabled"] = bool(hygiene_filter.get("enabled", False))
+        guardrails["lead_hygiene_call_filter_reasons"] = dict(hygiene_filter.get("reason_counts") or {})
 
         # NEW: Run autonomous audits
         audit_results = _run_missed_call_audits(call_list=call_list["data"], env=env)
         guardrails["audits_generated"] = len(audit_results)
+
+    lead_hygiene_paths = _write_lead_hygiene_daily_report(
+        repo_root=repo_root,
+        env=env,
+        sqlite_path=sqlite_path,
+        lead_hygiene=lead_hygiene_result,
+        call_list=call_list,
+    )
+    lead_hygiene_result["call_list_removed"] = int(guardrails.get("lead_hygiene_call_rows_removed") or 0)
+    lead_hygiene_result["daily_report_path"] = str(lead_hygiene_paths.get("daily_report_path") or "")
+    lead_hygiene_result["latest_report_path"] = str(lead_hygiene_paths.get("latest_report_path") or "")
+    guardrails["lead_hygiene_daily_report_path"] = str(lead_hygiene_paths.get("daily_report_path") or "")
 
     auto_calls: AutoCallResult | None = None
     if call_list is not None and isinstance(call_list.get("data"), list):
@@ -1220,6 +1446,7 @@ def main() -> None:
     }
     report = _format_report(
         leadgen_new=leadgen_new,
+        lead_hygiene=lead_hygiene_result,
         call_list=call_list,
         auto_calls=auto_calls,
         sms_followup=sms_result,
@@ -1253,6 +1480,7 @@ def main() -> None:
         "twilio_inbox_result": asdict(twilio_inbox_result),
         "twilio_tollfree_result": asdict(twilio_tollfree_result) if twilio_tollfree_result is not None else None,
         "interest_nudge_result": asdict(interest_nudge_result) if interest_nudge_result is not None else None,
+        "lead_hygiene": lead_hygiene_result,
         "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
         "guardrails": guardrails,

@@ -15,6 +15,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     _looks_like_stripe_payment,
 )
 from autonomy.tools.live_job import (
+    _filter_call_list_rows_for_hygiene,
     _maybe_write_call_list,
     _compute_sms_channel_budgets,
     _count_actions_today,
@@ -22,6 +23,7 @@ from autonomy.tools.live_job import (
     _format_report,
     _parse_categories,
 )
+from autonomy.tools.call_list import CallListRow
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
 from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
 
@@ -189,6 +191,16 @@ def test_live_job_report_formatting() -> None:
     )
     report = _format_report(
         leadgen_new=0,
+        lead_hygiene={
+            "reason": "ok",
+            "enabled": True,
+            "total": 12,
+            "invalid": 2,
+            "skipped": 0,
+            "call_list_removed": 1,
+            "daily_report_path": "autonomy/state/lead_hygiene_removal_2026-02-24.json",
+            "latest_report_path": "autonomy/state/lead_hygiene_removal_latest.json",
+        },
         engine_result={"sent_initial": 0, "sent_followup": 0},
         inbox_result=inbox,
         scoreboard=board,
@@ -196,9 +208,81 @@ def test_live_job_report_formatting() -> None:
         kpi={"bookings_today": 0, "payments_today": 0, "bookings_window": 0, "payments_window": 0},
     )
     assert "CallCatcher Ops Daily Report" in report
+    assert "Lead hygiene" in report
+    assert "- invalid_marked: 2" in report
     assert "Revenue KPI" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
+
+
+def test_filter_call_list_rows_for_hygiene_removes_bad_rows() -> None:
+    rows = [
+        CallListRow(
+            company="Good Co",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="+1 (954) 555-1212",
+            website="",
+            contact_name="",
+            email="owner@goodco.com",
+            email_method="direct",
+            lead_status="new",
+            score=92,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+        CallListRow(
+            company="Artifact LLC",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="+1 (954) 555-1213",
+            website="",
+            contact_name="",
+            email="asset@3x.png",
+            email_method="scrape",
+            lead_status="new",
+            score=88,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+        CallListRow(
+            company="No Phone Inc",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="N/A",
+            website="",
+            contact_name="",
+            email="owner@nophone.com",
+            email_method="direct",
+            lead_status="contacted",
+            score=85,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+    ]
+
+    kept, summary = _filter_call_list_rows_for_hygiene(rows=rows, enabled=True, sample_limit=10)
+    assert len(kept) == 1
+    assert int(summary["removed_count"]) == 2
+    reason_counts = dict(summary["reason_counts"])
+    assert int(reason_counts["email_junk_artifact"]) == 1
+    assert int(reason_counts["bad_phone"]) == 1
+    samples = list(summary["samples"])
+    assert len(samples) == 2
+    assert all("email_sha256" in s for s in samples)
+    assert all("@" not in str(s) for s in samples)
 
 
 def test_live_job_report_includes_guardrails_section() -> None:
