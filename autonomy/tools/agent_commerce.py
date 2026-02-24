@@ -6,7 +6,6 @@ import json
 import os
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,16 +79,37 @@ def _meter_path(env: dict[str, str] | None) -> Path:
     return _resolve_state_path(raw)
 
 
-def _write_meter_event(*, env: dict[str, str] | None, event: dict[str, object]) -> None:
+def _write_meter_event(
+    *,
+    env: dict[str, str] | None,
+    ts: str,
+    agent_id: str,
+    method: str,
+    ok: bool,
+    status_code: int,
+    error_type: str,
+    duration_ms: int,
+) -> None:
     if not _meter_enabled(env):
         return
     try:
         out = _meter_path(env)
     except Exception:
         return
+    safe_status = int(status_code or 0)
+    safe_event = {
+        "ts": str(ts or ""),
+        "agent_id": str(agent_id or ""),
+        "method": str(method or "").upper(),
+        "ok": bool(ok),
+        "status_code": safe_status,
+        "status_class": f"{safe_status // 100}xx" if safe_status > 0 else "0xx",
+        "error_type": str(error_type or ""),
+        "duration_ms": int(duration_ms or 0),
+    }
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event, sort_keys=True) + "\n")
+        fh.write(json.dumps(safe_event, sort_keys=True) + "\n")
 
 
 def request_json(
@@ -111,20 +131,14 @@ def request_json(
 
     def _base_event(*, ok: bool, status_code: int, error_type: str = "") -> dict[str, object]:
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        # Redact query params from URL to avoid storing secrets in clear text
-        parsed_url = urllib.parse.urlparse(url)
-        safe_url = urllib.parse.urlunparse(parsed_url._replace(query="REDACTED" if parsed_url.query else ""))
         return {
             "ts": _now_iso_utc(),
             "agent_id": agent_id,
-            "request_id": request_id,
             "method": method.upper(),
-            "url": safe_url,
             "status_code": int(status_code),
             "ok": bool(ok),
             "error_type": error_type,
             "duration_ms": duration_ms,
-            "request_bytes": int(len(payload or b"")),
         }
 
     opener = urlopen_func or urllib.request.urlopen
@@ -136,14 +150,40 @@ def request_json(
         if not isinstance(parsed, dict):
             parsed = {}
         event = _base_event(ok=True, status_code=status)
-        event["response_bytes"] = int(len(body or b""))
-        _write_meter_event(env=env, event=event)
+        _write_meter_event(
+            env=env,
+            ts=str(event["ts"]),
+            agent_id=str(event["agent_id"]),
+            method=str(event["method"]),
+            ok=bool(event["ok"]),
+            status_code=int(event["status_code"]),
+            error_type=str(event["error_type"]),
+            duration_ms=int(event["duration_ms"]),
+        )
         return parsed
     except urllib.error.HTTPError as exc:
         event = _base_event(ok=False, status_code=int(exc.code or 0), error_type=type(exc).__name__)
-        _write_meter_event(env=env, event=event)
+        _write_meter_event(
+            env=env,
+            ts=str(event["ts"]),
+            agent_id=str(event["agent_id"]),
+            method=str(event["method"]),
+            ok=bool(event["ok"]),
+            status_code=int(event["status_code"]),
+            error_type=str(event["error_type"]),
+            duration_ms=int(event["duration_ms"]),
+        )
         raise
     except Exception as exc:
         event = _base_event(ok=False, status_code=0, error_type=type(exc).__name__)
-        _write_meter_event(env=env, event=event)
+        _write_meter_event(
+            env=env,
+            ts=str(event["ts"]),
+            agent_id=str(event["agent_id"]),
+            method=str(event["method"]),
+            ok=bool(event["ok"]),
+            status_code=int(event["status_code"]),
+            error_type=str(event["error_type"]),
+            duration_ms=int(event["duration_ms"]),
+        )
         raise
