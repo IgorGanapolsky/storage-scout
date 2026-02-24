@@ -217,12 +217,6 @@ def main() -> None:
     print(f"  No answer: {result.no_answer}")
     print(f"  Avg ring time: {result.avg_ring_secs}s")
 
-    # Generate HTML report.
-    from autonomy.tools.audit_report import generate_audit_report
-
-    html_path = generate_audit_report(result, output_dir=args.output)
-    print(f"  HTML report: {html_path}")
-
 
 if __name__ == "__main__":
     main()

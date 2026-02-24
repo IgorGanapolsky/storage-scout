@@ -76,7 +76,7 @@ def _run_missed_call_audits(*, call_list: list[dict], env: dict[str, str]) -> li
                 env=env
             )
             save_audit(res)
-            results.append({"company": company, "miss_rate": res.miss_rate_pct, "html_report": f"audit_{company.lower().replace(' ', '-')}_{res.audit_date}.html"})
+            results.append({"company": company, "miss_rate": res.miss_rate_pct})
         except Exception as e:
             print(f"live_job: audit failed for {company}: {e}", file=sys.stderr)
 
