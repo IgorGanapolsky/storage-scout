@@ -1,0 +1,110 @@
+name: Dead Code Cleanup
+
+# Find unused imports and dead code, open small reviewable PRs
+
+on:
+  schedule:
+    - cron: '0 11 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detect-and-clean:
+    name: Find and Remove Dead Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install tools
+        run: pip install ruff vulture
+
+      - name: Detect unused imports
+        id: imports
+        run: |
+          UNUSED=$(ruff check autonomy/ --select F401 --output-format json 2>/dev/null || echo "[]")
+          COUNT=$(echo "$UNUSED" | jq 'length')
+          echo "unused_imports=$COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$COUNT" -gt "0" ]; then
+            ruff check autonomy/ --select F401 --fix 2>/dev/null || true
+          fi
+
+      - name: Detect dead code with vulture
+        id: vulture
+        run: |
+          vulture autonomy/ --min-confidence 90 > /tmp/vulture-report.txt 2>&1 || true
+          DEAD_COUNT=$(wc -l < /tmp/vulture-report.txt | tr -d ' ')
+          echo "dead_code_lines=$DEAD_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$DEAD_COUNT" -gt "0" ]; then
+            echo "### Vulture Report" >> $GITHUB_STEP_SUMMARY
+            cat /tmp/vulture-report.txt >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify imports still work
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          python3 -c "
+          import importlib, sys
+          for mod in ['autonomy', 'autonomy.engine', 'autonomy.outreach_policy', 'autonomy.tracking', 'autonomy.utils']:
+              try:
+                  importlib.import_module(mod)
+              except Exception as e:
+                  print(f'BROKEN: {mod}: {e}')
+                  sys.exit(1)
+          print('All imports OK')
+          "
+
+      - name: Lint check
+        if: steps.changes.outputs.has_changes == 'true'
+        run: ruff check autonomy/ --select E,F,W --ignore E501
+
+      - name: Create PR
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="ralph/dead-code-cleanup-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "refactor: remove ${{ steps.imports.outputs.unused_imports }} unused imports"
+          git push -u origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --title "refactor: automated dead code cleanup" \
+            --body "## Automated Cleanup
+
+          **Unused imports removed**: ${{ steps.imports.outputs.unused_imports }}
+          **Vulture dead code detected**: ${{ steps.vulture.outputs.dead_code_lines }} items (report in workflow summary)
+
+          Smoke test + lint verified after changes.
+          Runs every Saturday 6am EST.
+
+          Policy: AI writes code, AI does not ship code." \
+            --label "maintenance,ralph-mode"
+
+      - name: No changes needed
+        if: steps.changes.outputs.has_changes != 'true'
+        run: |
+          echo "### Dead Code Cleanup" >> $GITHUB_STEP_SUMMARY
+          echo "Codebase is clean." >> $GITHUB_STEP_SUMMARY

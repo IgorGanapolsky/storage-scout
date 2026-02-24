@@ -1,7 +1,8 @@
-name: Auto-Merge on CI Pass
+name: Smart Governance Gate
 
-# Automatically merge PRs when all required checks pass
-# This enables autonomous workflow - no manual review needed
+# Risk-based merge policy: "AI writes code, AI does not ship code"
+# Low-risk (docs/config only) -> auto-merge after CI
+# High-risk (outreach engine, live jobs, lead data) -> human approval required
 
 on:
   check_suite:
@@ -15,9 +16,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  auto-merge:
+  governance-gate:
     runs-on: ubuntu-latest
-    # Only run on successful CI completion for PRs
     if: >
       github.event.workflow_run.conclusion == 'success' ||
       github.event.check_suite.conclusion == 'success'
@@ -27,23 +27,13 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            // Find PR associated with this workflow run
             const head_sha = context.payload.workflow_run?.head_sha ||
                             context.payload.check_suite?.head_sha;
-
             if (!head_sha) {
-              console.log('No head_sha found');
+              core.setOutput('found', 'false');
               return;
             }
 
-            const { data: prs } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${head_sha}`
-            });
-
-            // Also check by commit
             const { data: prsByCommit } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -51,18 +41,16 @@ jobs:
             });
 
             const openPrs = prsByCommit.filter(pr => pr.state === 'open');
-
             if (openPrs.length > 0) {
               console.log(`Found PR #${openPrs[0].number}`);
               core.setOutput('number', openPrs[0].number);
               core.setOutput('found', 'true');
             } else {
-              console.log('No open PR found for this commit');
               core.setOutput('found', 'false');
             }
 
-      - name: Check all required checks passed
-        id: checks
+      - name: Classify risk and check governance
+        id: classify
         if: steps.pr.outputs.found == 'true'
         uses: actions/github-script@v8
         with:
@@ -76,55 +64,102 @@ jobs:
               pull_number: pr_number
             });
 
-            // Get check runs for the PR head
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number
+            });
+
+            const filePaths = files.map(f => f.filename);
+            console.log(`Changed files: ${filePaths.join(', ')}`);
+
+            // High-risk: outreach engine, live jobs, lead data, SMS/call, CI
+            const highRiskPatterns = [
+              /^autonomy\/tools\//,
+              /^autonomy\/engine\.py/,
+              /^autonomy\/run\.py/,
+              /^autonomy\/outreach_policy\.py/,
+              /^autonomy\/providers\.py/,
+              /^autonomy\/state\//,
+              /^autonomy\/data\//,
+              /^\.github\/workflows\//,
+              /\.env/,
+              /config\..*\.live\.json/
+            ];
+
+            const isHighRisk = filePaths.some(fp =>
+              highRiskPatterns.some(pattern => pattern.test(fp))
+            );
+
+            // Check required CI checks
             const { data: checkRuns } = await github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: pr.head.sha
             });
 
-            // Required checks (customize as needed)
-            const requiredChecks = ['Python Quality', 'Security'];
-            const optionalChecks = ['SonarCloud', 'Snyk', 'Claude Review', 'Seer Code Review'];
-
+            const requiredChecks = ['Python Quality', 'Security', 'Smoke Test'];
             let allRequiredPassed = true;
-            let pendingRequired = false;
 
             for (const check of requiredChecks) {
               const run = checkRuns.check_runs.find(r => r.name === check);
-              if (!run) {
-                console.log(`Required check '${check}' not found`);
+              if (!run || run.status !== 'completed' || run.conclusion !== 'success') {
                 allRequiredPassed = false;
-              } else if (run.status !== 'completed') {
-                console.log(`Required check '${check}' still pending`);
-                pendingRequired = true;
-              } else if (run.conclusion !== 'success') {
-                console.log(`Required check '${check}' failed: ${run.conclusion}`);
-                allRequiredPassed = false;
-              } else {
-                console.log(`Required check '${check}' passed`);
+                console.log(`Required check '${check}' not passing`);
               }
             }
 
-            if (pendingRequired) {
-              console.log('Some required checks still pending - will try again later');
-              core.setOutput('ready', 'false');
-            } else if (allRequiredPassed) {
-              console.log('All required checks passed!');
-              core.setOutput('ready', 'true');
-            } else {
-              console.log('Some required checks failed');
-              core.setOutput('ready', 'false');
-            }
+            const riskLevel = isHighRisk ? 'high' : 'low';
+            console.log(`Risk: ${riskLevel}, Checks passed: ${allRequiredPassed}`);
 
-      - name: Auto-merge PR
-        if: steps.pr.outputs.found == 'true' && steps.checks.outputs.ready == 'true'
+            core.setOutput('risk', riskLevel);
+            core.setOutput('checks_passed', allRequiredPassed ? 'true' : 'false');
+            core.setOutput('file_list', filePaths.join('\n'));
+
+      # LOW RISK + checks pass -> auto-merge
+      - name: Auto-merge (low risk)
+        if: >
+          steps.pr.outputs.found == 'true' &&
+          steps.classify.outputs.risk == 'low' &&
+          steps.classify.outputs.checks_passed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Merging PR #${{ steps.pr.outputs.number }}"
+          echo "Low-risk PR with all checks passing - auto-merging"
           gh pr merge ${{ steps.pr.outputs.number }} \
             --repo ${{ github.repository }} \
             --squash \
             --delete-branch \
-            --body "Auto-merged after CI passed"
+            --body "Auto-merged: low-risk change, all CI checks passed"
+
+      # HIGH RISK -> label for human review
+      - name: Request human review (high risk)
+        if: >
+          steps.pr.outputs.found == 'true' &&
+          steps.classify.outputs.risk == 'high' &&
+          steps.classify.outputs.checks_passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=${{ steps.pr.outputs.number }}
+          gh pr edit "$PR" --repo ${{ github.repository }} --add-label "needs-ceo-review"
+          gh pr comment "$PR" --repo ${{ github.repository }} \
+            --body "**Governance Gate: Human Review Required**
+
+          This PR touches high-risk files (outreach engine, live jobs, CI, or lead data).
+
+          Policy: AI writes code, AI does not ship code.
+
+          All CI checks passed. Awaiting CEO approval to merge."
+
+      # CHECKS FAILED -> block
+      - name: Block merge (checks failed)
+        if: >
+          steps.pr.outputs.found == 'true' &&
+          steps.classify.outputs.checks_passed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.pr.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --body "**Governance Gate: Blocked** - Required CI checks have not passed."
