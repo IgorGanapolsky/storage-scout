@@ -6,7 +6,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-export GITHUB_TOKEN="${GITHUB_TOKEN:-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}"
+if [ -z "${GITHUB_TOKEN:-}" ]; then
+  echo "ERROR: GITHUB_TOKEN is required for GSD deploy."
+  exit 1
+fi
 
 echo "🚀 Initiating GSD Autonomous Deployment & Hybrid RLHF Sync..."
 
