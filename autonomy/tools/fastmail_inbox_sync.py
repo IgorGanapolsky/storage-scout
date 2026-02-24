@@ -29,11 +29,11 @@ CALENDLY_SUBJECT_RE = re.compile(
 )
 CALENDLY_BODY_RE = re.compile(r"(calendly\.com/|you are scheduled|new event type)", re.IGNORECASE)
 STRIPE_SUBJECT_RE = re.compile(
-    r"(stripe|payment|invoice|receipt|checkout|charge succeeded|charge failed)",
+    r"(charge\.succeeded|invoice\.paid|payment succeeded|receipt for your payment)",
     re.IGNORECASE,
 )
 STRIPE_BODY_RE = re.compile(
-    r"(stripe\.com|buy\.stripe\.com|checkout\.stripe\.com|payment_intent|invoice\.paid)",
+    r"(stripe\.com/receipts|checkout\.stripe\.com/pay/|view your invoice|payment_intent\.succeeded|checkout\.session\.completed)",
     re.IGNORECASE,
 )
 
