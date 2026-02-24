@@ -9,9 +9,11 @@ Automates the last-mile compliance loop:
 
 from __future__ import annotations
 
+import argparse
 import base64
 import contextlib
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -21,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.fastmail_inbox_sync import load_dotenv
 from autonomy.utils import UTC, truthy
 
 
@@ -36,6 +39,9 @@ class TwilioTollfreeWatchdogConfig:
     auto_fix_enabled: bool
     auto_fix_error_codes: tuple[int, ...]
     stale_review_hours: int
+    alert_cooldown_hours: int
+    notify_on_status_change: bool
+    notify_on_approved: bool
 
 
 @dataclass
@@ -55,11 +61,15 @@ class TwilioTollfreeWatchdogResult:
     auto_fix_attempted: bool = False
     auto_fix_applied: bool = False
     auto_fix_error: str = ""
+    previous_status: str = ""
+    status_changed: bool = False
     should_alert: bool = False
     alert_reason: str = ""
+    alert_suppressed: bool = False
     date_updated: str = ""
     poll_utc: str = ""
     url: str = ""
+    state_path: str = ""
 
 
 def _parse_int_set(raw: str, default: tuple[int, ...]) -> tuple[int, ...]:
@@ -101,6 +111,25 @@ def _parse_dt_utc(raw: str) -> datetime | None:
         return None
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {}
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _normalize_status(raw: str) -> str:
+    return (raw or "").strip().upper()
+
+
 def load_twilio_tollfree_watchdog_config(
     env: dict[str, str],
     *,
@@ -123,6 +152,7 @@ def load_twilio_tollfree_watchdog_config(
     )
     business_type = ((env.get("TWILIO_BUSINESS_TYPE") or "").strip() or "SOLE_PROPRIETOR").upper()
     stale_review_hours = max(1, int((env.get("TWILIO_TOLLFREE_STALE_REVIEW_HOURS") or "24").strip() or "24"))
+    alert_cooldown_hours = max(1, int((env.get("TWILIO_TOLLFREE_ALERT_COOLDOWN_HOURS") or "12").strip() or "12"))
     auto_fix_codes = _parse_int_set(
         env.get("TWILIO_TOLLFREE_AUTOFIX_ERROR_CODES") or "",
         default=(30485,),
@@ -138,6 +168,9 @@ def load_twilio_tollfree_watchdog_config(
         auto_fix_enabled=truthy(env.get("TWILIO_TOLLFREE_AUTOFIX_ENABLED"), default=True),
         auto_fix_error_codes=auto_fix_codes,
         stale_review_hours=stale_review_hours,
+        alert_cooldown_hours=alert_cooldown_hours,
+        notify_on_status_change=truthy(env.get("TWILIO_TOLLFREE_NOTIFY_ON_STATUS_CHANGE"), default=True),
+        notify_on_approved=truthy(env.get("TWILIO_TOLLFREE_NOTIFY_ON_APPROVED"), default=True),
     )
 
 
@@ -284,13 +317,63 @@ def _evaluate_alert_state(*, cfg: TwilioTollfreeWatchdogConfig, result: TwilioTo
     result.alert_reason = "unknown_status"
 
 
+def _apply_transition_logic(
+    *,
+    cfg: TwilioTollfreeWatchdogConfig,
+    result: TwilioTollfreeWatchdogResult,
+    prior_state: dict[str, Any],
+) -> None:
+    current = _normalize_status(result.status)
+    previous = _normalize_status(str(prior_state.get("last_status") or ""))
+    result.previous_status = previous
+    result.status_changed = bool(previous and current and previous != current)
+
+    if not result.status_changed or not cfg.notify_on_status_change:
+        return
+
+    if current in {"TWILIO_APPROVED", "APPROVED"}:
+        if cfg.notify_on_approved:
+            result.should_alert = True
+            result.alert_reason = "status_changed_approved"
+        return
+    if current in {"TWILIO_REJECTED", "REJECTED"}:
+        result.should_alert = True
+        result.alert_reason = "status_changed_rejected"
+        return
+    result.should_alert = True
+    result.alert_reason = "status_changed"
+
+
+def _apply_alert_cooldown(
+    *,
+    cfg: TwilioTollfreeWatchdogConfig,
+    result: TwilioTollfreeWatchdogResult,
+    prior_state: dict[str, Any],
+) -> None:
+    if not result.should_alert:
+        return
+    prior_reason = str(prior_state.get("last_alert_reason") or "").strip()
+    prior_alert_ts = _parse_dt_utc(str(prior_state.get("last_alert_utc") or ""))
+    if not prior_reason or prior_alert_ts is None:
+        return
+    if prior_reason != (result.alert_reason or ""):
+        return
+    cooldown = timedelta(hours=int(cfg.alert_cooldown_hours))
+    if datetime.now(UTC) - prior_alert_ts < cooldown:
+        result.should_alert = False
+        result.alert_suppressed = True
+
+
 def run_twilio_tollfree_watchdog(
     *,
     sqlite_path: Path,
     audit_log: Path,
     env: dict[str, str],
     company_name: str = "",
+    state_path: Path | None = None,
 ) -> TwilioTollfreeWatchdogResult:
+    resolved_state_path = state_path or (Path(sqlite_path).resolve().parent / "twilio_tollfree_watchdog_state.json")
+    prior_state = _read_json(resolved_state_path)
     cfg = load_twilio_tollfree_watchdog_config(env, company_name=company_name)
     poll_utc = datetime.now(UTC).replace(microsecond=0).isoformat()
     if cfg is None:
@@ -299,11 +382,22 @@ def run_twilio_tollfree_watchdog(
             should_alert=True,
             alert_reason="missing_twilio_env",
             poll_utc=poll_utc,
+            state_path=str(resolved_state_path),
         )
     if not cfg.enabled:
-        return TwilioTollfreeWatchdogResult(reason="disabled", phone_number=cfg.phone_number, poll_utc=poll_utc)
+        return TwilioTollfreeWatchdogResult(
+            reason="disabled",
+            phone_number=cfg.phone_number,
+            poll_utc=poll_utc,
+            state_path=str(resolved_state_path),
+        )
 
-    result = TwilioTollfreeWatchdogResult(reason="ok", phone_number=cfg.phone_number, poll_utc=poll_utc)
+    result = TwilioTollfreeWatchdogResult(
+        reason="ok",
+        phone_number=cfg.phone_number,
+        poll_utc=poll_utc,
+        state_path=str(resolved_state_path),
+    )
     try:
         phone_sid = _fetch_phone_number_sid(cfg)
         result.phone_number_sid = phone_sid
@@ -347,12 +441,30 @@ def run_twilio_tollfree_watchdog(
                 result.reason = "rejected_no_fix_delta"
 
         _evaluate_alert_state(cfg=cfg, result=result)
+        _apply_transition_logic(cfg=cfg, result=result, prior_state=prior_state)
+        _apply_alert_cooldown(cfg=cfg, result=result, prior_state=prior_state)
     except Exception as exc:
         result.reason = "watchdog_error"
         result.should_alert = True
         result.alert_reason = "watchdog_error"
         result.auto_fix_error = f"{type(exc).__name__}: {exc}"
     finally:
+        next_state: dict[str, Any] = {
+            "last_poll_utc": result.poll_utc,
+            "verification_sid": result.verification_sid,
+            "phone_number": result.phone_number,
+            "last_status": result.status,
+            "last_error_code": result.error_code,
+            "last_alert_reason": str(prior_state.get("last_alert_reason") or ""),
+            "last_alert_utc": str(prior_state.get("last_alert_utc") or ""),
+            "last_date_updated": result.date_updated,
+        }
+        if result.should_alert:
+            next_state["last_alert_reason"] = result.alert_reason
+            next_state["last_alert_utc"] = result.poll_utc
+        with contextlib.suppress(Exception):
+            _write_json(resolved_state_path, next_state)
+
         with contextlib.suppress(Exception):
             store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
             trace = f"twilio_tollfree_watchdog:{result.verification_sid or result.phone_number}:{int(time.time())}"
@@ -378,3 +490,55 @@ def run_twilio_tollfree_watchdog(
 
     return result
 
+
+def _resolve_path(repo_root: Path, raw: str) -> Path:
+    path = Path(raw)
+    return path if path.is_absolute() else (repo_root / path).resolve()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run Twilio toll-free verification watchdog.")
+    parser.add_argument(
+        "--dotenv",
+        default=".env",
+        help="Comma-separated dotenv paths relative to repo root (later wins).",
+    )
+    parser.add_argument("--sqlite-path", default="autonomy/state/autonomy_live.sqlite3")
+    parser.add_argument("--audit-log", default="autonomy/state/autonomy_live.jsonl")
+    parser.add_argument(
+        "--state-path",
+        default="autonomy/state/twilio_tollfree_watchdog_state.json",
+        help="State file used for transition/cooldown dedupe.",
+    )
+    parser.add_argument("--company-name", default="CallCatcher Ops")
+    parser.add_argument(
+        "--exit-on-alert",
+        action="store_true",
+        help="Exit 2 when watchdog determines an alert should fire.",
+    )
+    args = parser.parse_args()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    env: dict[str, str] = {}
+    for rel in [p.strip() for p in str(args.dotenv or "").split(",") if p.strip()]:
+        env.update(load_dotenv(_resolve_path(repo_root, rel)))
+
+    # Keep env vars visible for dependent libs/tools that read process env.
+    for key, value in env.items():
+        os.environ.setdefault(key, value)
+
+    result = run_twilio_tollfree_watchdog(
+        sqlite_path=_resolve_path(repo_root, args.sqlite_path),
+        audit_log=_resolve_path(repo_root, args.audit_log),
+        env=env,
+        company_name=args.company_name,
+        state_path=_resolve_path(repo_root, args.state_path),
+    )
+    print(json.dumps(asdict(result), indent=2, sort_keys=True))
+
+    if args.exit_on_alert and result.should_alert:
+        raise SystemExit(2)
+
+
+if __name__ == "__main__":
+    main()

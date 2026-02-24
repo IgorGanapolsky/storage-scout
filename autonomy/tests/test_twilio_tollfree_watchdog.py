@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import urllib.parse
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from autonomy.utils import UTC
 from autonomy.tools.twilio_tollfree_watchdog import run_twilio_tollfree_watchdog
 
 
@@ -28,11 +30,13 @@ def test_watchdog_returns_missing_env_when_twilio_not_configured() -> None:
     run_id = uuid4().hex
     sqlite_path = Path(f"autonomy/state/test_tf_watchdog_{run_id}.sqlite3")
     audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
+    state_path = Path(f"autonomy/state/test_tf_watchdog_state_{run_id}.json")
     result = run_twilio_tollfree_watchdog(
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env={},
         company_name="CallCatcher Ops",
+        state_path=state_path,
     )
     assert result.reason == "missing_twilio_env"
     assert result.should_alert is True
@@ -43,6 +47,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
     run_id = uuid4().hex
     sqlite_path = Path(f"autonomy/state/test_tf_watchdog_{run_id}.sqlite3")
     audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
+    state_path = Path(f"autonomy/state/test_tf_watchdog_state_{run_id}.json")
     posted: list[dict[str, str]] = []
 
     def fake_urlopen(req, timeout=20):  # noqa: ANN001
@@ -111,6 +116,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
         audit_log=audit_log,
         env=env,
         company_name="CallCatcher Ops",
+        state_path=state_path,
     )
     assert result.reason == "auto_fix_applied"
     assert result.status == "IN_REVIEW"
@@ -127,6 +133,7 @@ def test_watchdog_alerts_when_in_review_is_stale(monkeypatch) -> None:
     run_id = uuid4().hex
     sqlite_path = Path(f"autonomy/state/test_tf_watchdog_{run_id}.sqlite3")
     audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
+    state_path = Path(f"autonomy/state/test_tf_watchdog_state_{run_id}.json")
 
     def fake_urlopen(req, timeout=20):  # noqa: ANN001
         url = req.full_url
@@ -170,8 +177,136 @@ def test_watchdog_alerts_when_in_review_is_stale(monkeypatch) -> None:
         audit_log=audit_log,
         env=env,
         company_name="CallCatcher Ops",
+        state_path=state_path,
     )
     assert result.status == "IN_REVIEW"
     assert result.should_alert is True
     assert result.alert_reason == "stale_in_review"
 
+
+def test_watchdog_alerts_on_transition_to_approved(monkeypatch, tmp_path: Path) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_tf_watchdog_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
+    state_path = tmp_path / "watchdog_state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_status": "IN_REVIEW",
+                "last_alert_reason": "",
+                "last_alert_utc": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_urlopen(req, timeout=20):  # noqa: ANN001
+        url = req.full_url
+        method = req.get_method()
+        if method == "GET" and "IncomingPhoneNumbers.json" in url:
+            return _FakeHTTPResponse({"incoming_phone_numbers": [{"sid": "PN123", "phone_number": "+18446480144"}]})
+        if method == "GET" and "messaging.twilio.com/v1/Tollfree/Verifications" in url:
+            return _FakeHTTPResponse(
+                {
+                    "verifications": [
+                        {
+                            "sid": "HH123",
+                            "status": "TWILIO_APPROVED",
+                            "error_code": None,
+                            "rejection_reason": None,
+                            "business_name": "Igor Ganapolsky",
+                            "doing_business_as": "CallCatcher Ops",
+                            "business_type": "SOLE_PROPRIETOR",
+                            "edit_allowed": None,
+                            "date_updated": "2026-02-24T20:15:32Z",
+                            "url": "https://messaging.twilio.com/v1/Tollfree/Verifications/HH123",
+                        }
+                    ]
+                }
+            )
+        raise AssertionError(f"Unexpected request: {method} {url}")
+
+    monkeypatch.setattr("autonomy.tools.twilio_tollfree_watchdog.urllib.request.urlopen", fake_urlopen)
+    env = {
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_SMS_FROM_NUMBER": "+18446480144",
+        "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "1",
+        "TWILIO_TOLLFREE_NOTIFY_ON_STATUS_CHANGE": "1",
+        "TWILIO_TOLLFREE_NOTIFY_ON_APPROVED": "1",
+    }
+    result = run_twilio_tollfree_watchdog(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=env,
+        company_name="CallCatcher Ops",
+        state_path=state_path,
+    )
+    assert result.status == "TWILIO_APPROVED"
+    assert result.status_changed is True
+    assert result.previous_status == "IN_REVIEW"
+    assert result.should_alert is True
+    assert result.alert_reason == "status_changed_approved"
+
+
+def test_watchdog_suppresses_duplicate_stale_alert_within_cooldown(monkeypatch, tmp_path: Path) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_tf_watchdog_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
+    state_path = tmp_path / "watchdog_state.json"
+    last_alert = datetime.now(UTC).replace(microsecond=0).isoformat()
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_status": "IN_REVIEW",
+                "last_alert_reason": "stale_in_review",
+                "last_alert_utc": last_alert,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_urlopen(req, timeout=20):  # noqa: ANN001
+        url = req.full_url
+        method = req.get_method()
+        if method == "GET" and "IncomingPhoneNumbers.json" in url:
+            return _FakeHTTPResponse({"incoming_phone_numbers": [{"sid": "PN123", "phone_number": "+18446480144"}]})
+        if method == "GET" and "messaging.twilio.com/v1/Tollfree/Verifications" in url:
+            stale_dt = (datetime.now(UTC) - timedelta(days=2)).replace(microsecond=0).isoformat()
+            return _FakeHTTPResponse(
+                {
+                    "verifications": [
+                        {
+                            "sid": "HH123",
+                            "status": "IN_REVIEW",
+                            "business_name": "Igor Ganapolsky",
+                            "doing_business_as": "CallCatcher Ops",
+                            "business_type": "SOLE_PROPRIETOR",
+                            "date_updated": stale_dt,
+                            "url": "https://messaging.twilio.com/v1/Tollfree/Verifications/HH123",
+                        }
+                    ]
+                }
+            )
+        raise AssertionError(f"Unexpected request: {method} {url}")
+
+    monkeypatch.setattr("autonomy.tools.twilio_tollfree_watchdog.urllib.request.urlopen", fake_urlopen)
+    env = {
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_SMS_FROM_NUMBER": "+18446480144",
+        "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "1",
+        "TWILIO_TOLLFREE_STALE_REVIEW_HOURS": "24",
+        "TWILIO_TOLLFREE_ALERT_COOLDOWN_HOURS": "99999",
+    }
+    result = run_twilio_tollfree_watchdog(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=env,
+        company_name="CallCatcher Ops",
+        state_path=state_path,
+    )
+    assert result.status == "IN_REVIEW"
+    assert result.alert_reason == "stale_in_review"
+    assert result.should_alert is False
+    assert result.alert_suppressed is True
