@@ -106,6 +106,14 @@ class RetellClient:
         resp = self._post("/create-retell-llm", data)
         return resp["llm_id"]
 
+    def update_retell_llm(self, llm_id: str, prompt: str) -> Dict[str, Any]:
+        """Update an existing Retell LLM configuration."""
+        data = {
+            "general_prompt": prompt,
+        }
+        resp = self._patch(f"/update-retell-llm/{llm_id}", data)
+        return resp
+
     def create_agent(self, name: str, llm_id: str, voice_id: str) -> Dict[str, Any]:
         """Create a new agent in Retell linked to an LLM."""
         data = {
@@ -161,11 +169,12 @@ def load_prompt(file_path: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Manage Retell AI Receptionist Agents")
-    p.add_argument("--action", required=True, choices=["create_agent", "list_agents", "buy_number", "register_phone", "set_budget"], help="Action to perform")
+    p.add_argument("--action", required=True, choices=["create_agent", "list_agents", "buy_number", "register_phone", "set_budget", "update_llm"], help="Action to perform")
     p.add_argument("--name", help="Name of the agent (for create_agent)")
-    p.add_argument("--prompt-file", help="Path to prompt markdown file (for create_agent)")
+    p.add_argument("--prompt-file", help="Path to prompt markdown file (for create_agent/update_llm)")
     p.add_argument("--voice-id", default="11labs-Adrian", help="Voice ID (default: 11labs-Adrian)")
     p.add_argument("--agent-id", help="Agent ID (for buy_number/register_phone/set_budget)")
+    p.add_argument("--llm-id", help="LLM ID (for update_llm)")
     p.add_argument("--phone-number", help="Phone number (for register_phone)")
     p.add_argument("--area-code", type=int, default=954, help="Area code for phone number (for buy_number)")
     p.add_argument("--max-min", type=int, default=5, help="Max minutes per call (for set_budget)")
@@ -204,6 +213,19 @@ def main() -> None:
 
         print("\nNext step: Register your Twilio number for this agent using:")
         print(f"  python3 -m autonomy.tools.ai_receptionist --action register_phone --agent-id {agent['agent_id']} --phone-number <your_twilio_number>")
+
+    elif args.action == "update_llm":
+        if not args.llm_id or not args.prompt_file:
+            print("Error: --llm-id and --prompt-file are required for update_llm")
+            sys.exit(1)
+
+        print(f"Loading updated prompt from {args.prompt_file}...")
+        prompt_text = load_prompt(args.prompt_file)
+
+        print(f"Updating LLM {args.llm_id}...")
+        result = client.update_retell_llm(args.llm_id, prompt_text)
+        print("LLM updated successfully!")
+        print(json.dumps(result, indent=2))
 
     elif args.action == "list_agents":
         agents = client.list_agents()
