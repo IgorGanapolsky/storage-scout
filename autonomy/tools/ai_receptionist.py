@@ -230,7 +230,7 @@ def main() -> None:
             print("Error: TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in env.")
             sys.exit(1)
 
-        print(f"Registering Twilio number {args.phone_number} for agent {args.agent_id}...")
+        print("Registering Twilio number for agent...")
         number = client.register_phone_number(args.agent_id, args.phone_number, twilio_sid, twilio_token)
         print("Phone number registered successfully!")
         print(json.dumps(number, indent=2))
