@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -110,12 +111,15 @@ def request_json(
 
     def _base_event(*, ok: bool, status_code: int, error_type: str = "") -> dict[str, object]:
         duration_ms = int((time.perf_counter() - t0) * 1000)
+        # Redact query params from URL to avoid storing secrets in clear text
+        parsed_url = urllib.parse.urlparse(url)
+        safe_url = urllib.parse.urlunparse(parsed_url._replace(query="REDACTED" if parsed_url.query else ""))
         return {
             "ts": _now_iso_utc(),
             "agent_id": agent_id,
             "request_id": request_id,
             "method": method.upper(),
-            "url": url,
+            "url": safe_url,
             "status_code": int(status_code),
             "ok": bool(ok),
             "error_type": error_type,
