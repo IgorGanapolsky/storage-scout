@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -27,6 +28,7 @@ if __package__ is None:
 from autonomy.tools.fastmail_inbox_sync import load_dotenv
 
 STATE_DIR = Path(__file__).resolve().parent.parent / "state"
+log = logging.getLogger(__name__)
 
 # Keywords that indicate reachability problems
 REACHABILITY_KEYWORDS = [
@@ -88,7 +90,8 @@ def _google_find_place(name: str, city: str, state: str, api_key: str) -> str | 
         if candidates:
             return str(candidates[0].get("place_id", ""))
     except (urllib.error.URLError, json.JSONDecodeError, KeyError):
-        pass
+        log.debug("Google Place lookup failed; continuing without a place_id.")
+        return None
     return None
 
 

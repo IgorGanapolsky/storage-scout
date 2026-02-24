@@ -163,7 +163,7 @@ def scrape_website(base_url: str, session_cdp_url: str) -> dict:
         emails |= extract_emails_from_html(html)
         name = extract_contact_name(html)
     except Exception as exc:
-        log.warning("Failed to scrape %s: %s", base_url, exc)
+        log.warning("Failed to scrape website during enrichment (%s).", exc.__class__.__name__)
         return {"emails": emails, "name": name, "pages_scraped": pages_scraped}
 
     # Scrape contact/about pages if we still need emails or name.
@@ -308,7 +308,7 @@ def enrich_leads_batch(leads: list[dict], max_per_session: int = 5) -> list[dict
                         lead["name"] = result["name"]
 
                 except Exception as exc:
-                    log.warning("Failed to enrich %s: %s", website, exc)
+                    log.warning("Failed to enrich website lead (%s).", exc.__class__.__name__)
 
                 time.sleep(1)  # Polite delay between sites.
 
