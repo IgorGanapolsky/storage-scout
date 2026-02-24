@@ -468,8 +468,6 @@ def run_twilio_tollfree_watchdog(
     finally:
         next_state: dict[str, Any] = {
             "last_poll_utc": result.poll_utc,
-            "verification_sid": result.verification_sid,
-            "phone_number": result.phone_number,
             "last_status": result.status,
             "last_error_code": result.error_code,
             "last_alert_reason": str(prior_state.get("last_alert_reason") or ""),
