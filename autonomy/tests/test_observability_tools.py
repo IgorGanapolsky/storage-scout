@@ -23,6 +23,7 @@ from autonomy.tools.live_job import (
     _parse_categories,
 )
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
+from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
 
 
 def _tmp_state_paths(tmp_name: str) -> tuple[str, str]:
@@ -248,6 +249,64 @@ def test_live_job_report_includes_guardrails_section() -> None:
     assert "Guardrails" in report
     assert "- deliverability_blocked: True" in report
     assert "- stop_loss_blocked: True" in report
+
+
+def test_live_job_report_includes_twilio_tollfree_section() -> None:
+    inbox = InboxSyncResult(
+        processed_messages=0,
+        new_bounces=0,
+        new_replies=0,
+        new_opt_outs=0,
+        intake_submissions=0,
+        calendly_bookings=0,
+        stripe_payments=0,
+        last_uid=0,
+    )
+    board = Scoreboard(
+        leads_total=0,
+        leads_new=0,
+        leads_contacted=0,
+        leads_replied=0,
+        leads_bounced=0,
+        leads_other=0,
+        email_sent_total=0,
+        email_sent_recent=0,
+        emailed_leads_recent=0,
+        bounced_leads_recent=0,
+        bounce_rate_recent=0.0,
+        opt_out_total=0,
+        last_email_ts="",
+        call_attempts_total=0,
+        call_attempts_recent=0,
+        call_booked_total=0,
+        call_booked_recent=0,
+        calendly_bookings_total=0,
+        calendly_bookings_recent=0,
+        stripe_payments_total=0,
+        stripe_payments_recent=0,
+        bookings_total=0,
+        bookings_recent=0,
+        last_call_ts="",
+    )
+    report = _format_report(
+        leadgen_new=0,
+        engine_result={"sent_initial": 0, "sent_followup": 0},
+        inbox_result=inbox,
+        scoreboard=board,
+        scoreboard_days=30,
+        twilio_tollfree=TwilioTollfreeWatchdogResult(
+            reason="auto_fix_applied",
+            status="IN_REVIEW",
+            verification_sid="HH123",
+            auto_fix_attempted=True,
+            auto_fix_applied=True,
+            should_alert=False,
+            alert_reason="",
+        ),
+    )
+    assert "Twilio toll-free verification" in report
+    assert "- status: IN_REVIEW" in report
+    assert "- auto_fix_applied: True" in report
 
 
 def test_stop_loss_blocks_and_resets(tmp_path: Path) -> None:
