@@ -122,7 +122,14 @@ def _read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+_WATCHDOG_STATE_DIR = Path(__file__).resolve().parent.parent / "state"
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    resolved = path.resolve()
+    allowed = _WATCHDOG_STATE_DIR.resolve()
+    if resolved != allowed and allowed not in resolved.parents:
+        raise ValueError(f"Refusing to write outside {allowed}: {resolved}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
