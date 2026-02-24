@@ -229,33 +229,33 @@ jobs:
             Be harsh. Be thorough. Reject anything suspicious.
           claude_args: "--max-turns 10 --model claude-sonnet-4-5-20250929"
 
-  # Phase 4: Auto-merge if approved
-  auto-merge:
+  # Phase 4: Hand off to Smart Governance Gate
+  governance-handoff:
     needs: [code-generation, superior-audit]
     if: success()
     runs-on: ubuntu-latest
     permissions:
-      contents: write
       pull-requests: write
     steps:
-      - name: Enable auto-merge
+      - name: Label as audit-passed and notify
         run: |
-          gh pr merge ${{ needs.code-generation.outputs.pr_number }} \
-            --auto --squash \
-            --subject "Ralph Mode: Auto-merged after superior audit"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify completion
-        run: |
-          gh pr comment ${{ needs.code-generation.outputs.pr_number }} \
-            --body "🎉 **Ralph Mode Complete**
+          PR=${{ needs.code-generation.outputs.pr_number }}
+          gh pr edit "$PR" \
+            --repo ${{ github.repository }} \
+            --add-label "ralph-audit-passed"
+          gh pr comment "$PR" \
+            --repo ${{ github.repository }} \
+            --body "$(cat <<'EOF'
+          **Ralph Mode Complete**
 
           - Code generated autonomously
           - Tests passed
           - Superior intelligence audit approved
-          - Auto-merge enabled
 
-          PR will merge when branch protections pass."
+          **Governance Gate** will now classify risk and decide merge policy:
+          - Low-risk changes → auto-merged
+          - High-risk changes → awaiting CEO review
+          EOF
+          )"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

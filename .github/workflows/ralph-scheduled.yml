@@ -1,0 +1,71 @@
+name: Ralph Scheduled — Proactive Background Agent
+
+# Ona pattern: scan for work daily at 8am EST, pick oldest issue, execute
+# "The kind of work that never gets prioritized on a roadmap,
+#  done autonomously in the background."
+
+on:
+  schedule:
+    # 8:00 AM EST (13:00 UTC) every weekday
+    - cron: '0 13 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+jobs:
+  find-and-dispatch:
+    name: Find Ralph-Ready Work
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick oldest ralph-mode issue and dispatch
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find oldest open issue with ralph-mode label
+          ISSUE=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label "ralph-mode" \
+            --state open \
+            --json number,title,createdAt \
+            --jq 'sort_by(.createdAt) | .[0]')
+
+          if [ -z "$ISSUE" ] || [ "$ISSUE" = "null" ]; then
+            echo "No ralph-mode issues found. Backlog is clear."
+            echo "### Ralph Scheduled Run" >> $GITHUB_STEP_SUMMARY
+            echo "No ralph-mode issues found. Backlog is clear." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          NUMBER=$(echo "$ISSUE" | jq -r '.number')
+          TITLE=$(echo "$ISSUE" | jq -r '.title')
+
+          # Check if there's already an open PR for this issue
+          EXISTING_PR=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --search "Ralph Mode: $TITLE" \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Issue #$NUMBER already has open PR #$EXISTING_PR, skipping"
+            echo "### Ralph Scheduled Run" >> $GITHUB_STEP_SUMMARY
+            echo "Issue #$NUMBER already has open PR #$EXISTING_PR — skipped." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "Found issue #$NUMBER: $TITLE — dispatching Ralph Mode"
+
+          # Trigger ralph-mode workflow via workflow_dispatch
+          gh workflow run ralph-mode.yml \
+            --repo ${{ github.repository }} \
+            -f issue_number="$NUMBER" \
+            -f max_iterations="10"
+
+          echo "### Ralph Scheduled Run" >> $GITHUB_STEP_SUMMARY
+          echo "Dispatched Ralph Mode for issue #$NUMBER: $TITLE" >> $GITHUB_STEP_SUMMARY

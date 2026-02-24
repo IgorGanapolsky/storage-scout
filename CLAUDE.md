@@ -71,6 +71,8 @@ If user says "continue" or "continue where you left off":
 
 **CRITICAL: Claude MUST execute autonomously without asking for permission.**
 
+**Governance principle: AI writes code, AI does not ship code.**
+
 When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
 1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
@@ -80,21 +82,24 @@ When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 5. **If checks PASS**: Commit with `Ralph: <description>`
 6. **Push**: `git push -u origin <branch>`
 7. **Create PR**: `gh pr create --base develop --title "Ralph: <desc>"`
-8. **Auto-merge**: `gh pr merge --auto --squash`
+8. **STOP** — Smart Governance Gate handles merge automatically:
+   - Low-risk PRs (docs, config, tests) → auto-merged by CI
+   - High-risk PRs (outreach engine, live jobs, lead data, CI) → labeled `needs-ceo-review`, CEO merges
 
 **DO NOT:**
 - Ask "should I proceed?"
 - Ask "would you like me to..."
 - Wait for confirmation
 - Stop after partial implementation
+- Run `gh pr merge` — the governance gate handles this
 
 **DO:**
 - Execute the full loop until checks pass
 - Commit after each successful fix
-- Create PR and enable auto-merge
-- Report completion with PR link
+- Create PR and report the PR link
+- Let the Smart Governance Gate decide merge policy
 
-Required checks for merge: `Python Quality`, `Security`
+Required checks for merge: `Python Quality`, `Smoke Test`, `Security`
 Optional (won't block): SonarCloud, Claude Review, Seer
 
 **After completing any task:**

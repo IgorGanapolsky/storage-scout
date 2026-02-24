@@ -1,0 +1,138 @@
+name: Dead Code Cleanup
+
+# Ona pattern: combine deterministic tools (ruff, vulture) with agent
+# to find unused code, open small reviewable PRs
+
+on:
+  schedule:
+    # Saturday 6:00 AM EST (11:00 UTC) — weekend maintenance
+    - cron: '0 11 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detect-and-clean:
+    name: Find & Remove Dead Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install tools
+        run: pip install ruff vulture
+
+      - name: Detect unused imports
+        id: imports
+        run: |
+          # Ruff F401 = unused imports
+          UNUSED=$(ruff check autonomy/ --select F401 --output-format json 2>/dev/null || echo "[]")
+          COUNT=$(echo "$UNUSED" | jq 'length')
+          echo "unused_imports=$COUNT" >> $GITHUB_OUTPUT
+          echo "Found $COUNT unused imports"
+
+          if [ "$COUNT" -gt "0" ]; then
+            # Auto-fix unused imports
+            ruff check autonomy/ --select F401 --fix 2>/dev/null || true
+          fi
+
+      - name: Detect dead code with vulture
+        id: vulture
+        run: |
+          # Vulture finds unused functions, variables, classes
+          # Use high confidence threshold to avoid false positives
+          vulture autonomy/ --min-confidence 90 > /tmp/vulture-report.txt 2>&1 || true
+          DEAD_COUNT=$(wc -l < /tmp/vulture-report.txt | tr -d ' ')
+          echo "dead_code_lines=$DEAD_COUNT" >> $GITHUB_OUTPUT
+          echo "Found $DEAD_COUNT potential dead code items"
+
+          if [ "$DEAD_COUNT" -gt "0" ]; then
+            echo "### Vulture Report (confidence >= 90%)" >> $GITHUB_STEP_SUMMARY
+            cat /tmp/vulture-report.txt >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            git diff --stat
+          fi
+
+      - name: Verify fixes don't break imports
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          python3 -c "
+          import importlib, sys
+          modules = [
+              'autonomy',
+              'autonomy.engine',
+              'autonomy.outreach_policy',
+              'autonomy.tracking',
+              'autonomy.utils',
+          ]
+          failed = []
+          for mod in modules:
+              try:
+                  importlib.import_module(mod)
+              except Exception as e:
+                  failed.append(f'{mod}: {e}')
+          if failed:
+              print('Import check failed after cleanup:')
+              for f in failed:
+                  print(f'  {f}')
+              sys.exit(1)
+          print('All imports OK after dead code removal')
+          "
+
+      - name: Lint check after cleanup
+        if: steps.changes.outputs.has_changes == 'true'
+        run: ruff check autonomy/ --select E,F,W --ignore E501
+
+      - name: Create PR
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="ralph/dead-code-cleanup-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "refactor: remove ${{ steps.imports.outputs.unused_imports }} unused imports
+
+          Automated dead code cleanup by Ralph.
+          Vulture detected ${{ steps.vulture.outputs.dead_code_lines }} additional items (logged, not auto-removed)."
+
+          git push -u origin "$BRANCH"
+
+          gh pr create \
+            --base develop \
+            --title "refactor: automated dead code cleanup" \
+            --body "## Automated Cleanup
+
+          **Unused imports removed**: ${{ steps.imports.outputs.unused_imports }}
+          **Vulture dead code detected**: ${{ steps.vulture.outputs.dead_code_lines }} items (report in workflow summary)
+
+          Only safe auto-fixes applied (unused imports). Vulture findings logged for manual review.
+          Smoke test + lint verified after changes.
+
+          ---
+          Runs every Saturday 6am EST.
+          Policy: AI writes code, AI does not ship code." \
+            --label "maintenance,ralph-mode"
+
+      - name: No changes needed
+        if: steps.changes.outputs.has_changes != 'true'
+        run: |
+          echo "### Dead Code Cleanup" >> $GITHUB_STEP_SUMMARY
+          echo "Codebase is clean. No unused imports found." >> $GITHUB_STEP_SUMMARY
+          echo "Vulture items: ${{ steps.vulture.outputs.dead_code_lines }} (below action threshold)" >> $GITHUB_STEP_SUMMARY
