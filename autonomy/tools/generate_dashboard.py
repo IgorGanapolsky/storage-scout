@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ _DB_CANDIDATES = [
     REPO_ROOT / "autonomy" / "state" / "autonomy_live.sqlite3",
     REPO_ROOT / "autonomy" / "state" / "autonomy.sqlite3",
 ]
+
+log = logging.getLogger(__name__)
 
 
 def _find_db() -> Path | None:
@@ -47,7 +50,9 @@ def generate():
                 "SELECT ts, action_type, payload_json FROM actions ORDER BY ts DESC LIMIT 15"
             ).fetchall()
         except sqlite3.OperationalError:
-            pass
+            log.warning("Dashboard source DB unavailable or schema mismatch; rendering fallback metrics.")
+        finally:
+            conn.close()
 
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     db_label = str(actual_db.name) if actual_db else "none"
