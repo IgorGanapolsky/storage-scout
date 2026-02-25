@@ -32,13 +32,6 @@ class OutreachWriter:
     def _render_unsubscribe(self, email: str) -> str:
         return self.unsubscribe_url.replace("{{email}}", email)
 
-    def _render_intake_link(self) -> str:
-        if not self.intake_url:
-            return ""
-        joiner = "&" if "?" in self.intake_url else "?"
-        # Do not include PII in query params (e.g., email). Keep UTMs only.
-        return f"{self.intake_url}{joiner}utm_source=outreach&utm_medium=email&utm_campaign=baseline"
-
     def _proof_line(self) -> str:
         if not self.baseline_example_url:
             return ""
