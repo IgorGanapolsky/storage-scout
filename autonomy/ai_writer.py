@@ -16,6 +16,7 @@ class AIOutreachWriter:
     mailing_address: str
     signature: str
     unsubscribe_url: str
+    kickoff_url: str = ""
     booking_url: str = ""
     baseline_example_url: str = ""
     model: str = "gpt-4o"
@@ -73,7 +74,8 @@ class AIOutreachWriter:
             f"You write short, personalized cold outreach emails for {self.company_name}, "
             f"a missed-call recovery service for local businesses. "
             f"Keep emails under 100 words. Be conversational, not salesy. "
-            f"CTA must be 'Reply YES' — never include Calendly or intake form links. "
+            f"CTA can be 'Reply YES' or a direct link to the setup page if the business has verified pain. "
+            f"Setup link: {self.kickoff_url} ($249 setup fee). "
             f"Frame as: free pilot, pay per recovered call ($25/call, no monthly fee). "
             f"Always include the unsubscribe link."
         )

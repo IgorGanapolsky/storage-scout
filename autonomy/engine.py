@@ -61,6 +61,7 @@ class Engine:
                 mailing_address=config.company["mailing_address"],
                 signature=config.company["signature"],
                 unsubscribe_url=config.compliance["unsubscribe_url"],
+                kickoff_url=config.company.get("kickoff_url", ""),
                 booking_url=config.company.get("booking_url", ""),
                 baseline_example_url=config.company.get("baseline_example_url", ""),
                 model=ai_cfg.get("model", "gpt-4o"),
@@ -73,6 +74,7 @@ class Engine:
                 mailing_address=config.company["mailing_address"],
                 signature=config.company["signature"],
                 unsubscribe_url=config.compliance["unsubscribe_url"],
+                kickoff_url=config.company.get("kickoff_url", ""),
                 booking_url=config.company.get("booking_url", ""),
                 baseline_example_url=config.company.get("baseline_example_url", ""),
             )

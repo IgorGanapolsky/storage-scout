@@ -26,6 +26,7 @@ class OutreachWriter:
     mailing_address: str
     signature: str
     unsubscribe_url: str
+    kickoff_url: str = ""
     booking_url: str = ""
     baseline_example_url: str = ""
 
@@ -38,7 +39,10 @@ class OutreachWriter:
         return f"\nExample baseline (1 page): {self.baseline_example_url}"
 
     def _booking_line(self) -> str:
-        return "\nReply YES and I'll run the free baseline for you — no call needed."
+        line = "\nReply YES and I'll run the free baseline for you — no call needed."
+        if self.kickoff_url:
+            line += f"\nOr skip the line and start setup now: {self.kickoff_url} ($249 setup fee)."
+        return line
 
     def _is_med_spa(self, lead: Lead) -> bool:
         return "med spa" in (lead.service or "").lower()
