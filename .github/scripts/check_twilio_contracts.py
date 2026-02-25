@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,53 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _dotted_name(node: ast.AST | None) -> str:
+    if node is None:
+        return ""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        left = _dotted_name(node.value)
+        return f"{left}.{node.attr}" if left else node.attr
+    return ""
+
+
+def _extract_asserted_outcomes(path: Path) -> tuple[set[str], int]:
+    tree = ast.parse(_read_text(path), filename=str(path))
+    outcomes: set[str] = set()
+    assert_count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assert):
+            continue
+        assert_count += 1
+        for child in ast.walk(node.test):
+            if not isinstance(child, ast.Compare):
+                continue
+            operands = [child.left, *child.comparators]
+            has_dynamic_operand = any(
+                not (isinstance(op, ast.Constant) and isinstance(op.value, str))
+                for op in operands
+            )
+            if not has_dynamic_operand:
+                continue
+            for op in operands:
+                if isinstance(op, ast.Constant) and isinstance(op.value, str):
+                    if op.value in REQUIRED_OUTCOMES:
+                        outcomes.add(op.value)
+    return outcomes, assert_count
+
+
+def _has_log_action_calls(path: Path) -> bool:
+    tree = ast.parse(_read_text(path), filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = _dotted_name(node.func)
+        if callee == "log_action" or callee.endswith(".log_action"):
+            return True
+    return False
+
+
 def main() -> int:
     violations: list[Violation] = []
 
@@ -55,7 +103,7 @@ def main() -> int:
             )
             continue
         text = _read_text(path)
-        if "log_action(" not in text:
+        if not _has_log_action_calls(path):
             violations.append(
                 Violation(
                     code="GOV102",
@@ -64,7 +112,9 @@ def main() -> int:
                 )
             )
 
-    twilio_test_text_parts: list[str] = []
+    asserted_outcomes: set[str] = set()
+    total_assert_count = 0
+    has_log_action_test_call = False
     for filename in REQUIRED_TWILIO_TEST_FILES:
         path = TESTS_DIR / filename
         if not path.exists():
@@ -76,25 +126,38 @@ def main() -> int:
                 )
             )
             continue
-        twilio_test_text_parts.append(_read_text(path))
+        outcomes, assert_count = _extract_asserted_outcomes(path)
+        asserted_outcomes.update(outcomes)
+        total_assert_count += assert_count
+        has_log_action_test_call = has_log_action_test_call or _has_log_action_calls(path)
 
-    combined_test_text = "\n".join(twilio_test_text_parts)
+    if total_assert_count == 0:
+        violations.append(
+            Violation(
+                code="GOV204",
+                path="autonomy/tests/test_twilio_*.py",
+                message="No assert statements found in required Twilio tests.",
+            )
+        )
+
     for outcome in REQUIRED_OUTCOMES:
-        if outcome not in combined_test_text:
+        if outcome not in asserted_outcomes:
             violations.append(
                 Violation(
                     code="GOV202",
                     path="autonomy/tests/test_twilio_*.py",
-                    message=f"Canonical outcome `{outcome}` is not covered in Twilio tests.",
+                    message=(
+                        f"Canonical outcome `{outcome}` is not covered in Twilio test assertions."
+                    ),
                 )
             )
 
-    if "log_action(" not in combined_test_text:
+    if not has_log_action_test_call:
         violations.append(
             Violation(
                 code="GOV203",
                 path="autonomy/tests/test_twilio_*.py",
-                message="No Twilio tests reference audit logging behavior (`log_action(...)`).",
+                message="No Twilio tests call `log_action(...)` for audit-path coverage.",
             )
         )
 
