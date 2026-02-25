@@ -165,41 +165,90 @@ class AuditNode(Node):
         return state
 
 class OutreachNode(Node):
-    """Outreach Node: Twilio Calls, SMS Follow-up, and Interest Nudges."""
+    """Outreach Node: Uses Delegation Market for Verifiable Task Allocation."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
         from autonomy.tools.twilio_autocall import run_auto_calls
         from autonomy.tools.twilio_sms import run_sms_followup
         from autonomy.tools.twilio_interest_nudge import run_interest_nudges
+        from autonomy.delegation import DelegationMarket, TrustManager, AgentBid, VerifiableContract
 
         call_rows = state.metadata.get("call_list", [])
 
-        # 1. Run Auto-calls
-        call_res = run_auto_calls(
-            sqlite_path=state.sqlite_path,
-            audit_log=state.audit_log_path,
-            env=state.env,
-            call_rows=call_rows
-        )
-        state.calls_attempted = call_res.attempted
-        state.metadata["outreach_result"] = call_res
+        # 1. Initialize Delegation Market & Trust Store
+        # In a real system, initial_trust is loaded from DB.
+        trust_manager = TrustManager({"agent_autocall": 0.9, "agent_sms": 0.8, "agent_nudge": 0.8})
 
-        # 2. Run SMS Follow-ups
-        sms_res = run_sms_followup(
-            sqlite_path=state.sqlite_path,
-            audit_log=state.audit_log_path,
-            env=state.env,
+        # 2. Delegate Auto-calls
+        market_calls = DelegationMarket(trust_manager)
+        call_contract = VerifiableContract(
+            agent_id="agent_autocall",
+            is_valid=bool(state.sqlite_path and state.sqlite_path.exists()),
+            reason="Database exists for call tracking."
         )
-        state.sms_sent = sms_res.attempted
-        state.metadata["sms_result"] = sms_res
+        market_calls.receive_bid(AgentBid("agent_autocall", confidence_score=0.9, estimated_cost=0.0, contract=call_contract))
 
-        # 3. Run Interest Nudges
-        nudge_res = run_interest_nudges(
-            sqlite_path=state.sqlite_path,
-            audit_log=state.audit_log_path,
-            env=state.env,
+        best_call_agent = market_calls.select_best_agent()
+        if best_call_agent:
+            log.info(f"Delegating calls to {best_call_agent.agent_id}")
+            call_res = run_auto_calls(
+                sqlite_path=state.sqlite_path,
+                audit_log=state.audit_log_path,
+                env=state.env,
+                call_rows=call_rows
+            )
+            state.calls_attempted = call_res.attempted
+            state.metadata["outreach_result"] = call_res
+        else:
+            log.warning("No valid bids for call delegation.")
+
+        # 3. Delegate SMS Follow-ups
+        market_sms = DelegationMarket(trust_manager)
+
+        # PROOF OF COMPLIANCE: Twilio Toll-Free Verification
+        is_tfv_approved = truthy(state.env.get("TWILIO_TFV_APPROVED"), default=False)
+        sms_contract = VerifiableContract(
+            agent_id="agent_sms",
+            is_valid=is_tfv_approved,
+            reason="Twilio Toll-Free Verification is approved." if is_tfv_approved else "Twilio TFV is IN_REVIEW or blocked."
         )
-        state.nudges_sent = nudge_res.nudged
-        state.metadata["interest_nudge_result"] = nudge_res
+        market_sms.receive_bid(AgentBid("agent_sms", confidence_score=0.8, estimated_cost=0.0, contract=sms_contract))
+
+        best_sms_agent = market_sms.select_best_agent()
+        if best_sms_agent:
+            log.info(f"Delegating SMS to {best_sms_agent.agent_id}")
+            sms_res = run_sms_followup(
+                sqlite_path=state.sqlite_path,
+                audit_log=state.audit_log_path,
+                env=state.env,
+            )
+            state.sms_sent = sms_res.attempted
+            state.metadata["sms_result"] = sms_res
+        else:
+            log.warning(f"SMS delegation blocked by VerifiableContract: {sms_contract.reason}")
+            state.metadata["sms_result"] = None
+
+        # 4. Delegate Interest Nudges
+        market_nudge = DelegationMarket(trust_manager)
+        nudge_contract = VerifiableContract(
+            agent_id="agent_nudge",
+            is_valid=is_tfv_approved,
+            reason="Twilio Toll-Free Verification is approved." if is_tfv_approved else "Twilio TFV is IN_REVIEW or blocked."
+        )
+        market_nudge.receive_bid(AgentBid("agent_nudge", confidence_score=0.8, estimated_cost=0.0, contract=nudge_contract))
+
+        best_nudge_agent = market_nudge.select_best_agent()
+        if best_nudge_agent:
+            log.info(f"Delegating Interest Nudges to {best_nudge_agent.agent_id}")
+            nudge_res = run_interest_nudges(
+                sqlite_path=state.sqlite_path,
+                audit_log=state.audit_log_path,
+                env=state.env,
+            )
+            state.nudges_sent = nudge_res.nudged
+            state.metadata["interest_nudge_result"] = nudge_res
+        else:
+            log.warning(f"Nudge delegation blocked by VerifiableContract: {nudge_contract.reason}")
+            state.metadata["interest_nudge_result"] = None
 
         return state
 
