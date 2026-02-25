@@ -13,8 +13,25 @@ class LeadScorer:
             score += 15
         if lead.service:
             score += 10
+            # Tier 1 Verticals (Highest ROI)
+            service_l = lead.service.lower()
+            if "dentist" in service_l or "dental" in service_l:
+                score += 15
+            elif "med spa" in service_l or "aesthetics" in service_l:
+                score += 15
+            elif "hvac" in service_l or "plumbing" in service_l or "plumber" in service_l:
+                score += 10
         if lead.city and lead.state:
             score += 10
+            # Regional Priority (South Florida)
+            if (lead.state or "").upper() == "FL":
+                south_fl_cities = {
+                    "miami", "fort lauderdale", "pompano beach", "coral springs",
+                    "hollywood", "davie", "plantation", "sunrise", "deerfield beach",
+                    "pembroke pines", "miramar", "weston", "tamarac", "margate"
+                }
+                if (lead.city or "").lower() in south_fl_cities:
+                    score += 5
         if lead.email:
             score += 20
         return min(score, 100)

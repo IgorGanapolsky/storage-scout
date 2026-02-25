@@ -13,7 +13,8 @@ from email.parser import BytesParser
 from email.utils import parseaddr
 from pathlib import Path
 
-from autonomy.context_store import ContextStore
+from autonomy.agents import LeadScorer
+from autonomy.context_store import ContextStore, Lead
 from autonomy.utils import EMAIL_SEARCH_RE
 
 UTC = timezone.utc
@@ -114,6 +115,33 @@ def _message_text(msg) -> str:
     return "\n".join(parts)
 
 
+def _parse_intake_body(body: str) -> dict[str, str]:
+    """Parse FormSubmit-style 'Field: Value' pairs from email body."""
+    out = {}
+    lines = (body or "").splitlines()
+    for line in lines:
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        key = k.strip().lower()
+        val = v.strip()
+        if key in ("name", "full name"):
+            out["name"] = val
+        elif key in ("email", "e-mail"):
+            out["email"] = val
+        elif key in ("phone", "telephone", "cell"):
+            out["phone"] = val
+        elif key in ("company", "business", "practice"):
+            out["company"] = val
+        elif key in ("service", "industry"):
+            out["service"] = val
+        elif key in ("city", "location"):
+            out["city"] = val
+        elif key in ("state", "province"):
+            out["state"] = val
+    return out
+
+
 def _is_bounce(from_name: str, from_email: str, subject: str, body: str) -> bool:
     from_name_l = (from_name or "").lower()
     from_email_l = (from_email or "").lower()
@@ -175,6 +203,7 @@ def sync_fastmail_inbox(
     last_uid = int(state.get("last_uid") or 0)
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    scorer = LeadScorer()
 
     processed = 0
     new_bounces = 0
@@ -269,6 +298,34 @@ def sync_fastmail_inbox(
             # Intake submissions (formsubmit -> hello inbox)
             if "baseline intake" in subject.lower() and "callcatcher" in subject.lower():
                 intake_submissions += 1
+                data = _parse_intake_body(body_text)
+                if data.get("email"):
+                    email = data["email"].strip().lower()
+                    lead = Lead(
+                        id=email,
+                        name=data.get("name", ""),
+                        company=data.get("company", ""),
+                        email=email,
+                        phone=data.get("phone", ""),
+                        service=data.get("service", ""),
+                        city=data.get("city", ""),
+                        state=data.get("state", ""),
+                        source="intake",
+                        status="new",
+                    )
+                    lead.score = scorer.score(lead)
+                    store.upsert_lead(lead)
+                    store.log_action(
+                        agent_id="agent.inbox_sync.v1",
+                        action_type="lead.intake_scored",
+                        trace_id=f"imap:intake:{uid}",
+                        payload={
+                            "email": email,
+                            "score": lead.score,
+                            "mailbox": mailbox,
+                            "message_uid": uid,
+                        },
+                    )
 
             is_calendly_notice = _looks_like_calendly_booking(from_email, subject, body_text)
             is_stripe_notice = _looks_like_stripe_payment(from_email, subject, body_text)
