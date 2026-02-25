@@ -1,0 +1,49 @@
+name: 24/7 Agentic Orchestrator
+
+# Heartbeat of the revenue engine - runs hourly to process leads and handle outreach
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode'
+        required: false
+        default: 'true'
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  orchestrate:
+    name: Execute Orchestration Cycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r autonomy/tools/requirements.txt 2>/dev/null || true
+          pip install ruff pytest pytest-cov
+
+      - name: Run Orchestrator (Dry Run)
+        env:
+          AUTO_LEADGEN_LIMIT: 5
+          AUTO_LEAD_HYGIENE_DRY_RUN: "true"
+          # Add other required secrets/env here as needed
+        run: |
+          python autonomy/tools/live_job_refactored.py --config autonomy/config.callcatcherops.json
+
+      - name: Record Session Outcome
+        if: always()
+        run: |
+          echo "### Orchestration Cycle Completed" >> $GITHUB_STEP_SUMMARY
+          echo "Session ID: $(date +%s)" >> $GITHUB_STEP_SUMMARY
+          echo "Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

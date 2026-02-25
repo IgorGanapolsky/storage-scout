@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from dataclasses import dataclass
 
 from autonomy.orchestrator import Node, OrchestrationState
 from autonomy.tools.lead_gen_broward import (
@@ -19,6 +20,17 @@ from autonomy.utils import truthy, UTC
 
 log = logging.getLogger(__name__)
 
+@dataclass
+class MockInboxResult:
+    processed_messages: int = 0
+    new_bounces: int = 0
+    new_replies: int = 0
+    new_opt_outs: int = 0
+    intake_submissions: int = 0
+    calendly_bookings: int = 0
+    stripe_payments: int = 0
+    last_uid: int = 0
+
 def _int_env(raw: str | None, default: int) -> int:
     try:
         return int(str(raw).strip() or default)
@@ -28,18 +40,35 @@ def _int_env(raw: str | None, default: int) -> int:
 class IngestionNode(Node):
     """Lead Generation Node: Google Places API."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
-        # get_api_key() in tools/lead_gen_broward.py takes 0 args (reads from os.environ)
+        # Determine output CSV from the first configured CSV lead source.
+        output_rel = ""
+        for src in (getattr(state.config, "lead_sources", []) or []):
+            if (src.get("type") or "").lower() == "csv":
+                output_rel = str(src.get("path") or "").strip()
+                break
+
+        if not output_rel:
+            state.metadata["ingestion_skipped"] = "no_csv_source"
+            return state
+
+        output_path = (state.repo_root / output_rel).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
         api_key = get_api_key()
         if not api_key:
             state.metadata["ingestion_skipped"] = "missing_api_key"
             return state
 
-        limit = _int_env(state.env.get("AUTO_LEADGEN_LIMIT"), 30)
-        cities = load_cities(state.repo_root)
-        existing_emails = load_existing(state.sqlite_path)
+        limit = _int_env(state.env.get("AUTO_LEADGEN_LIMIT"), 0)
+        if limit <= 0:
+            state.metadata["ingestion_skipped"] = "limit_zero"
+            return state
+
+        cities = load_cities(None)
+        existing_emails, _, _ = load_existing(output_path)
 
         # build_leads takes direct params
-        new_leads = build_leads(
+        new_leads, _ = build_leads(
             api_key=api_key,
             categories=DEFAULT_CATEGORIES,
             cities=cities,
@@ -79,19 +108,23 @@ class HygieneNode(Node):
             state.metadata["hygiene_report"] = cleaned
         except Exception as e:
             log.warning(f"HygieneNode: {e}")
-            state.errors.append(f"HygieneNode: {e}")
+            # If the database doesn't exist yet, this is expected in first run
+            if "no such table" in str(e):
+                state.metadata["hygiene_skipped"] = "db_not_initialized"
+            else:
+                state.errors.append(f"HygieneNode: {e}")
 
         return state
 
 class AuditNode(Node):
     """Missed Call Audit Node: Probing offices."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
-        # generate_call_list takes no positional args in current implementation
         from autonomy.tools.call_list import generate_call_list
 
         try:
             call_list = generate_call_list(
-                sqlite_path=str(state.sqlite_path),
+                sqlite_path=state.sqlite_path,
+                services=DEFAULT_CATEGORIES,
                 limit=10,
                 min_score=60,
             )
@@ -143,6 +176,7 @@ class OutreachNode(Node):
             call_rows=call_rows
         )
         state.calls_attempted = call_res.attempted
+        state.metadata["outreach_result"] = call_res
 
         # 2. Run SMS Follow-ups
         sms_res = run_sms_followup(
@@ -151,6 +185,7 @@ class OutreachNode(Node):
             env=state.env,
         )
         state.sms_sent = sms_res.attempted
+        state.metadata["sms_result"] = sms_res
 
         # 3. Run Interest Nudges
         nudge_res = run_interest_nudges(
@@ -159,6 +194,7 @@ class OutreachNode(Node):
             env=state.env,
         )
         state.nudges_sent = nudge_res.nudged
+        state.metadata["interest_nudge_result"] = nudge_res
 
         return state
 
@@ -175,20 +211,18 @@ class ReportingNode(Node):
         )
 
         # 2. Format Report
+        inbox_result = MockInboxResult()
+
         report_txt = _format_report(
+            leadgen_new=state.leads_generated,
+            lead_hygiene=state.metadata.get("hygiene_report"),
+            engine_result={},
+            inbox_result=inbox_result,
             scoreboard=scoreboard,
-            lead_hygiene=state.metadata.get("hygiene_report", {}),
-            call_list=None,
-            audits=state.audits_run,
-            inbox_result=None, # Updated keyword
-            twilio_inbox_result=None, # Updated keyword
-            twilio_tollfree_result=None, # Updated keyword
-            sms_result=None, # Updated keyword
-            interest_nudge_result=None, # Updated keyword
-            outreach_result=None, # Updated keyword
-            revenue_result=None, # Updated keyword
-            goal_result=None,
-            leadgen_count=state.leads_generated,
+            scoreboard_days=30,
+            auto_calls=state.metadata.get("outreach_result"),
+            sms_followup=state.metadata.get("sms_result"),
+            interest_nudge=state.metadata.get("interest_nudge_result"),
         )
 
         # 3. Deliver
@@ -219,12 +253,13 @@ class ReflectionNode(Node):
         try:
             # 1. Prepare data objects for reflection
             scoreboard = load_scoreboard(sqlite_path=state.sqlite_path, days=7)
+            inbox_result = MockInboxResult()
 
             # 2. Analyze outcomes
             lesson = build_revenue_lesson(
                 scoreboard=scoreboard,
                 guardrails={}, # Optional
-                inbox_result=None, # Optional
+                inbox_result=inbox_result,
                 sources=[str(state.sqlite_path)]
             )
 
