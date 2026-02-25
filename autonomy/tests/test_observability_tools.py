@@ -567,5 +567,11 @@ def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(mon
     assert out is not None
     assert out["statuses"] == ["replied", "contacted", "new"]
     assert int(out["min_score"] or 0) == 70
+    assert bool(out["enrichment_enabled"]) is True
+    assert int(out["call_signal_days"] or 0) == 14
+    assert int(out["sms_signal_days"] or 0) == 30
     assert captured["statuses"] == ["replied", "contacted", "new"]
     assert int(captured["min_score"] or 0) == 70
+    assert bool(captured["enrichment_enabled"]) is True
+    assert int(captured["call_signal_days"] or 0) == 14
+    assert int(captured["sms_signal_days"] or 0) == 30
