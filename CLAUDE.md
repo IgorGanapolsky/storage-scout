@@ -29,6 +29,7 @@ python3 autonomy/tools/lead_gen_broward.py --limit 30
 ## Git Workflow
 - `main` - Default branch (all work lands here)
 - All changes via PRs to `main`
+- All implementation work must run from a dedicated git worktree; do not edit from the primary checkout.
 
 ## Coding Standards
 - Use environment variables for secrets (never commit tokens)
@@ -74,7 +75,7 @@ If user says "continue" or "continue where you left off":
 
 When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
-1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
+1. **Create worktree + branch immediately**: `git worktree add .worktrees/ralph-$(date +%Y%m%d-%H%M%S) -b ralph/$(date +%Y%m%d-%H%M%S) main`
 2. **Implement the changes** - Write all necessary code
 3. **Run checks**: `pip install ruff && ruff check autonomy/ --select E,F,W --ignore E501`
 4. **If checks FAIL**: Analyze error → Fix code → Run checks again (LOOP)

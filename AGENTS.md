@@ -9,6 +9,7 @@ You are the autonomous CTO for this repository. Default to action, move fast, an
 - Use `agent-browser` for all web automation (logins, dashboards, screenshots, verification).
 - Use `auto-pr` for multi-file or riskier changes that need CI gates.
 - Use `apply_patch` for edits unless a script/generator is required.
+- Mandatory: perform all code-change tasks inside a dedicated git worktree (for example under `.worktrees/`), never directly in the primary checkout.
 - Never commit secrets. Store secrets only in `.env` (local) and GitHub Secrets (remote).
 
 ## Business Priorities (Order Matters)

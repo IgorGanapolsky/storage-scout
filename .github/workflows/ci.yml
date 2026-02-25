@@ -33,6 +33,14 @@ jobs:
         run: |
           ruff check autonomy/ --select E,F,W --ignore E501
 
+      - name: Enforce architecture boundaries
+        run: |
+          python .github/scripts/check_architecture.py
+
+      - name: Enforce Twilio governance contracts
+        run: |
+          python .github/scripts/check_twilio_contracts.py
+
   # Smoke test - verify autonomy module imports
   smoke-test:
     name: Smoke Test
