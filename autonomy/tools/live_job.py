@@ -675,6 +675,9 @@ def _format_report(
         lines.append(f"- services: {services_str}")
         lines.append(f"- rows: {int(call_list.get('rows') or 0)}")
         lines.append(f"- path: {call_list.get('path') or ''}")
+        lines.append(f"- enrichment_enabled: {bool(call_list.get('enrichment_enabled', True))}")
+        lines.append(f"- call_signal_days: {int(call_list.get('call_signal_days') or 0)}")
+        lines.append(f"- sms_signal_days: {int(call_list.get('sms_signal_days') or 0)}")
     if auto_calls is not None:
         lines.append("")
         lines.append("Auto calls (Twilio)")
@@ -912,6 +915,9 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         call_floor = max(0, _int_env(env.get("HIGH_INTENT_CALL_MIN_SCORE"), default_min_score))
         min_score = max(min_score, call_floor)
     exclude_role_inbox = truthy(env.get("DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX"), default=high_intent_only)
+    enrichment_enabled = truthy(env.get("DAILY_CALL_LIST_ENRICHMENT_ENABLED"), default=True)
+    call_signal_days = max(1, _int_env(env.get("DAILY_CALL_LIST_CALL_SIGNAL_DAYS"), 14))
+    sms_signal_days = max(1, _int_env(env.get("DAILY_CALL_LIST_SMS_SIGNAL_DAYS"), 30))
 
     output_rel = (env.get("DAILY_CALL_LIST_OUTPUT") or "").strip()
     if not output_rel:
@@ -937,6 +943,9 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         statuses=statuses or None,
         min_score=min_score,
         exclude_role_inbox=exclude_role_inbox,
+        enrichment_enabled=enrichment_enabled,
+        call_signal_days=call_signal_days,
+        sms_signal_days=sms_signal_days,
         limit=limit,
         require_phone=True,
         include_opt_outs=False,
@@ -959,6 +968,9 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         "statuses": statuses,
         "min_score": min_score,
         "exclude_role_inbox": bool(exclude_role_inbox),
+        "enrichment_enabled": bool(enrichment_enabled),
+        "call_signal_days": int(call_signal_days),
+        "sms_signal_days": int(sms_signal_days),
         "hygiene_filter": hygiene_filter,
     }
 
@@ -1304,6 +1316,9 @@ def main() -> None:
         guardrails["call_list_statuses"] = call_list.get("statuses") or []
         guardrails["call_list_min_score"] = int(call_list.get("min_score") or 0)
         guardrails["call_list_exclude_role_inbox"] = bool(call_list.get("exclude_role_inbox"))
+        guardrails["call_list_enrichment_enabled"] = bool(call_list.get("enrichment_enabled", True))
+        guardrails["call_list_call_signal_days"] = int(call_list.get("call_signal_days") or 0)
+        guardrails["call_list_sms_signal_days"] = int(call_list.get("sms_signal_days") or 0)
         hygiene_filter = dict(call_list.get("hygiene_filter") or {})
         guardrails["lead_hygiene_call_rows_removed"] = int(hygiene_filter.get("removed_count") or 0)
         guardrails["lead_hygiene_call_rows_kept"] = int(hygiene_filter.get("kept_count") or 0)
