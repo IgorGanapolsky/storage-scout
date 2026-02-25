@@ -903,7 +903,10 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
         if not statuses:
             statuses = ["replied", "contacted", "new"]
 
-    default_min_score = 80 if high_intent_only else 0
+    # LeadScorer max possible score is 75 (company=20+phone=15+service=10+
+    # city/state=10+email=20).  Previous default of 80 was unreachable, which
+    # silently produced empty call lists.
+    default_min_score = 70 if high_intent_only else 0
     min_score = max(0, _int_env(env.get("DAILY_CALL_LIST_MIN_SCORE"), default_min_score))
     if high_intent_only:
         call_floor = max(0, _int_env(env.get("HIGH_INTENT_CALL_MIN_SCORE"), default_min_score))
