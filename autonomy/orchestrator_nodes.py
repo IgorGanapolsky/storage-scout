@@ -274,12 +274,12 @@ class ReflectionNode(Node):
             auditor = EvidenceAuditor(state.sqlite_path)
             signals = auditor.audit_interactions()
             auditor.update_assumptions(signals)
-            
+
             # Record evidence signals to metadata for visibility
             state.metadata["evidence_signals"] = [
                 {"id": s.assumption_id, "impact": s.impact, "note": s.note} for s in signals
             ]
-            
+
             # 3. Decision Logic: Pivot if evidence is strongly negative
             for s in signals:
                 if s.impact == "negative" and s.assumption_id == "price_point_249":
