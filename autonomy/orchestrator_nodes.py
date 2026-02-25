@@ -1,0 +1,241 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from autonomy.orchestrator import Node, OrchestrationState
+from autonomy.tools.lead_gen_broward import (
+    DEFAULT_CATEGORIES,
+    build_leads,
+    get_api_key,
+    load_cities,
+    load_existing,
+    save_city_index,
+    write_leads,
+)
+from autonomy.tools.lead_hygiene import clean_leads_db
+from autonomy.tools.missed_call_audit import run_audit, save_audit
+from autonomy.utils import truthy
+
+log = logging.getLogger(__name__)
+
+def _int_env(raw: str | None, default: int) -> int:
+    try:
+        return int(str(raw).strip() or default)
+    except Exception:
+        return int(default)
+
+class IngestionNode(Node):
+    """Lead Generation Node: Google Places API."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        # get_api_key() in tools/lead_gen_broward.py takes 0 args (reads from os.environ)
+        api_key = get_api_key() 
+        if not api_key:
+            state.metadata["ingestion_skipped"] = "missing_api_key"
+            return state
+
+        limit = _int_env(state.env.get("AUTO_LEADGEN_LIMIT"), 30)
+        cities = load_cities(state.repo_root)
+        existing_emails = load_existing(state.sqlite_path)
+        
+        # build_leads takes direct params
+        new_leads = build_leads(
+            api_key=api_key,
+            categories=DEFAULT_CATEGORIES,
+            cities=cities,
+            limit=limit,
+            existing_emails=existing_emails,
+        )
+        
+        if new_leads:
+            write_leads(state.sqlite_path, new_leads)
+            state.leads_generated = len(new_leads)
+            save_city_index(state.repo_root, cities)
+            
+        return state
+
+class HygieneNode(Node):
+    """Lead Hygiene Node: Email/Phone validation."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        enabled = truthy(state.env.get("AUTO_LEAD_HYGIENE_ENABLED"), default=True)
+        if not enabled:
+            state.metadata["hygiene_skipped"] = "disabled"
+            return state
+
+        dry_run = truthy(state.env.get("AUTO_LEAD_HYGIENE_DRY_RUN"), default=True) # Default dry-run for safety
+        smtp_probe = truthy(state.env.get("AUTO_LEAD_HYGIENE_SMTP_PROBE"), default=False)
+        check_mx = truthy(state.env.get("AUTO_LEAD_HYGIENE_MX_CHECK"), default=True)
+        sample_limit = max(0, _int_env(state.env.get("AUTO_LEAD_HYGIENE_SAMPLE_LIMIT"), 20))
+
+        try:
+            cleaned = clean_leads_db(
+                str(state.sqlite_path),
+                dry_run=dry_run,
+                smtp=smtp_probe,
+                check_mx=check_mx,
+                sample_limit=sample_limit,
+            )
+            state.leads_cleaned = cleaned.get("invalid", 0)
+            state.metadata["hygiene_report"] = cleaned
+        except Exception as e:
+            log.warning(f"HygieneNode: {e}")
+            state.errors.append(f"HygieneNode: {e}")
+            
+        return state
+
+class AuditNode(Node):
+    """Missed Call Audit Node: Probing offices."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        # generate_call_list takes no positional args in current implementation
+        from autonomy.tools.call_list import generate_call_list
+        
+        try:
+            call_list = generate_call_list(
+                sqlite_path=str(state.sqlite_path),
+                limit=10,
+                min_score=60,
+            )
+            state.metadata["call_list"] = call_list
+        except Exception as e:
+            log.warning(f"AuditNode: call list generation failed: {e}")
+            return state
+        
+        to_audit = [row for row in call_list if getattr(row, "lead_status", None) in {"new", "contacted"}]
+        to_audit = to_audit[:3]
+
+        for row in to_audit:
+            phone = getattr(row, "phone", None)
+            company = getattr(row, "company", None)
+            if not phone or not company:
+                continue
+
+            try:
+                res = run_audit(
+                    phone=phone,
+                    company=company,
+                    service=getattr(row, "service", "dentist"),
+                    state=getattr(row, "state", "FL"),
+                    num_calls=1,
+                    delay_between_secs=0,
+                    env=state.env
+                )
+                save_audit(res)
+                state.audits_run.append({"company": company, "miss_rate": res.miss_rate_pct})
+            except Exception as e:
+                log.error(f"AuditNode: failed for {company}: {e}")
+
+        return state
+
+class OutreachNode(Node):
+    """Outreach Node: Twilio Calls, SMS Follow-up, and Interest Nudges."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        from autonomy.tools.twilio_autocall import run_auto_calls
+        from autonomy.tools.twilio_sms import run_sms_followup
+        from autonomy.tools.twilio_interest_nudge import run_interest_nudges
+        
+        call_rows = state.metadata.get("call_list", [])
+
+        # 1. Run Auto-calls
+        call_res = run_auto_calls(
+            sqlite_path=state.sqlite_path,
+            audit_log=state.audit_log_path,
+            env=state.env,
+            call_rows=call_rows
+        )
+        state.calls_attempted = call_res.attempted
+        
+        # 2. Run SMS Follow-ups
+        sms_res = run_sms_followup(
+            sqlite_path=state.sqlite_path,
+            audit_log=state.audit_log_path,
+            env=state.env,
+        )
+        state.sms_sent = sms_res.attempted
+        
+        # 3. Run Interest Nudges
+        nudge_res = run_interest_nudges(
+            sqlite_path=state.sqlite_path,
+            audit_log=state.audit_log_path,
+            env=state.env,
+        )
+        state.nudges_sent = nudge_res.nudged
+        
+        return state
+
+class ReportingNode(Node):
+    """Reporting Node: Format and deliver the daily summary."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        from autonomy.tools.scoreboard import load_scoreboard
+        from autonomy.tools.live_job import _format_report, _send_email, _send_ntfy
+        
+        # 1. Generate Scoreboard
+        scoreboard = load_scoreboard(
+            sqlite_path=state.sqlite_path,
+            days=30
+        )
+        
+        # 2. Format Report
+        report_txt = _format_report(
+            scoreboard=scoreboard,
+            lead_hygiene=state.metadata.get("hygiene_report", {}),
+            call_list=None,
+            audits=state.audits_run,
+            inbox_result=None, # Updated keyword
+            twilio_inbox_result=None, # Updated keyword
+            twilio_tollfree_result=None, # Updated keyword
+            sms_result=None, # Updated keyword
+            interest_nudge_result=None, # Updated keyword
+            outreach_result=None, # Updated keyword
+            revenue_result=None, # Updated keyword
+            goal_result=None,
+            leadgen_count=state.leads_generated,
+        )
+        
+        # 3. Deliver
+        smtp_user = state.env.get("SMTP_USER", "hello@callcatcherops.com")
+        smtp_password = state.env.get("SMTP_PASSWORD")
+        report_to = state.env.get("REPORT_TO_EMAIL")
+        
+        if smtp_password and report_to:
+            try:
+                _send_email(
+                    smtp_user=smtp_user,
+                    smtp_password=smtp_password,
+                    to_email=report_to,
+                    subject=f"CallCatcher Ops Report - {datetime.now(UTC).date().isoformat()}",
+                    body=report_txt
+                )
+            except Exception as e:
+                log.error(f"ReportingNode: email failed: {e}")
+            
+        return state
+
+class ReflectionNode(Node):
+    """Reflection Node: Autonomous strategy analysis (Ozkary pattern)."""
+    def run(self, state: OrchestrationState) -> OrchestrationState:
+        from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
+        from autonomy.tools.scoreboard import load_scoreboard
+        
+        try:
+            # 1. Prepare data objects for reflection
+            scoreboard = load_scoreboard(sqlite_path=state.sqlite_path, days=7)
+            
+            # 2. Analyze outcomes
+            lesson = build_revenue_lesson(
+                scoreboard=scoreboard,
+                guardrails={}, # Optional
+                inbox_result=None, # Optional
+                sources=[str(state.sqlite_path)]
+            )
+            
+            # 3. Record to RAG
+            if lesson:
+                record_revenue_lesson(repo_root=state.repo_root, lesson=lesson)
+                state.metadata["reflection_bottleneck"] = lesson.bottleneck
+                state.metadata["reflection_next_action"] = lesson.next_actions
+        except Exception as e:
+            log.warning(f"ReflectionNode: {e}")
+            
+        return state

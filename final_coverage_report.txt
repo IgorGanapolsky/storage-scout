@@ -1,0 +1,78 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/ganapolsky_i/workspace/git/igor/storage
+plugins: cov-7.0.0
+collected 125 items
+
+autonomy/tests/test_agent_commerce.py ...                                [  2%]
+autonomy/tests/test_call_list.py ...                                     [  4%]
+autonomy/tests/test_deliverability_policy.py ......                      [  9%]
+autonomy/tests/test_email_preflight.py ....                              [ 12%]
+autonomy/tests/test_funnel_watchdog.py ...                               [ 15%]
+autonomy/tests/test_goal_planner.py ..........................           [ 36%]
+autonomy/tests/test_launchd_tollfree_watchdog.py .                       [ 36%]
+autonomy/tests/test_observability_tools.py ..............                [ 48%]
+autonomy/tests/test_observer.py ......................                   [ 65%]
+autonomy/tests/test_revenue_rag.py ..                                    [ 67%]
+autonomy/tests/test_twilio_autocall.py .............                     [ 77%]
+autonomy/tests/test_twilio_inbox_sync.py ..                              [ 79%]
+autonomy/tests/test_twilio_interest_nudge.py ...                         [ 81%]
+autonomy/tests/test_twilio_sms.py .................                      [ 95%]
+autonomy/tests/test_twilio_tollfree_watchdog.py ......                   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                  Stmts   Miss  Cover
+-------------------------------------------------------------------------
+autonomy/__init__.py                                      0      0   100%
+autonomy/agents.py                                       73     40    45%
+autonomy/ai_writer.py                                    90     30    67%
+autonomy/context_store.py                               176     19    89%
+autonomy/engine.py                                      181     76    58%
+autonomy/goal_executor.py                                99     19    81%
+autonomy/goal_planner.py                                153     17    89%
+autonomy/observer.py                                     82      4    95%
+autonomy/outreach_policy.py                              49      9    82%
+autonomy/providers.py                                    78     27    65%
+autonomy/run.py                                          14     14     0%
+autonomy/tests/test_agent_commerce.py                    63      1    98%
+autonomy/tests/test_call_list.py                         49      0   100%
+autonomy/tests/test_deliverability_policy.py            121      0   100%
+autonomy/tests/test_email_preflight.py                   26      0   100%
+autonomy/tests/test_funnel_watchdog.py                   33      1    97%
+autonomy/tests/test_goal_planner.py                     226      3    99%
+autonomy/tests/test_launchd_tollfree_watchdog.py         10      0   100%
+autonomy/tests/test_observability_tools.py              160      0   100%
+autonomy/tests/test_observer.py                         182      3    98%
+autonomy/tests/test_revenue_rag.py                       38      0   100%
+autonomy/tests/test_twilio_autocall.py                  199      4    98%
+autonomy/tests/test_twilio_inbox_sync.py                 72      2    97%
+autonomy/tests/test_twilio_interest_nudge.py             67      1    99%
+autonomy/tests/test_twilio_sms.py                       228      2    99%
+autonomy/tests/test_twilio_tollfree_watchdog.py         134      5    96%
+autonomy/tools/__init__.py                                0      0   100%
+autonomy/tools/agent_commerce.py                         88      6    93%
+autonomy/tools/anchor_scraper.py                        221    221     0%
+autonomy/tools/call_list.py                             137     38    72%
+autonomy/tools/fastmail_inbox_sync.py                   236    175    26%
+autonomy/tools/funnel_watchdog.py                       188     91    52%
+autonomy/tools/generate_dashboard.py                     50     50     0%
+autonomy/tools/install_launchd_daily.py                  26     26     0%
+autonomy/tools/install_launchd_tollfree_watchdog.py      26     14    46%
+autonomy/tools/lead_gen_broward.py                      368    317    14%
+autonomy/tools/lead_hygiene.py                          137     99    28%
+autonomy/tools/live_job.py                              847    559    34%
+autonomy/tools/missed_call_audit.py                     118     71    40%
+autonomy/tools/revenue_rag.py                           101     25    75%
+autonomy/tools/scoreboard.py                             62     16    74%
+autonomy/tools/twilio_autocall.py                       225     16    93%
+autonomy/tools/twilio_inbox_sync.py                     142     14    90%
+autonomy/tools/twilio_interest_nudge.py                 152     26    83%
+autonomy/tools/twilio_sms.py                            219     45    79%
+autonomy/tools/twilio_tollfree_watchdog.py              331     71    79%
+autonomy/tracking.py                                     16      1    94%
+autonomy/utils.py                                        40      4    90%
+-------------------------------------------------------------------------
+TOTAL                                                  6333   2162    66%
+============================= 125 passed in 0.64s ==============================
