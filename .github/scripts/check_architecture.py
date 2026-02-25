@@ -58,6 +58,21 @@ FORBIDDEN_TWILIO_HTTP_CALLS = frozenset(
     }
 )
 
+TRANSPORT_FACTORY_CALLS = frozenset(
+    {
+        "urllib.request.build_opener",
+        "requests.Session",
+        "httpx.Client",
+        "httpx.AsyncClient",
+        "urllib3.PoolManager",
+        "aiohttp.ClientSession",
+    }
+)
+
+TRANSPORT_METHOD_NAMES = frozenset(
+    {"open", "request", "send", "get", "post", "put", "patch", "delete"}
+)
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -123,6 +138,8 @@ def _is_forbidden_transport_call(
     resolved = _resolve_alias_dotted_name(callee, import_alias_map)
     if resolved in FORBIDDEN_TWILIO_HTTP_CALLS:
         return resolved
+    if resolved.startswith("urllib.request.") and resolved != "urllib.request.urlencode":
+        return resolved
     return None
 
 
@@ -133,9 +150,51 @@ def _is_request_json_call(
     if not callee:
         return False
     resolved = _resolve_alias_dotted_name(callee, import_alias_map)
-    return resolved == "autonomy.tools.agent_commerce.request_json" or resolved.endswith(
-        ".request_json"
-    )
+    return resolved == "autonomy.tools.agent_commerce.request_json"
+
+
+def _iter_assigned_names(target: ast.AST) -> Iterable[str]:
+    if isinstance(target, ast.Name):
+        yield target.id
+        return
+    if isinstance(target, (ast.Tuple, ast.List)):
+        for child in target.elts:
+            yield from _iter_assigned_names(child)
+
+
+def _collect_transport_client_vars(
+    tree: ast.AST, import_alias_map: Mapping[str, str]
+) -> set[str]:
+    names: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            factory = _resolve_alias_dotted_name(
+                _dotted_name(node.value.func),
+                import_alias_map,
+            )
+            if factory in TRANSPORT_FACTORY_CALLS:
+                for target in node.targets:
+                    names.update(_iter_assigned_names(target))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Call):
+            factory = _resolve_alias_dotted_name(
+                _dotted_name(node.value.func),
+                import_alias_map,
+            )
+            if factory in TRANSPORT_FACTORY_CALLS:
+                names.update(_iter_assigned_names(node.target))
+        elif isinstance(node, ast.With):
+            for item in node.items:
+                if not isinstance(item.context_expr, ast.Call):
+                    continue
+                factory = _resolve_alias_dotted_name(
+                    _dotted_name(item.context_expr.func),
+                    import_alias_map,
+                )
+                if factory in TRANSPORT_FACTORY_CALLS and item.optional_vars is not None:
+                    names.update(_iter_assigned_names(item.optional_vars))
+
+    return names
 
 
 def _analyze_file(py_file: Path) -> list[Violation]:
@@ -262,6 +321,7 @@ def _analyze_file(py_file: Path) -> list[Violation]:
             )
 
     if is_approved_wrapper:
+        transport_client_vars = _collect_transport_client_vars(tree, import_alias_map)
         has_request_json_call = any(
             _is_request_json_call(node, import_alias_map)
             for node in ast.walk(tree)
@@ -296,8 +356,47 @@ def _analyze_file(py_file: Path) -> list[Violation]:
                             "Use request_json helper."
                         ),
                         snippet=_safe_line(lines, int(node.lineno)),
+                        )
                     )
-                )
+                continue
+
+            if isinstance(node.func, ast.Attribute):
+                call_attr = node.func.attr
+                if call_attr in TRANSPORT_METHOD_NAMES:
+                    root = _attribute_root_name(node.func)
+                    if root in transport_client_vars:
+                        violations.append(
+                            Violation(
+                                code="ARCH203",
+                                path=rel_path,
+                                line=int(node.lineno),
+                                message=(
+                                    "Detected direct transport client usage for Twilio flow. "
+                                    "Use autonomy.tools.agent_commerce.request_json."
+                                ),
+                                snippet=_safe_line(lines, int(node.lineno)),
+                            )
+                        )
+                        continue
+
+                    if isinstance(node.func.value, ast.Call):
+                        factory = _resolve_alias_dotted_name(
+                            _dotted_name(node.func.value.func),
+                            import_alias_map,
+                        )
+                        if factory in TRANSPORT_FACTORY_CALLS:
+                            violations.append(
+                                Violation(
+                                    code="ARCH203",
+                                    path=rel_path,
+                                    line=int(node.lineno),
+                                    message=(
+                                        "Detected direct transport factory usage for Twilio flow. "
+                                        "Use autonomy.tools.agent_commerce.request_json."
+                                    ),
+                                    snippet=_safe_line(lines, int(node.lineno)),
+                                )
+                            )
 
     deduped = {
         (v.code, v.path, v.line, v.message, v.snippet): v
