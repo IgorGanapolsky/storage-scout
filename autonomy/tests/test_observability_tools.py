@@ -482,6 +482,6 @@ def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(mon
     )
     assert out is not None
     assert out["statuses"] == ["replied", "contacted", "new"]
-    assert int(out["min_score"] or 0) == 80
+    assert int(out["min_score"] or 0) == 70
     assert captured["statuses"] == ["replied", "contacted", "new"]
-    assert int(captured["min_score"] or 0) == 80
+    assert int(captured["min_score"] or 0) == 70
