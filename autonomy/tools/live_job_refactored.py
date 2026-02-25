@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
-import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -33,15 +31,15 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
-    
+
     # Resolve config with fallback to tracked version
     requested = (repo_root / args.config).resolve()
     if not requested.exists():
         requested = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
-    
+
     cfg = load_config(requested)
     env = load_dotenv(repo_root / args.env_file)
-    
+
     sqlite_raw = Path(cfg.storage["sqlite_path"])
     audit_raw = Path(cfg.storage["audit_log"])
     sqlite_path = sqlite_raw if sqlite_raw.is_absolute() else (repo_root / sqlite_raw).resolve()

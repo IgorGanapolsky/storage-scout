@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 from autonomy.orchestrator import Node, OrchestrationState
 from autonomy.tools.lead_gen_broward import (
@@ -17,7 +15,7 @@ from autonomy.tools.lead_gen_broward import (
 )
 from autonomy.tools.lead_hygiene import clean_leads_db
 from autonomy.tools.missed_call_audit import run_audit, save_audit
-from autonomy.utils import truthy
+from autonomy.utils import truthy, UTC
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ class IngestionNode(Node):
     """Lead Generation Node: Google Places API."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
         # get_api_key() in tools/lead_gen_broward.py takes 0 args (reads from os.environ)
-        api_key = get_api_key() 
+        api_key = get_api_key()
         if not api_key:
             state.metadata["ingestion_skipped"] = "missing_api_key"
             return state
@@ -39,7 +37,7 @@ class IngestionNode(Node):
         limit = _int_env(state.env.get("AUTO_LEADGEN_LIMIT"), 30)
         cities = load_cities(state.repo_root)
         existing_emails = load_existing(state.sqlite_path)
-        
+
         # build_leads takes direct params
         new_leads = build_leads(
             api_key=api_key,
@@ -48,12 +46,12 @@ class IngestionNode(Node):
             limit=limit,
             existing_emails=existing_emails,
         )
-        
+
         if new_leads:
             write_leads(state.sqlite_path, new_leads)
             state.leads_generated = len(new_leads)
             save_city_index(state.repo_root, cities)
-            
+
         return state
 
 class HygieneNode(Node):
@@ -82,7 +80,7 @@ class HygieneNode(Node):
         except Exception as e:
             log.warning(f"HygieneNode: {e}")
             state.errors.append(f"HygieneNode: {e}")
-            
+
         return state
 
 class AuditNode(Node):
@@ -90,7 +88,7 @@ class AuditNode(Node):
     def run(self, state: OrchestrationState) -> OrchestrationState:
         # generate_call_list takes no positional args in current implementation
         from autonomy.tools.call_list import generate_call_list
-        
+
         try:
             call_list = generate_call_list(
                 sqlite_path=str(state.sqlite_path),
@@ -101,7 +99,7 @@ class AuditNode(Node):
         except Exception as e:
             log.warning(f"AuditNode: call list generation failed: {e}")
             return state
-        
+
         to_audit = [row for row in call_list if getattr(row, "lead_status", None) in {"new", "contacted"}]
         to_audit = to_audit[:3]
 
@@ -134,7 +132,7 @@ class OutreachNode(Node):
         from autonomy.tools.twilio_autocall import run_auto_calls
         from autonomy.tools.twilio_sms import run_sms_followup
         from autonomy.tools.twilio_interest_nudge import run_interest_nudges
-        
+
         call_rows = state.metadata.get("call_list", [])
 
         # 1. Run Auto-calls
@@ -145,7 +143,7 @@ class OutreachNode(Node):
             call_rows=call_rows
         )
         state.calls_attempted = call_res.attempted
-        
+
         # 2. Run SMS Follow-ups
         sms_res = run_sms_followup(
             sqlite_path=state.sqlite_path,
@@ -153,7 +151,7 @@ class OutreachNode(Node):
             env=state.env,
         )
         state.sms_sent = sms_res.attempted
-        
+
         # 3. Run Interest Nudges
         nudge_res = run_interest_nudges(
             sqlite_path=state.sqlite_path,
@@ -161,21 +159,21 @@ class OutreachNode(Node):
             env=state.env,
         )
         state.nudges_sent = nudge_res.nudged
-        
+
         return state
 
 class ReportingNode(Node):
     """Reporting Node: Format and deliver the daily summary."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
         from autonomy.tools.scoreboard import load_scoreboard
-        from autonomy.tools.live_job import _format_report, _send_email, _send_ntfy
-        
+        from autonomy.tools.live_job import _format_report, _send_email
+
         # 1. Generate Scoreboard
         scoreboard = load_scoreboard(
             sqlite_path=state.sqlite_path,
             days=30
         )
-        
+
         # 2. Format Report
         report_txt = _format_report(
             scoreboard=scoreboard,
@@ -192,12 +190,12 @@ class ReportingNode(Node):
             goal_result=None,
             leadgen_count=state.leads_generated,
         )
-        
+
         # 3. Deliver
         smtp_user = state.env.get("SMTP_USER", "hello@callcatcherops.com")
         smtp_password = state.env.get("SMTP_PASSWORD")
         report_to = state.env.get("REPORT_TO_EMAIL")
-        
+
         if smtp_password and report_to:
             try:
                 _send_email(
@@ -209,7 +207,7 @@ class ReportingNode(Node):
                 )
             except Exception as e:
                 log.error(f"ReportingNode: email failed: {e}")
-            
+
         return state
 
 class ReflectionNode(Node):
@@ -217,11 +215,11 @@ class ReflectionNode(Node):
     def run(self, state: OrchestrationState) -> OrchestrationState:
         from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
         from autonomy.tools.scoreboard import load_scoreboard
-        
+
         try:
             # 1. Prepare data objects for reflection
             scoreboard = load_scoreboard(sqlite_path=state.sqlite_path, days=7)
-            
+
             # 2. Analyze outcomes
             lesson = build_revenue_lesson(
                 scoreboard=scoreboard,
@@ -229,7 +227,7 @@ class ReflectionNode(Node):
                 inbox_result=None, # Optional
                 sources=[str(state.sqlite_path)]
             )
-            
+
             # 3. Record to RAG
             if lesson:
                 record_revenue_lesson(repo_root=state.repo_root, lesson=lesson)
@@ -237,5 +235,5 @@ class ReflectionNode(Node):
                 state.metadata["reflection_next_action"] = lesson.next_actions
         except Exception as e:
             log.warning(f"ReflectionNode: {e}")
-            
+
         return state

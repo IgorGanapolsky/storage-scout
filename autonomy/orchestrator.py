@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List
 
-from autonomy.context_store import ContextStore
 from autonomy.utils import UTC
 
 log = logging.getLogger(__name__)
@@ -21,7 +19,7 @@ class OrchestrationState:
     env: Dict[str, str]
     sqlite_path: Path
     audit_log_path: Path
-    
+
     # Node outputs
     leads_generated: int = 0
     leads_cleaned: int = 0
@@ -29,7 +27,7 @@ class OrchestrationState:
     calls_attempted: int = 0
     sms_sent: int = 0
     nudges_sent: int = 0
-    
+
     # Internal metrics
     errors: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -61,7 +59,7 @@ class Orchestrator:
                 error_msg = f"Node {node_name} failed: {str(e)}"
                 log.error(error_msg)
                 self.state.errors.append(error_msg)
-        
+
         self.state.metadata["completed_at"] = datetime.now(UTC).isoformat()
         return self.state
 
