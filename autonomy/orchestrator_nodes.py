@@ -54,11 +54,16 @@ class IngestionNode(Node):
         output_path = (state.repo_root / output_rel).resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        api_key = get_api_key()
+        try:
+            api_key = get_api_key()
+        except SystemExit:
+            state.metadata["ingestion_skipped"] = "missing_api_key"
+            log.warning("IngestionNode: API key missing, skipping.")
+            return state
+
         if not api_key:
             state.metadata["ingestion_skipped"] = "missing_api_key"
             return state
-
         limit = _int_env(state.env.get("AUTO_LEADGEN_LIMIT"), 0)
         if limit <= 0:
             state.metadata["ingestion_skipped"] = "limit_zero"
