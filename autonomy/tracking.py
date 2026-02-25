@@ -23,6 +23,8 @@ Deploy a Cloudflare Worker (free tier, 100k req/day) with this code:
     };
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 

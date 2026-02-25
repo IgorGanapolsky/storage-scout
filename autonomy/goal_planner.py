@@ -4,6 +4,8 @@ Loads business goals, evaluates current state, generates and tracks
 daily tasks that advance the highest-priority unmet objectives.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import random
