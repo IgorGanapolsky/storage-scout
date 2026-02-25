@@ -18,7 +18,7 @@
         "lead.write",
         "email.send"
       ],
-      "daily_send_limit": 10,
+      "daily_send_limit": 25,
       "min_score": 60,
       "target_services": [
         "med spa",
@@ -35,8 +35,6 @@
         "scrape"
       ],
       "blocked_local_parts": [
-        "info",
-        "contact",
         "hello",
         "office",
         "support",
@@ -58,7 +56,7 @@
         "enabled": true,
         "min_days_since_last_email": 3,
         "max_emails_per_lead": 5,
-        "daily_send_limit": 5
+        "daily_send_limit": 15
       }
     },
     "observer": {
