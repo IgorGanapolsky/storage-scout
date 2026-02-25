@@ -24,15 +24,17 @@ Deploy a Cloudflare Worker (free tier, 100k req/day) with this code:
 """
 
 import hashlib
+import os
 
-# Set this to your deployed pixel endpoint URL.
-# Leave empty to disable open tracking (HTML emails still sent, just without pixel).
-PIXEL_ENDPOINT = "https://cc-email-pixel.iganapolsky.workers.dev/open"
+PIXEL_ENDPOINT = os.getenv(
+    "PIXEL_ENDPOINT",
+    "https://cc-email-pixel.iganapolsky.workers.dev/open",
+)
 
 
 def generate_message_id(lead_id: str, step: int) -> str:
     """Generate a unique, opaque message ID for tracking."""
-    raw = f"{lead_id}:{step}:{id(lead_id)}"
+    raw = f"{lead_id}:{step}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
