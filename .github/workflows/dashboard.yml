@@ -35,4 +35,4 @@ jobs:
           git add docs/status.html
           git diff --cached --quiet && echo "No changes" && exit 0
           git commit -m "chore: auto-refresh dashboard [skip ci]"
-          git push --force-with-lease origin bot/dashboard-refresh
+          git push --force origin bot/dashboard-refresh
