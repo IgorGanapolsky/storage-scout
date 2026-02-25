@@ -12,6 +12,8 @@ from random import SystemRandom
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
+
 DEFAULT_CATEGORIES = [
     "med spa",
     "plumber",
@@ -30,7 +32,6 @@ STATE_DIR = Path(__file__).resolve().parents[1] / "state"
 CITY_INDEX_FILE = STATE_DIR / "broward_city_index.json"
 RNG = SystemRandom()
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 
 MAX_HTML_BYTES = 512_000
@@ -195,7 +196,7 @@ def fetch_html(url: str) -> str:
 def extract_emails(html_text: str) -> set[str]:
     html_text = unescape(html_text or "")
     out: set[str] = set()
-    for m in EMAIL_RE.finditer(html_text):
+    for m in EMAIL_SEARCH_RE.finditer(html_text):
         out.add(m.group(0).strip().lower())
     # Mailto links sometimes don't render as plain text.
     for m in re.finditer(r"mailto:([^?\"'>]+)", html_text, re.IGNORECASE):

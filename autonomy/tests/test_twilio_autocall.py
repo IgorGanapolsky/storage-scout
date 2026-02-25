@@ -17,13 +17,13 @@ from autonomy.tools.twilio_autocall import (
     _is_business_hours,
     _is_reasonable_email,
     _lead_called_recently,
-    _state_tz,
     load_twilio_config,
     map_twilio_call_to_outcome,
     normalize_us_phone_e164,
     run_auto_calls,
     wait_for_call_terminal_status,
 )
+from autonomy.utils import state_tz
 from autonomy.tools.twilio_sms import SmsResult
 
 
@@ -96,9 +96,9 @@ def test_load_twilio_config_missing_env() -> None:
 
 
 def test_state_tz_defaults_and_known() -> None:
-    assert _state_tz("") == "America/New_York"
-    assert _state_tz("fl") == "America/New_York"
-    assert _state_tz("CA") == "America/Los_Angeles"
+    assert state_tz("") == "America/New_York"
+    assert state_tz("fl") == "America/New_York"
+    assert state_tz("CA") == "America/Los_Angeles"
 
 
 def test_is_reasonable_email_filters_scrape_artifacts() -> None:
@@ -114,7 +114,7 @@ def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
         def now(cls, tz=None):
             return real_datetime(2026, 2, 16, 10, 0, 0, tzinfo=tz)
 
-    monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekdayDateTime)
+    monkeypatch.setattr("autonomy.utils.datetime", FixedWeekdayDateTime)
     assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is True
     assert _is_business_hours(state="FL", start_hour=11, end_hour=17) is False
 
@@ -124,7 +124,7 @@ def test_is_business_hours_weekday_and_weekend(monkeypatch) -> None:
         def now(cls, tz=None):
             return real_datetime(2026, 2, 14, 10, 0, 0, tzinfo=tz)
 
-    monkeypatch.setattr("autonomy.tools.twilio_autocall.datetime", FixedWeekendDateTime)
+    monkeypatch.setattr("autonomy.utils.datetime", FixedWeekendDateTime)
     assert _is_business_hours(state="FL", start_hour=9, end_hour=17) is False
     assert _is_business_hours(state="FL", start_hour=9, end_hour=17, allow_weekends=True) is True
 

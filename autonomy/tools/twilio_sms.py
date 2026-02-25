@@ -29,29 +29,20 @@ from typing import Any
 
 from autonomy.context_store import ContextStore
 from autonomy.tools.agent_commerce import request_json
-from autonomy.utils import UTC, normalize_us_phone, state_tz, truthy
+from autonomy.utils import UTC, is_business_hours, normalize_us_phone, truthy
 
 # Re-export for backward compatibility (tests import this name).
 normalize_phone = normalize_us_phone
 
 
 def _is_business_hours(state: str, start_hour: int, end_hour: int, *, allow_weekends: bool = False) -> bool:
-    """Keep local wrapper for monkeypatch-friendly tests and stable behavior."""
-    try:
-        from zoneinfo import ZoneInfo
-    except Exception:
-        return True
+    """Thin wrapper delegating to ``utils.is_business_hours``.
 
-    tz_name = state_tz(state)
-    try:
-        tz = ZoneInfo(tz_name)
-    except Exception:
-        tz = ZoneInfo("America/New_York")
-
-    now_local = datetime.now(tz)
-    if not bool(allow_weekends) and now_local.weekday() >= 5:
-        return False
-    return int(start_hour) <= int(now_local.hour) < int(end_hour)
+    Keeps the positional signature so existing monkeypatches
+    (``lambda state, start_hour, end_hour, allow_weekends=False: True``)
+    continue to work.
+    """
+    return is_business_hours(state, start_hour, end_hour, allow_weekends=allow_weekends)
 
 
 def _default_sms_body(booking_url: str) -> str:
@@ -108,11 +99,11 @@ def load_sms_config(env: dict[str, str], booking_url: str = "") -> TwilioSmsConf
 
     body = (env.get("AUTO_SMS_BODY") or "").strip()
     if not body:
-        url = booking_url or "https://calendly.com/igorganapolsky/audit-call"
+        url = booking_url or env.get("BOOKING_URL", "https://calendly.com/igorganapolsky/audit-call")
         body = _default_sms_body(url)
     second_nudge_body = (env.get("AUTO_SMS_SECOND_NUDGE_BODY") or "").strip()
     if not second_nudge_body:
-        url = booking_url or "https://calendly.com/igorganapolsky/audit-call"
+        url = booking_url or env.get("BOOKING_URL", "https://calendly.com/igorganapolsky/audit-call")
         second_nudge_body = _default_sms_second_nudge_body(url)
 
     return TwilioSmsConfig(

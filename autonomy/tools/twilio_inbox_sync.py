@@ -66,7 +66,11 @@ def load_twilio_inbox_config(
     if not sid or not token or not from_num or not from_num.startswith("+"):
         return None
 
-    booking = (booking_url or "").strip() or "https://calendly.com/igorganapolsky/audit-call"
+    booking = (
+        (booking_url or "").strip()
+        or (env.get("BOOKING_URL") or "").strip()
+        or "https://calendly.com/igorganapolsky/audit-call"
+    )
     kickoff = (
         (kickoff_url or "").strip()
         or (env.get("PRIORITY_KICKOFF_URL") or "").strip()
