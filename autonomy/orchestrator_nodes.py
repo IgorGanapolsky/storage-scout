@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime
-from typing import Any
 from dataclasses import dataclass
 
 from autonomy.orchestrator import Node, OrchestrationState
@@ -48,7 +46,7 @@ class IngestionNode(Node):
             if (src.get("type") or "").lower() == "csv":
                 output_rel = str(src.get("path") or "").strip()
                 break
-        
+
         if not output_rel:
             state.metadata["ingestion_skipped"] = "no_csv_source"
             return state
@@ -214,7 +212,7 @@ class ReportingNode(Node):
 
         # 2. Format Report
         inbox_result = MockInboxResult()
-        
+
         report_txt = _format_report(
             leadgen_new=state.leads_generated,
             lead_hygiene=state.metadata.get("hygiene_report"),
