@@ -250,29 +250,42 @@ class ReportingNode(Node):
         return state
 
 class ReflectionNode(Node):
-    """Reflection Node: Autonomous strategy analysis (Ozkary pattern)."""
+    """Reflection Node: Autonomous strategy analysis (Sullivan Data-to-Decisions pattern)."""
     def run(self, state: OrchestrationState) -> OrchestrationState:
         from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_lesson
         from autonomy.tools.scoreboard import load_scoreboard
+        from autonomy.tools.evidence_auditor import EvidenceAuditor
 
         try:
-            # 1. Prepare data objects for reflection
+            # 1. Standard Revenue Reflection
             scoreboard = load_scoreboard(sqlite_path=state.sqlite_path, days=7)
             inbox_result = MockInboxResult()
-
-            # 2. Analyze outcomes
             lesson = build_revenue_lesson(
                 scoreboard=scoreboard,
-                guardrails={}, # Optional
+                guardrails={},
                 inbox_result=inbox_result,
                 sources=[str(state.sqlite_path)]
             )
-
-            # 3. Record to RAG
             if lesson:
                 record_revenue_lesson(repo_root=state.repo_root, lesson=lesson)
                 state.metadata["reflection_bottleneck"] = lesson.bottleneck
-                state.metadata["reflection_next_action"] = lesson.next_actions
+
+            # 2. Data-to-Decisions Audit (Sullivan Methodology)
+            auditor = EvidenceAuditor(state.sqlite_path)
+            signals = auditor.audit_interactions()
+            auditor.update_assumptions(signals)
+            
+            # Record evidence signals to metadata for visibility
+            state.metadata["evidence_signals"] = [
+                {"id": s.assumption_id, "impact": s.impact, "note": s.note} for s in signals
+            ]
+            
+            # 3. Decision Logic: Pivot if evidence is strongly negative
+            for s in signals:
+                if s.impact == "negative" and s.assumption_id == "price_point_249":
+                    log.warning(f"STRATEGY PIVOT SUGGESTED: {s.note}")
+                    state.errors.append(f"Strategic Risk: {s.note}")
+
         except Exception as e:
             log.warning(f"ReflectionNode: {e}")
 
