@@ -14,10 +14,9 @@ from email.utils import parseaddr
 from pathlib import Path
 
 from autonomy.context_store import ContextStore
+from autonomy.utils import EMAIL_SEARCH_RE
 
 UTC = timezone.utc
-
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 BOUNCE_SUBJECT_RE = re.compile(
     r"(undeliver|returned to sender|delivery status notification|delivery[ -]status|mail delivery failed|failure)",
     re.IGNORECASE,
@@ -142,7 +141,7 @@ def _extract_failed_recipients(body: str) -> set[str]:
         out.add(m.group(1).strip().lower())
 
     # Fallback: any email addresses, filtered later against leads table.
-    for m in EMAIL_RE.finditer(body):
+    for m in EMAIL_SEARCH_RE.finditer(body):
         out.add(m.group(0).strip().lower())
 
     return out

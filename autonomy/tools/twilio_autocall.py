@@ -21,7 +21,6 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
-import re
 import time
 import urllib.error
 import urllib.parse
@@ -33,9 +32,7 @@ from typing import Any
 
 from autonomy.context_store import ContextStore
 from autonomy.tools.agent_commerce import request_json
-from autonomy.utils import UTC, normalize_us_phone, now_utc_iso, state_tz, truthy
-
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+from autonomy.utils import UTC, EMAIL_RE, is_business_hours, normalize_us_phone, now_utc_iso, truthy
 
 
 
@@ -45,28 +42,13 @@ def normalize_us_phone_e164(raw_phone: str) -> str | None:
     return result or None
 
 
-def _state_tz(state: str) -> str:
-    """Backward-compatible state timezone helper used by tests and callers."""
-    return state_tz(state)
-
-
 def _is_business_hours(*, state: str, start_hour: int, end_hour: int, allow_weekends: bool = False) -> bool:
-    """Local business-hours check that remains monkeypatch-friendly in tests."""
-    try:
-        from zoneinfo import ZoneInfo
-    except Exception:
-        return True
+    """Thin wrapper delegating to ``utils.is_business_hours``.
 
-    tz_name = _state_tz(state)
-    try:
-        tz = ZoneInfo(tz_name)
-    except Exception:
-        tz = ZoneInfo("America/New_York")
-
-    now_local = datetime.now(tz)
-    if not bool(allow_weekends) and now_local.weekday() >= 5:
-        return False
-    return int(start_hour) <= int(now_local.hour) < int(end_hour)
+    Keeps the keyword-only signature so existing monkeypatches
+    (``lambda **_kwargs: True``) continue to work.
+    """
+    return is_business_hours(state, start_hour, end_hour, allow_weekends=allow_weekends)
 
 
 def _default_twiml() -> str:
@@ -85,7 +67,7 @@ def _default_twiml() -> str:
 
 def _is_reasonable_email(value: str) -> bool:
     email = (value or "").strip().lower()
-    if not _EMAIL_RE.match(email):
+    if not EMAIL_RE.match(email):
         return False
     domain = email.split("@", 1)[1]
     parts = domain.rsplit(".", 1)

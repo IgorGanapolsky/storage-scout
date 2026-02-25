@@ -16,7 +16,6 @@ Usage as library:
 from __future__ import annotations
 
 import logging
-import re
 import smtplib
 import socket
 import sqlite3
@@ -24,9 +23,9 @@ import subprocess
 import hashlib
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+from autonomy.utils import EMAIL_RE
 
-EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+log = logging.getLogger(__name__)
 
 # Domains known to be non-deliverable or irrelevant.
 EXCLUDED_DOMAINS: set[str] = {

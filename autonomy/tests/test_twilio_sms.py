@@ -150,7 +150,7 @@ def test_is_business_hours_weekday(monkeypatch) -> None:
         def now(cls, tz=None):
             return real_datetime(2026, 2, 16, 10, 0, 0, tzinfo=tz)  # Monday
 
-    monkeypatch.setattr("autonomy.tools.twilio_sms.datetime", FixedWeekday)
+    monkeypatch.setattr("autonomy.utils.datetime", FixedWeekday)
     assert _is_business_hours("FL", 9, 17) is True
     assert _is_business_hours("FL", 11, 17) is False  # 10 AM < 11 start
 
@@ -161,7 +161,7 @@ def test_is_business_hours_weekend(monkeypatch) -> None:
         def now(cls, tz=None):
             return real_datetime(2026, 2, 14, 10, 0, 0, tzinfo=tz)  # Saturday
 
-    monkeypatch.setattr("autonomy.tools.twilio_sms.datetime", FixedWeekend)
+    monkeypatch.setattr("autonomy.utils.datetime", FixedWeekend)
     assert _is_business_hours("FL", 9, 17) is False
     assert _is_business_hours("FL", 9, 17, allow_weekends=True) is True
 
