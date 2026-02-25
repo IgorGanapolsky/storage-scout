@@ -186,7 +186,7 @@ class OutreachNode(Node):
             reason="Database exists for call tracking."
         )
         market_calls.receive_bid(AgentBid("agent_autocall", confidence_score=0.9, estimated_cost=0.0, contract=call_contract))
-        
+
         best_call_agent = market_calls.select_best_agent()
         if best_call_agent:
             log.info(f"Delegating calls to {best_call_agent.agent_id}")
@@ -203,7 +203,7 @@ class OutreachNode(Node):
 
         # 3. Delegate SMS Follow-ups
         market_sms = DelegationMarket(trust_manager)
-        
+
         # PROOF OF COMPLIANCE: Twilio Toll-Free Verification
         is_tfv_approved = truthy(state.env.get("TWILIO_TFV_APPROVED"), default=False)
         sms_contract = VerifiableContract(
@@ -212,7 +212,7 @@ class OutreachNode(Node):
             reason="Twilio Toll-Free Verification is approved." if is_tfv_approved else "Twilio TFV is IN_REVIEW or blocked."
         )
         market_sms.receive_bid(AgentBid("agent_sms", confidence_score=0.8, estimated_cost=0.0, contract=sms_contract))
-        
+
         best_sms_agent = market_sms.select_best_agent()
         if best_sms_agent:
             log.info(f"Delegating SMS to {best_sms_agent.agent_id}")
@@ -235,7 +235,7 @@ class OutreachNode(Node):
             reason="Twilio Toll-Free Verification is approved." if is_tfv_approved else "Twilio TFV is IN_REVIEW or blocked."
         )
         market_nudge.receive_bid(AgentBid("agent_nudge", confidence_score=0.8, estimated_cost=0.0, contract=nudge_contract))
-        
+
         best_nudge_agent = market_nudge.select_best_agent()
         if best_nudge_agent:
             log.info(f"Delegating Interest Nudges to {best_nudge_agent.agent_id}")
