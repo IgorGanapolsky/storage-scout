@@ -132,6 +132,11 @@ def test_twilio_inbox_sync_classifies_and_auto_replies(monkeypatch) -> None:
         assert verify_store.get_lead_status("interested@example.com") == "replied"
         assert verify_store.get_lead_status("optout@example.com") == "opted_out"
         assert verify_store.is_opted_out("optout@example.com") is True
+        intent_rows = verify_store.conn.execute(
+            "SELECT COUNT(1) AS c FROM actions WHERE action_type='conversion.booking_intent'"
+        ).fetchone()
+        assert intent_rows is not None
+        assert int(intent_rows["c"] or 0) == 1
     finally:
         verify_store.conn.close()
 

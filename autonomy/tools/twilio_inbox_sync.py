@@ -261,6 +261,19 @@ def run_twilio_inbox_sync(
                 continue
             if classification == "interested":
                 result.interested += 1
+                if truthy(env.get("AUTO_BOOKING_INTENT_TRACKING_ENABLED"), default=True):
+                    store.log_action(
+                        agent_id="agent.sms.twilio.inbox.v1",
+                        action_type="conversion.booking_intent",
+                        trace_id=f"booking_intent:{inbound_sid}",
+                        payload={
+                            "lead_id": lead_id,
+                            "inbound_sid": inbound_sid,
+                            "from_phone_e164": from_phone,
+                            "channel": "sms",
+                            "source": "twilio_inbound",
+                        },
+                    )
                 reply_body = _interest_reply_text(cfg.booking_url, cfg.kickoff_url)
             else:
                 result.replied += 1

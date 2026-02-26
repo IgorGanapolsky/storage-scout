@@ -339,6 +339,16 @@ def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
     assert result.attempted == 1
     assert result.spoke == 1
 
+    verify_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = verify_store.conn.execute(
+            "SELECT COUNT(1) AS c FROM actions WHERE action_type='followup.task.created'"
+        ).fetchone()
+        assert row is not None
+        assert int(row["c"] or 0) == 1
+    finally:
+        verify_store.conn.close()
+
 
 def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
     run_id = uuid4().hex
@@ -422,6 +432,73 @@ def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
         assert str(row["error_type"] or "") == "HTTPError"
     finally:
         store_check.conn.close()
+
+
+def test_run_auto_calls_skips_followup_task_when_disabled(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        email = "nofollowup@example.com"
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name="Test",
+                company="Co",
+                email=email,
+                phone="9546211439",
+                service="Dentist",
+                city="X",
+                state="FL",
+                source="test",
+                score=100,
+                status="new",
+                email_method="direct",
+            )
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "1",
+        "AUTO_CALLS_FOLLOWUP_TASK_ENABLED": "0",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.urllib.request.urlopen",
+        lambda req, timeout=20: _FakeHTTPResponse(
+            {"sid": "CA9", "status": "completed", "answered_by": "human"}
+            if req.get_method() == "GET"
+            else {"sid": "CA9", "status": "queued"}
+        ),
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
+
+    result = run_auto_calls(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=env,
+        call_rows=[{"email": "nofollowup@example.com", "phone": "9546211439", "state": "FL"}],
+    )
+    assert result.reason == "ok"
+    assert result.spoke == 1
+
+    verify_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = verify_store.conn.execute(
+            "SELECT COUNT(1) AS c FROM actions WHERE action_type='followup.task.created'"
+        ).fetchone()
+        assert row is not None
+        assert int(row["c"] or 0) == 0
+    finally:
+        verify_store.conn.close()
 
 
 def test_live_job_report_includes_auto_calls_section() -> None:

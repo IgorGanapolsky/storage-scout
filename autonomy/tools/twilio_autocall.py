@@ -336,6 +336,7 @@ def run_auto_calls(
     start_hour = int((env.get("AUTO_CALLS_START_HOUR_LOCAL") or "9").strip() or 9)
     end_hour = int((env.get("AUTO_CALLS_END_HOUR_LOCAL") or "17").strip() or 17)
     allow_weekends = truthy(env.get("AUTO_CALLS_ALLOW_WEEKENDS"), default=False)
+    followup_tasks_enabled = truthy(env.get("AUTO_CALLS_FOLLOWUP_TASK_ENABLED"), default=True)
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
 
@@ -480,6 +481,25 @@ def run_auto_calls(
                     **provider_payload,
                 },
             )
+
+            if outcome == "spoke" and followup_tasks_enabled:
+                store.log_action(
+                    agent_id="agent.autocall.followup.v1",
+                    action_type="followup.task.created",
+                    trace_id=f"followup:{trace_id}",
+                    payload={
+                        "lead_id": lead_id,
+                        "source_action_type": "call.attempt",
+                        "source_trace_id": trace_id,
+                        "task_type": "executive_close",
+                        "priority": "high",
+                        "company": str(row_map.get("company") or ""),
+                        "service": str(row_map.get("service") or ""),
+                        "phone": str(row_map.get("phone") or ""),
+                        "city": str(row_map.get("city") or ""),
+                        "state": state,
+                    },
+                )
     finally:
         with contextlib.suppress(Exception):
             store.conn.close()

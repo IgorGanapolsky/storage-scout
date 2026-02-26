@@ -21,10 +21,12 @@ from autonomy.tools.live_job import (
     _maybe_write_call_list,
     _compute_sms_channel_budgets,
     _count_actions_today,
+    _evaluate_paid_call_readiness,
     _evaluate_paid_stop_loss,
     _format_report,
     _parse_categories,
 )
+from autonomy.tools.twilio_inbox_sync import TwilioInboxResult
 from autonomy.tools.call_list import CallListRow
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
 from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
@@ -534,6 +536,36 @@ def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
     assert budgets2["total_remaining"] == 1
     assert budgets2["interest_reserve_remaining"] == 0
     assert budgets2["followup_remaining"] == 1
+
+
+def test_paid_call_readiness_blocks_when_required_capabilities_inactive() -> None:
+    readiness = _evaluate_paid_call_readiness(
+        env={
+            "TWILIO_INBOX_SYNC_ENABLED": "0",
+            "CALLS_REQUIRE_BOOKING_INTENT_TRACKING": "1",
+            "CALLS_REQUIRE_FOLLOWUP_TASK_CREATION": "1",
+            "AUTO_CALLS_FOLLOWUP_TASK_ENABLED": "0",
+        },
+        twilio_inbox_result=TwilioInboxResult(reason="disabled"),
+    )
+    assert readiness["blocked"] is True
+    assert "booking_intent_tracking_inactive" in list(readiness["block_reasons"])
+    assert "followup_task_creation_inactive" in list(readiness["block_reasons"])
+
+
+def test_paid_call_readiness_passes_when_requirements_met() -> None:
+    readiness = _evaluate_paid_call_readiness(
+        env={
+            "TWILIO_INBOX_SYNC_ENABLED": "1",
+            "AUTO_BOOKING_INTENT_TRACKING_ENABLED": "1",
+            "AUTO_CALLS_FOLLOWUP_TASK_ENABLED": "1",
+            "CALLS_REQUIRE_BOOKING_INTENT_TRACKING": "1",
+            "CALLS_REQUIRE_FOLLOWUP_TASK_CREATION": "1",
+        },
+        twilio_inbox_result=TwilioInboxResult(reason="ok"),
+    )
+    assert readiness["blocked"] is False
+    assert list(readiness["block_reasons"]) == []
 
 
 def test_should_block_deliverability_trips_at_threshold() -> None:

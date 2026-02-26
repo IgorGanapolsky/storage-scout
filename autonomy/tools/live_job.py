@@ -489,6 +489,45 @@ def _compute_sms_channel_budgets(
     }
 
 
+def _evaluate_paid_call_readiness(
+    *,
+    env: dict[str, str],
+    twilio_inbox_result: TwilioInboxResult,
+) -> dict[str, object]:
+    """Block paid dialing unless required close-loop capabilities are active."""
+    require_booking_intent = truthy(env.get("CALLS_REQUIRE_BOOKING_INTENT_TRACKING"), default=True)
+    require_followup_task = truthy(env.get("CALLS_REQUIRE_FOLLOWUP_TASK_CREATION"), default=True)
+
+    twilio_inbox_enabled = truthy(env.get("TWILIO_INBOX_SYNC_ENABLED"), default=True)
+    booking_intent_tracking_enabled = truthy(env.get("AUTO_BOOKING_INTENT_TRACKING_ENABLED"), default=True)
+    booking_intent_tracking_active = bool(
+        twilio_inbox_enabled
+        and booking_intent_tracking_enabled
+        and str(twilio_inbox_result.reason or "").strip().lower() == "ok"
+    )
+
+    followup_task_creation_active = truthy(env.get("AUTO_CALLS_FOLLOWUP_TASK_ENABLED"), default=True)
+
+    block_reasons: list[str] = []
+    if require_booking_intent and not booking_intent_tracking_active:
+        block_reasons.append("booking_intent_tracking_inactive")
+    if require_followup_task and not followup_task_creation_active:
+        block_reasons.append("followup_task_creation_inactive")
+
+    return {
+        "require_booking_intent_tracking": bool(require_booking_intent),
+        "require_followup_task_creation": bool(require_followup_task),
+        "twilio_inbox_sync_enabled": bool(twilio_inbox_enabled),
+        "twilio_inbox_sync_reason": str(twilio_inbox_result.reason or ""),
+        "booking_intent_tracking_enabled": bool(booking_intent_tracking_enabled),
+        "booking_intent_tracking_active": bool(booking_intent_tracking_active),
+        "followup_task_creation_active": bool(followup_task_creation_active),
+        "blocked": bool(block_reasons),
+        "block_reasons": block_reasons,
+        "block_reason": block_reasons[0] if block_reasons else "",
+    }
+
+
 def _log_guard_block(
     *,
     store: ContextStore,
@@ -1256,6 +1295,19 @@ def main() -> None:
 
     paid_kill_switch = truthy(env.get("PAID_KILL_SWITCH"), default=False)
     guardrails["paid_kill_switch"] = bool(paid_kill_switch)
+    paid_call_readiness = _evaluate_paid_call_readiness(env=env, twilio_inbox_result=twilio_inbox_result)
+    guardrails["calls_require_booking_intent_tracking"] = bool(
+        paid_call_readiness["require_booking_intent_tracking"]
+    )
+    guardrails["calls_require_followup_task_creation"] = bool(
+        paid_call_readiness["require_followup_task_creation"]
+    )
+    guardrails["booking_intent_tracking_enabled"] = bool(paid_call_readiness["booking_intent_tracking_enabled"])
+    guardrails["booking_intent_tracking_active"] = bool(paid_call_readiness["booking_intent_tracking_active"])
+    guardrails["followup_task_creation_active"] = bool(paid_call_readiness["followup_task_creation_active"])
+    guardrails["paid_call_readiness_blocked"] = bool(paid_call_readiness["blocked"])
+    guardrails["paid_call_readiness_block_reasons"] = list(paid_call_readiness["block_reasons"])
+    guardrails["twilio_inbox_sync_reason"] = str(paid_call_readiness["twilio_inbox_sync_reason"])
 
     daily_call_cap = max(0, _int_env(env.get("PAID_DAILY_CALL_CAP"), 10))
     calls_today_all = _count_actions_today(guard_store, action_type="call.attempt")
@@ -1394,6 +1446,8 @@ def main() -> None:
             calls_block_reason = "paid_kill_switch"
         elif bool(stop_loss_state.get("blocked", False)):
             calls_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
+        elif bool(paid_call_readiness.get("blocked", False)):
+            calls_block_reason = str(paid_call_readiness.get("block_reason") or "call_readiness_guard")
         elif call_budget_remaining <= 0:
             calls_block_reason = "call_daily_cap_reached"
 
@@ -1406,6 +1460,8 @@ def main() -> None:
                     "calls_today": int(calls_today),
                     "calls_today_all_actions": int(calls_today_all),
                     "call_daily_cap": int(daily_call_cap),
+                    "paid_call_readiness_blocked": bool(paid_call_readiness.get("blocked", False)),
+                    "paid_call_readiness_block_reasons": list(paid_call_readiness.get("block_reasons") or []),
                 },
             )
             auto_calls = AutoCallResult(
