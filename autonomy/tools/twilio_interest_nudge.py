@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import json
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.agent_commerce import request_json
 from autonomy.tools.twilio_inbox_sync import load_twilio_inbox_config
 from autonomy.utils import UTC, normalize_us_phone, truthy
 
@@ -54,16 +54,29 @@ def _auth_header(account_sid: str, auth_token: str) -> str:
     return f"Basic {base64.b64encode(raw).decode('ascii')}"
 
 
-def _send_sms(*, cfg: InterestNudgeConfig, to_number: str, body: str) -> dict[str, Any]:
+def _send_sms(
+    *,
+    cfg: InterestNudgeConfig,
+    to_number: str,
+    body: str,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     url = f"https://api.twilio.com/2010-04-01/Accounts/{cfg.account_sid}/Messages.json"
     data = urllib.parse.urlencode({"To": to_number, "From": cfg.from_number, "Body": body}).encode("utf-8")
     headers = {
         "Authorization": _auth_header(cfg.account_sid, cfg.auth_token),
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    return request_json(
+        method="POST",
+        url=url,
+        headers=headers,
+        payload=data,
+        timeout_secs=20,
+        agent_id="agent.sms.twilio.nudge.v1",
+        env=env,
+        urlopen_func=urllib.request.urlopen,
+    )
 
 
 def _parse_iso(raw: str) -> datetime | None:
@@ -291,7 +304,7 @@ def run_interest_nudges(
             result.attempted += 1
 
             try:
-                resp = _send_sms(cfg=cfg, to_number=phone_e164, body=msg_body)
+                resp = _send_sms(cfg=cfg, to_number=phone_e164, body=msg_body, env=env)
                 sid = str(resp.get("sid") or "").strip()
                 payload["twilio"] = {
                     "sid": sid,
@@ -323,4 +336,3 @@ def run_interest_nudges(
             store.conn.close()
 
     return result
-

@@ -187,3 +187,106 @@ def test_call_list_high_intent_filters_role_inbox_and_low_scores() -> None:
     )
 
     assert [r.email for r in rows] == ["jane@clinic.example"]
+
+
+def test_call_list_enrichment_prioritizes_recent_spoke_signals() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    for email in ("spoke@clinic.example", "noanswer@clinic.example"):
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name="",
+                company=email.split("@", 1)[0],
+                email=email,
+                phone="555-3000",
+                service="dentist",
+                city="Coral Springs",
+                state="FL",
+                source="t",
+                score=80,
+                status="contacted",
+                email_method="direct",
+            )
+        )
+
+    store.log_action(
+        agent_id="agent.autocall.twilio.v1",
+        action_type="call.attempt",
+        trace_id="t1",
+        payload={"lead_id": "spoke@clinic.example", "outcome": "spoke"},
+    )
+    store.log_action(
+        agent_id="agent.autocall.twilio.v1",
+        action_type="call.attempt",
+        trace_id="t2",
+        payload={"lead_id": "noanswer@clinic.example", "outcome": "no_answer"},
+    )
+
+    rows = generate_call_list(
+        sqlite_path=Path(sqlite_path),
+        services=["dentist"],
+        statuses=["contacted"],
+        limit=10,
+        require_phone=True,
+        include_opt_outs=False,
+    )
+
+    assert [r.email for r in rows[:2]] == ["spoke@clinic.example", "noanswer@clinic.example"]
+    assert rows[0].priority_score > rows[1].priority_score
+    assert rows[0].recent_spoke == 1
+    assert rows[1].recent_no_answer == 1
+
+
+def test_call_list_can_disable_enrichment_for_static_ranking() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    store.upsert_lead(
+        Lead(
+            id="highnew@clinic.example",
+            name="",
+            company="High New",
+            email="highnew@clinic.example",
+            phone="555-4001",
+            service="dentist",
+            city="Coral Springs",
+            state="FL",
+            source="t",
+            score=95,
+            status="new",
+            email_method="direct",
+        )
+    )
+    store.upsert_lead(
+        Lead(
+            id="lowcontacted@clinic.example",
+            name="",
+            company="Low Contacted",
+            email="lowcontacted@clinic.example",
+            phone="555-4002",
+            service="dentist",
+            city="Coral Springs",
+            state="FL",
+            source="t",
+            score=70,
+            status="contacted",
+            email_method="direct",
+        )
+    )
+
+    rows = generate_call_list(
+        sqlite_path=Path(sqlite_path),
+        services=["dentist"],
+        statuses=["new", "contacted"],
+        limit=10,
+        require_phone=True,
+        include_opt_outs=False,
+        enrichment_enabled=False,
+    )
+
+    # Without enrichment, static ordering still favors warm status buckets.
+    assert [r.email for r in rows[:2]] == ["lowcontacted@clinic.example", "highnew@clinic.example"]

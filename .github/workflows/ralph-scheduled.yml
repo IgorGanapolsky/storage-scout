@@ -1,0 +1,61 @@
+name: Ralph Scheduled - Proactive Background Agent
+
+# Ona pattern: scan for work daily at 8am EST, pick oldest issue, execute
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+jobs:
+  find-and-dispatch:
+    name: Find Ralph-Ready Work
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick oldest ralph-mode issue and dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label "ralph-mode" \
+            --state open \
+            --json number,title,createdAt \
+            --jq 'sort_by(.createdAt) | .[0]')
+
+          if [ -z "$ISSUE" ] || [ "$ISSUE" = "null" ]; then
+            echo "No ralph-mode issues found. Backlog is clear."
+            echo "### Ralph Scheduled Run" >> $GITHUB_STEP_SUMMARY
+            echo "No ralph-mode issues found." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          NUMBER=$(echo "$ISSUE" | jq -r '.number')
+          TITLE=$(echo "$ISSUE" | jq -r '.title')
+
+          EXISTING_PR=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --search "Ralph Mode: $TITLE" \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Issue #$NUMBER already has open PR #$EXISTING_PR, skipping"
+            exit 0
+          fi
+
+          echo "Dispatching Ralph Mode for issue #$NUMBER: $TITLE"
+          gh workflow run ralph-mode.yml \
+            --repo ${{ github.repository }} \
+            -f issue_number="$NUMBER" \
+            -f max_iterations="10"
+
+          echo "### Ralph Scheduled Run" >> $GITHUB_STEP_SUMMARY
+          echo "Dispatched Ralph Mode for issue #$NUMBER: $TITLE" >> $GITHUB_STEP_SUMMARY

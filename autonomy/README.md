@@ -101,6 +101,13 @@ Optional tuning:
 - `DAILY_CALL_LIST_STATUSES=replied,contacted,new`
 - `DAILY_CALL_LIST_MIN_SCORE=80`
 - `DAILY_CALL_LIST_EXCLUDE_ROLE_INBOX=1`
+- `AUTO_LEAD_HYGIENE_ENABLED=1` (default on; marks invalid emails as `bad_email` before deliverability gating)
+- `AUTO_LEAD_HYGIENE_MX_CHECK=1` (default on; can disable for faster/lighter runs)
+- `AUTO_LEAD_HYGIENE_SMTP_PROBE=0` (default off; slow)
+- `AUTO_LEAD_HYGIENE_CALL_FILTER_ENABLED=1` (default on; drops bad-phone/bad-email artifacts from pre-dial list)
+- `AUTO_LEAD_HYGIENE_SAMPLE_LIMIT=20` (max sanitized samples retained in daily report)
+- `AUTO_LEAD_HYGIENE_REPORT_PATH=autonomy/state/lead_hygiene_removal_<YYYY-MM-DD>.json` (daily artifact)
+- `AUTO_LEAD_HYGIENE_REPORT_LATEST_PATH=autonomy/state/lead_hygiene_removal_latest.json`
 
 Run the toll-free watchdog on demand:
 ```bash
@@ -149,3 +156,18 @@ Set in local `.env`:
 - `REPORT_DELIVERY=email|ntfy|both|none` (default: `email`)
 - `NTFY_SERVER=https://ntfy.sh` (optional; for `REPORT_DELIVERY=ntfy|both`)
 - `NTFY_TOPIC=topic-name[,another-topic]` (required for `REPORT_DELIVERY=ntfy|both`)
+
+## Agent Commerce (Lightweight, Non-Crypto)
+Twilio API calls now include lightweight agent identity headers plus optional request signing and per-call metering.
+
+Set in local `.env`:
+- `AGENT_COMMERCE_AGENT_ID=agent.callcatcherops.v1` (optional override)
+- `AGENT_COMMERCE_PROTOCOL=acp-lite/2026-02` (optional override)
+- `AGENT_COMMERCE_SIGNING_KEY=...` (optional; enables `X-Agent-Signature` HMAC header)
+- `AGENT_COMMERCE_METERING_ENABLED=1` (default on)
+- `AGENT_API_METER_FILE=autonomy/state/agent_api_metering.jsonl` (optional override; must stay under `autonomy/state`)
+
+This provides:
+- request-level API metering (`status_code`, `duration_ms`, `request_bytes`)
+- consistent agent identity headers across autonomous Twilio traffic
+- compatibility with future pay-per-call/accounting models without adopting crypto rails today

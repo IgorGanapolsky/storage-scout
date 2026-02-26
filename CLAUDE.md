@@ -27,9 +27,9 @@ python3 autonomy/tools/lead_gen_broward.py --limit 30
 ```
 
 ## Git Workflow
-- `main` - Releases only
-- `develop` - Default working branch
-- All changes via PRs to `develop`
+- `main` - Default branch (all work lands here)
+- All changes via PRs to `main`
+- All implementation work must run from a dedicated git worktree; do not edit from the primary checkout.
 
 ## Coding Standards
 - Use environment variables for secrets (never commit tokens)
@@ -71,30 +71,35 @@ If user says "continue" or "continue where you left off":
 
 **CRITICAL: Claude MUST execute autonomously without asking for permission.**
 
+**Governance principle: AI writes code, AI does not ship code.**
+
 When given ANY multi-file task (implement, add feature, refactor, build, etc.):
 
-1. **Create branch immediately**: `git checkout -b ralph/$(date +%Y%m%d-%H%M%S)`
+1. **Create worktree + branch immediately**: `git worktree add .worktrees/ralph-$(date +%Y%m%d-%H%M%S) -b ralph/$(date +%Y%m%d-%H%M%S) main`
 2. **Implement the changes** - Write all necessary code
 3. **Run checks**: `pip install ruff && ruff check autonomy/ --select E,F,W --ignore E501`
 4. **If checks FAIL**: Analyze error → Fix code → Run checks again (LOOP)
 5. **If checks PASS**: Commit with `Ralph: <description>`
 6. **Push**: `git push -u origin <branch>`
-7. **Create PR**: `gh pr create --base develop --title "Ralph: <desc>"`
-8. **Auto-merge**: `gh pr merge --auto --squash`
+7. **Create PR**: `gh pr create --base main --title "Ralph: <desc>"`
+8. **STOP** — Smart Governance Gate handles merge:
+   - Low-risk PRs (docs, config, tests) → auto-merged by CI
+   - High-risk PRs (outreach engine, live jobs, lead data, CI) → labeled `needs-ceo-review`
 
 **DO NOT:**
 - Ask "should I proceed?"
 - Ask "would you like me to..."
 - Wait for confirmation
 - Stop after partial implementation
+- Run `gh pr merge` — the governance gate handles this
 
 **DO:**
 - Execute the full loop until checks pass
 - Commit after each successful fix
-- Create PR and enable auto-merge
-- Report completion with PR link
+- Create PR and report the PR link
+- Let the Smart Governance Gate decide merge policy
 
-Required checks for merge: `Python Quality`, `Security`
+Required checks for merge: `Python Quality`, `Smoke Test`, `Security`
 Optional (won't block): SonarCloud, Claude Review, Seer
 
 **After completing any task:**

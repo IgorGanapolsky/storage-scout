@@ -15,6 +15,9 @@ from autonomy.tools.fastmail_inbox_sync import (
     _looks_like_stripe_payment,
 )
 from autonomy.tools.live_job import (
+    _apply_outreach_runtime_policy,
+    _should_block_deliverability,
+    _filter_call_list_rows_for_hygiene,
     _maybe_write_call_list,
     _compute_sms_channel_budgets,
     _count_actions_today,
@@ -22,6 +25,7 @@ from autonomy.tools.live_job import (
     _format_report,
     _parse_categories,
 )
+from autonomy.tools.call_list import CallListRow
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
 from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
 
@@ -189,6 +193,16 @@ def test_live_job_report_formatting() -> None:
     )
     report = _format_report(
         leadgen_new=0,
+        lead_hygiene={
+            "reason": "ok",
+            "enabled": True,
+            "total": 12,
+            "invalid": 2,
+            "skipped": 0,
+            "call_list_removed": 1,
+            "daily_report_path": "autonomy/state/lead_hygiene_removal_2026-02-24.json",
+            "latest_report_path": "autonomy/state/lead_hygiene_removal_latest.json",
+        },
         engine_result={"sent_initial": 0, "sent_followup": 0},
         inbox_result=inbox,
         scoreboard=board,
@@ -196,9 +210,81 @@ def test_live_job_report_formatting() -> None:
         kpi={"bookings_today": 0, "payments_today": 0, "bookings_window": 0, "payments_window": 0},
     )
     assert "CallCatcher Ops Daily Report" in report
+    assert "Lead hygiene" in report
+    assert "- invalid_marked: 2" in report
     assert "Revenue KPI" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
+
+
+def test_filter_call_list_rows_for_hygiene_removes_bad_rows() -> None:
+    rows = [
+        CallListRow(
+            company="Good Co",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="+1 (954) 555-1212",
+            website="",
+            contact_name="",
+            email="owner@goodco.com",
+            email_method="direct",
+            lead_status="new",
+            score=92,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+        CallListRow(
+            company="Artifact LLC",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="+1 (954) 555-1213",
+            website="",
+            contact_name="",
+            email="asset@3x.png",
+            email_method="scrape",
+            lead_status="new",
+            score=88,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+        CallListRow(
+            company="No Phone Inc",
+            service="dentist",
+            city="Fort Lauderdale",
+            state="FL",
+            phone="N/A",
+            website="",
+            contact_name="",
+            email="owner@nophone.com",
+            email_method="direct",
+            lead_status="contacted",
+            score=85,
+            source="test",
+            role_inbox="no",
+            last_email_ts="",
+            email_sent_count=0,
+            opted_out="no",
+        ),
+    ]
+
+    kept, summary = _filter_call_list_rows_for_hygiene(rows=rows, enabled=True, sample_limit=10)
+    assert len(kept) == 1
+    assert int(summary["removed_count"]) == 2
+    reason_counts = dict(summary["reason_counts"])
+    assert int(reason_counts["email_junk_artifact"]) == 1
+    assert int(reason_counts["bad_phone"]) == 1
+    samples = list(summary["samples"])
+    assert len(samples) == 2
+    assert all("email_sha256" in s for s in samples)
+    assert all("@" not in str(s) for s in samples)
 
 
 def test_live_job_report_includes_guardrails_section() -> None:
@@ -450,6 +536,84 @@ def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
     assert budgets2["followup_remaining"] == 1
 
 
+def test_should_block_deliverability_trips_at_threshold() -> None:
+    assert (
+        _should_block_deliverability(
+            gate_enabled=True,
+            emailed=10,
+            bounce_rate=0.05,
+            min_emailed=10,
+            max_bounce_rate=0.05,
+        )
+        is True
+    )
+    assert (
+        _should_block_deliverability(
+            gate_enabled=True,
+            emailed=9,
+            bounce_rate=0.20,
+            min_emailed=10,
+            max_bounce_rate=0.05,
+        )
+        is False
+    )
+
+
+def test_apply_outreach_runtime_policy_pauses_email_only_on_deliverability_block() -> None:
+    cfg = SimpleNamespace(
+        agents={
+            "outreach": {
+                "min_score": 60,
+                "daily_send_limit": 30,
+                "followup": {"enabled": True, "daily_send_limit": 15},
+            }
+        }
+    )
+    guardrails: dict[str, object] = {}
+
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env={},
+        high_intent_only=False,
+        deliverability_block=True,
+        guardrails=guardrails,
+    )
+
+    outreach_cfg = dict(cfg.agents["outreach"])
+    follow_cfg = dict(outreach_cfg["followup"])
+    assert int(outreach_cfg["daily_send_limit"]) == 0
+    assert bool(follow_cfg["enabled"]) is False
+    assert int(follow_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["deliverability_email_paused_only"]) is True
+
+
+def test_apply_outreach_runtime_policy_respects_high_intent_controls() -> None:
+    cfg = SimpleNamespace(
+        agents={
+            "outreach": {
+                "min_score": 75,
+                "daily_send_limit": 30,
+                "followup": {"enabled": True, "daily_send_limit": 15},
+            }
+        }
+    )
+    guardrails: dict[str, object] = {}
+
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env={"HIGH_INTENT_EMAIL_MIN_SCORE": "80", "HIGH_INTENT_SKIP_COLD_EMAIL": "1"},
+        high_intent_only=True,
+        deliverability_block=False,
+        guardrails=guardrails,
+    )
+
+    outreach_cfg = dict(cfg.agents["outreach"])
+    assert int(outreach_cfg["min_score"]) == 80
+    assert int(outreach_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["high_intent_skip_cold_email"]) is True
+    assert bool(guardrails["deliverability_email_paused_only"]) is False
+
+
 def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
     (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
@@ -482,6 +646,12 @@ def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(mon
     )
     assert out is not None
     assert out["statuses"] == ["replied", "contacted", "new"]
-    assert int(out["min_score"] or 0) == 80
+    assert int(out["min_score"] or 0) == 70
+    assert bool(out["enrichment_enabled"]) is True
+    assert int(out["call_signal_days"] or 0) == 14
+    assert int(out["sms_signal_days"] or 0) == 30
     assert captured["statuses"] == ["replied", "contacted", "new"]
-    assert int(captured["min_score"] or 0) == 80
+    assert int(captured["min_score"] or 0) == 70
+    assert bool(captured["enrichment_enabled"]) is True
+    assert int(captured["call_signal_days"] or 0) == 14
+    assert int(captured["sms_signal_days"] or 0) == 30

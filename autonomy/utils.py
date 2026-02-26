@@ -13,6 +13,12 @@ UTC = timezone.utc
 
 _US_PHONE_RE = re.compile(r"\D+")
 
+# Canonical email patterns — use these everywhere instead of per-file copies.
+# EMAIL_RE: anchored, for validation / fullmatch / match on a single address.
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+# EMAIL_SEARCH_RE: un-anchored, for finditer / findall inside larger text.
+EMAIL_SEARCH_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
 # Best-effort US state -> IANA timezone mapping.
 STATE_TZ: dict[str, str] = {
     "AL": "America/Chicago",
@@ -96,7 +102,19 @@ def normalize_us_phone(raw: str) -> str:
     return f"+1{digits}"
 
 
-def is_business_hours(state: str, start_hour: int = 9, end_hour: int = 17) -> bool:
+def is_business_hours(
+    state: str,
+    start_hour: int = 9,
+    end_hour: int = 17,
+    *,
+    allow_weekends: bool = False,
+) -> bool:
+    """Check whether the current local time is within business hours.
+
+    Supports both positional and keyword calling conventions so that
+    callers in ``twilio_autocall`` (keyword-only) and ``twilio_sms``
+    (positional) can both delegate here.
+    """
     try:
         from zoneinfo import ZoneInfo
     except Exception:
@@ -109,6 +127,6 @@ def is_business_hours(state: str, start_hour: int = 9, end_hour: int = 17) -> bo
         tz = ZoneInfo("America/New_York")
 
     now_local = datetime.now(tz)
-    if now_local.weekday() >= 5:
+    if not bool(allow_weekends) and now_local.weekday() >= 5:
         return False
     return int(start_hour) <= int(now_local.hour) < int(end_hour)

@@ -23,6 +23,8 @@ import time
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
+
 log = logging.getLogger(__name__)
 
 ANCHOR_API_BASE = "https://api.anchorbrowser.io/v1"
@@ -41,8 +43,6 @@ _NAME_PATTERNS = [
         re.IGNORECASE,
     ),
 ]
-
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 CONTACT_PATHS = ("contact", "contact-us", "about", "about-us", "team", "our-team", "staff", "doctors")
 
@@ -121,7 +121,7 @@ def fetch_with_browser(url: str, session_cdp_url: str) -> str:
 def extract_emails_from_html(html: str) -> set[str]:
     """Extract email addresses from HTML content."""
     emails: set[str] = set()
-    for m in EMAIL_RE.finditer(html):
+    for m in EMAIL_SEARCH_RE.finditer(html):
         email = m.group(0).strip().lower()
         # Skip common false positives.
         if any(x in email for x in ("@sentry", "@wix", "example.com", "domain.com")):

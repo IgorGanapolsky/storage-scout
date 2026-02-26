@@ -5,7 +5,7 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch: {}
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - 'autonomy/tools/generate_dashboard.py'
 
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: develop
+          ref: main
 
       - uses: actions/setup-python@v6
         with:
@@ -27,11 +27,12 @@ jobs:
       - name: Generate dashboard
         run: python autonomy/tools/generate_dashboard.py
 
-      - name: Commit and push if changed
+      - name: Commit and push bot/dashboard-refresh if changed
         run: |
+          git checkout -B bot/dashboard-refresh
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/status.html
           git diff --cached --quiet && echo "No changes" && exit 0
           git commit -m "chore: auto-refresh dashboard [skip ci]"
-          git push
+          git push --force origin bot/dashboard-refresh

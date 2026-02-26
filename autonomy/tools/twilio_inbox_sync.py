@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import json
 import re
 import urllib.parse
 import urllib.request
@@ -21,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.agent_commerce import request_json
 from autonomy.utils import normalize_us_phone, truthy
 
 _OPT_OUT_RE = re.compile(r"\b(stop|unsubscribe|cancel|quit|end|remove)\b", re.IGNORECASE)
@@ -66,7 +66,11 @@ def load_twilio_inbox_config(
     if not sid or not token or not from_num or not from_num.startswith("+"):
         return None
 
-    booking = (booking_url or "").strip() or "https://calendly.com/igorganapolsky/audit-call"
+    booking = (
+        (booking_url or "").strip()
+        or (env.get("BOOKING_URL") or "").strip()
+        or "https://calendly.com/igorganapolsky/audit-call"
+    )
     kickoff = (
         (kickoff_url or "").strip()
         or (env.get("PRIORITY_KICKOFF_URL") or "").strip()
@@ -96,6 +100,7 @@ def _twilio_request(
     path: str,
     query: dict[str, str] | None = None,
     data: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     url = f"https://api.twilio.com{path}"
     if query:
@@ -107,29 +112,43 @@ def _twilio_request(
         payload = urllib.parse.urlencode(data).encode("utf-8")
         headers["Content-Type"] = "application/x-www-form-urlencoded"
 
-    req = urllib.request.Request(url, data=payload, headers=headers, method=method.upper())
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read()
-    return json.loads(body.decode("utf-8"))
+    return request_json(
+        method=method,
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout_secs=20,
+        agent_id="agent.sms.twilio.inbox.v1",
+        env=env,
+        urlopen_func=urllib.request.urlopen,
+    )
 
 
-def _list_messages(cfg: TwilioInboxConfig) -> list[dict[str, Any]]:
+def _list_messages(cfg: TwilioInboxConfig, *, env: dict[str, str] | None = None) -> list[dict[str, Any]]:
     payload = _twilio_request(
         cfg=cfg,
         method="GET",
         path=f"/2010-04-01/Accounts/{cfg.account_sid}/Messages.json",
         query={"To": cfg.from_number, "PageSize": str(int(cfg.max_per_run))},
+        env=env,
     )
     messages = payload.get("messages")
     return [m for m in messages if isinstance(m, dict)] if isinstance(messages, list) else []
 
 
-def _send_reply(cfg: TwilioInboxConfig, *, to_number: str, body: str) -> dict[str, Any]:
+def _send_reply(
+    cfg: TwilioInboxConfig,
+    *,
+    to_number: str,
+    body: str,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     return _twilio_request(
         cfg=cfg,
         method="POST",
         path=f"/2010-04-01/Accounts/{cfg.account_sid}/Messages.json",
         data={"To": to_number, "From": cfg.from_number, "Body": body},
+        env=env,
     )
 
 
@@ -196,7 +215,7 @@ def run_twilio_inbox_sync(
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     result = TwilioInboxResult()
     try:
-        messages = _list_messages(cfg)
+        messages = _list_messages(cfg, env=env)
         for msg in messages:
             result.fetched += 1
             direction = str(msg.get("direction") or "").strip().lower()
@@ -251,7 +270,7 @@ def run_twilio_inbox_sync(
                 continue
 
             try:
-                resp = _send_reply(cfg, to_number=from_phone, body=reply_body)
+                resp = _send_reply(cfg, to_number=from_phone, body=reply_body, env=env)
                 out_sid = str(resp.get("sid") or "").strip()
                 result.auto_replies_sent += 1
                 store.log_action(

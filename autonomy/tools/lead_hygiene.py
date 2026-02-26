@@ -16,16 +16,16 @@ Usage as library:
 from __future__ import annotations
 
 import logging
-import re
 import smtplib
 import socket
 import sqlite3
 import subprocess
+import hashlib
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+from autonomy.utils import EMAIL_RE
 
-EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+log = logging.getLogger(__name__)
 
 # Domains known to be non-deliverable or irrelevant.
 EXCLUDED_DOMAINS: set[str] = {
@@ -136,7 +136,15 @@ def _smtp_probe(email: str) -> bool:
         return True
 
 
-def validate_email(email: str, *, smtp: bool = False) -> tuple[bool, str]:
+def _email_hash(email: str) -> str:
+    return hashlib.sha256((email or "").strip().lower().encode("utf-8")).hexdigest()
+
+
+def _email_domain(email: str) -> str:
+    return (email or "").strip().lower().split("@", 1)[1] if "@" in (email or "") else ""
+
+
+def validate_email(email: str, *, smtp: bool = False, check_mx: bool = True) -> tuple[bool, str]:
     """Validate a single email address.
 
     Args:
@@ -160,7 +168,7 @@ def validate_email(email: str, *, smtp: bool = False) -> tuple[bool, str]:
     if domain in EXCLUDED_DOMAINS:
         return False, "excluded_domain"
 
-    if not _check_mx(domain):
+    if check_mx and not _check_mx(domain):
         return False, "no_mx_records"
 
     if smtp and not _smtp_probe(email):
@@ -169,13 +177,21 @@ def validate_email(email: str, *, smtp: bool = False) -> tuple[bool, str]:
     return True, "ok"
 
 
-def clean_leads_db(db_path: str, *, dry_run: bool = False, smtp: bool = False) -> dict[str, int]:
+def clean_leads_db(
+    db_path: str,
+    *,
+    dry_run: bool = False,
+    smtp: bool = False,
+    check_mx: bool = True,
+    sample_limit: int = 25,
+) -> dict[str, object]:
     """Validate all lead emails in the SQLite DB.
 
     Marks invalid leads as 'bad_email' status so the deliverability gate
     excludes them from bounce rate calculations and outreach.
 
-    Returns counts: {total, valid, invalid, already_bad, skipped}.
+    Returns counts and sanitized invalid samples:
+    {total, valid, invalid, already_bad, skipped, invalid_reasons, invalid_samples}.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -185,7 +201,16 @@ def clean_leads_db(db_path: str, *, dry_run: bool = False, smtp: bool = False) -
         "SELECT id, email, status FROM leads WHERE status NOT IN ('opted_out', 'bad_email')"
     ).fetchall()
 
-    counts = {"total": len(rows), "valid": 0, "invalid": 0, "already_bad": 0, "skipped": 0}
+    counts: dict[str, object] = {
+        "total": len(rows),
+        "valid": 0,
+        "invalid": 0,
+        "already_bad": 0,
+        "skipped": 0,
+        "invalid_reasons": {},
+        "invalid_samples": [],
+    }
+    max_samples = max(0, int(sample_limit))
 
     for row in rows:
         lead_id = row["id"]
@@ -195,12 +220,29 @@ def clean_leads_db(db_path: str, *, dry_run: bool = False, smtp: bool = False) -
             counts["skipped"] += 1
             continue
 
-        is_valid, reason = validate_email(email, smtp=smtp)
+        is_valid, reason = validate_email(email, smtp=smtp, check_mx=check_mx)
 
         if is_valid:
-            counts["valid"] += 1
+            counts["valid"] = int(counts["valid"]) + 1
         else:
-            counts["invalid"] += 1
+            counts["invalid"] = int(counts["invalid"]) + 1
+            reasons = dict(counts.get("invalid_reasons") or {})
+            reasons[reason] = int(reasons.get(reason, 0)) + 1
+            counts["invalid_reasons"] = reasons
+
+            samples = list(counts.get("invalid_samples") or [])
+            if len(samples) < max_samples:
+                samples.append(
+                    {
+                        "lead_id_sha256": hashlib.sha256(str(lead_id).encode("utf-8")).hexdigest(),
+                        "email_domain": _email_domain(email),
+                        "email_sha256": _email_hash(email),
+                        "reason": reason,
+                        "prior_status": str(row["status"] or ""),
+                    }
+                )
+                counts["invalid_samples"] = samples
+
             log.info("Invalid email: %s (reason: %s, lead: %s)", email, reason, lead_id)
             if not dry_run:
                 cur.execute(

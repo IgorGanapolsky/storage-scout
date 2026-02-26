@@ -13,8 +13,25 @@ class LeadScorer:
             score += 15
         if lead.service:
             score += 10
+            # Tier 1 Verticals (Highest ROI)
+            service_l = lead.service.lower()
+            if "dentist" in service_l or "dental" in service_l:
+                score += 15
+            elif "med spa" in service_l or "aesthetics" in service_l:
+                score += 15
+            elif "hvac" in service_l or "plumbing" in service_l or "plumber" in service_l:
+                score += 10
         if lead.city and lead.state:
             score += 10
+            # Regional Priority (South Florida)
+            if (lead.state or "").upper() == "FL":
+                south_fl_cities = {
+                    "miami", "fort lauderdale", "pompano beach", "coral springs",
+                    "hollywood", "davie", "plantation", "sunrise", "deerfield beach",
+                    "pembroke pines", "miramar", "weston", "tamarac", "margate"
+                }
+                if (lead.city or "").lower() in south_fl_cities:
+                    score += 5
         if lead.email:
             score += 20
         return min(score, 100)
@@ -26,18 +43,12 @@ class OutreachWriter:
     mailing_address: str
     signature: str
     unsubscribe_url: str
+    kickoff_url: str = ""
     booking_url: str = ""
     baseline_example_url: str = ""
 
     def _render_unsubscribe(self, email: str) -> str:
         return self.unsubscribe_url.replace("{{email}}", email)
-
-    def _render_intake_link(self) -> str:
-        if not self.intake_url:
-            return ""
-        joiner = "&" if "?" in self.intake_url else "?"
-        # Do not include PII in query params (e.g., email). Keep UTMs only.
-        return f"{self.intake_url}{joiner}utm_source=outreach&utm_medium=email&utm_campaign=baseline"
 
     def _proof_line(self) -> str:
         if not self.baseline_example_url:
@@ -45,7 +56,10 @@ class OutreachWriter:
         return f"\nExample baseline (1 page): {self.baseline_example_url}"
 
     def _booking_line(self) -> str:
-        return "\nReply YES and I'll run the free baseline for you — no call needed."
+        line = "\nReply YES and I'll run the free baseline for you — no call needed."
+        if self.kickoff_url:
+            line += f"\nOr skip the line and start setup now: {self.kickoff_url} ($249 setup fee)."
+        return line
 
     def _is_med_spa(self, lead: Lead) -> bool:
         return "med spa" in (lead.service or "").lower()

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from autonomy.context_store import ContextStore
+from autonomy.tools.agent_commerce import request_json
 from autonomy.tools.fastmail_inbox_sync import load_dotenv
 from autonomy.utils import UTC, truthy
 
@@ -121,7 +122,14 @@ def _read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+_WATCHDOG_STATE_DIR = Path(__file__).resolve().parent.parent / "state"
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    resolved = path.resolve()
+    allowed = _WATCHDOG_STATE_DIR.resolve()
+    if resolved != allowed and allowed not in resolved.parents:
+        raise ValueError(f"Refusing to write outside {allowed}: {resolved}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -186,6 +194,7 @@ def _request_json(
     method: str,
     url: str,
     data: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     payload = None
     headers = {"Authorization": _auth_header(cfg)}
@@ -193,16 +202,22 @@ def _request_json(
         payload = urllib.parse.urlencode(data).encode("utf-8")
         headers["Content-Type"] = "application/x-www-form-urlencoded"
 
-    req = urllib.request.Request(url, data=payload, headers=headers, method=method.upper())
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read()
-    parsed = json.loads(body.decode("utf-8"))
+    parsed = request_json(
+        method=method,
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout_secs=20,
+        agent_id="agent.twilio.tollfree_watchdog.v1",
+        env=env,
+        urlopen_func=urllib.request.urlopen,
+    )
     if not isinstance(parsed, dict):
         return {}
     return parsed
 
 
-def _fetch_phone_number_sid(cfg: TwilioTollfreeWatchdogConfig) -> str:
+def _fetch_phone_number_sid(cfg: TwilioTollfreeWatchdogConfig, *, env: dict[str, str] | None = None) -> str:
     phone_q = urllib.parse.quote(cfg.phone_number, safe="")
     payload = _request_json(
         cfg=cfg,
@@ -211,6 +226,7 @@ def _fetch_phone_number_sid(cfg: TwilioTollfreeWatchdogConfig) -> str:
             f"https://api.twilio.com/2010-04-01/Accounts/{cfg.account_sid}/IncomingPhoneNumbers.json"
             f"?PhoneNumber={phone_q}"
         ),
+        env=env,
     )
     rows = payload.get("incoming_phone_numbers")
     if not isinstance(rows, list):
@@ -223,7 +239,12 @@ def _fetch_phone_number_sid(cfg: TwilioTollfreeWatchdogConfig) -> str:
     return ""
 
 
-def _fetch_latest_verification(cfg: TwilioTollfreeWatchdogConfig, *, phone_sid: str) -> dict[str, Any]:
+def _fetch_latest_verification(
+    cfg: TwilioTollfreeWatchdogConfig,
+    *,
+    phone_sid: str,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     payload = _request_json(
         cfg=cfg,
         method="GET",
@@ -231,6 +252,7 @@ def _fetch_latest_verification(cfg: TwilioTollfreeWatchdogConfig, *, phone_sid: 
             "https://messaging.twilio.com/v1/Tollfree/Verifications"
             f"?TollfreePhoneNumberSid={urllib.parse.quote(phone_sid, safe='')}&PageSize=20"
         ),
+        env=env,
     )
     rows = payload.get("verifications")
     if not isinstance(rows, list):
@@ -252,12 +274,14 @@ def _update_verification(
     *,
     verification_sid: str,
     payload: dict[str, str],
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     return _request_json(
         cfg=cfg,
         method="POST",
         url=f"https://messaging.twilio.com/v1/Tollfree/Verifications/{verification_sid}",
         data=payload,
+        env=env,
     )
 
 
@@ -399,7 +423,7 @@ def run_twilio_tollfree_watchdog(
         state_path=str(resolved_state_path),
     )
     try:
-        phone_sid = _fetch_phone_number_sid(cfg)
+        phone_sid = _fetch_phone_number_sid(cfg, env=env)
         result.phone_number_sid = phone_sid
         if not phone_sid:
             result.reason = "phone_not_found"
@@ -407,7 +431,7 @@ def run_twilio_tollfree_watchdog(
             result.alert_reason = "phone_not_found"
             return result
 
-        verification = _fetch_latest_verification(cfg, phone_sid=phone_sid)
+        verification = _fetch_latest_verification(cfg, phone_sid=phone_sid, env=env)
         if not verification:
             result.reason = "verification_not_found"
             result.should_alert = True
@@ -427,7 +451,7 @@ def run_twilio_tollfree_watchdog(
             if payload:
                 result.auto_fix_attempted = True
                 try:
-                    updated = _update_verification(cfg, verification_sid=result.verification_sid, payload=payload)
+                    updated = _update_verification(cfg, verification_sid=result.verification_sid, payload=payload, env=env)
                     _apply_verification(result, updated)
                     result.auto_fix_applied = True
                     result.reason = "auto_fix_applied"
@@ -451,8 +475,6 @@ def run_twilio_tollfree_watchdog(
     finally:
         next_state: dict[str, Any] = {
             "last_poll_utc": result.poll_utc,
-            "verification_sid": result.verification_sid,
-            "phone_number": result.phone_number,
             "last_status": result.status,
             "last_error_code": result.error_code,
             "last_alert_reason": str(prior_state.get("last_alert_reason") or ""),
