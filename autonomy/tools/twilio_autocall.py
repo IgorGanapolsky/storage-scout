@@ -166,6 +166,40 @@ def _auth_header(cfg: TwilioConfig) -> str:
     return f"Basic {b64}"
 
 
+def fetch_twilio_balance(env: dict[str, str]) -> float | None:
+    """Fetch current Twilio account balance in USD.
+
+    Returns ``None`` when credentials are missing, transport fails, or payload
+    does not expose a parseable numeric balance.
+    """
+    sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
+    token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
+    if not sid or not token:
+        return None
+
+    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("ascii")
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Balance.json"
+    try:
+        payload = request_json(
+            method="GET",
+            url=url,
+            headers={"Authorization": f"Basic {auth}"},
+            payload=None,
+            timeout_secs=10,
+            agent_id="agent.autocall.twilio.v1",
+            env=env,
+            urlopen_func=urllib.request.urlopen,
+        )
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+    raw_balance = payload.get("balance")
+    try:
+        return float(raw_balance)
+    except (TypeError, ValueError):
+        return None
+
+
 def _twilio_request(
     *,
     cfg: TwilioConfig,
@@ -329,6 +363,22 @@ def run_auto_calls(
             failed=0,
             skipped=0,
             reason="missing_twilio_env",
+        )
+
+    # Balance guard: refuse to call if Twilio balance is below threshold.
+    min_balance = float((env.get("TWILIO_MIN_BALANCE") or "5.00").strip() or 5.00)
+    balance = fetch_twilio_balance(env)
+    if balance is not None and balance < min_balance:
+        return AutoCallResult(
+            attempted=0,
+            completed=0,
+            spoke=0,
+            voicemail=0,
+            no_answer=0,
+            wrong_number=0,
+            failed=0,
+            skipped=len(call_rows),
+            reason=f"low_balance=${balance:.2f}<${min_balance:.2f}",
         )
 
     max_calls = int((env.get("AUTO_CALLS_MAX_PER_RUN") or "10").strip() or 10)
