@@ -51,6 +51,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
     audit_log = Path(f"autonomy/state/test_tf_watchdog_{run_id}.jsonl")
     state_path = Path(f"autonomy/state/test_tf_watchdog_state_{run_id}.json")
     posted: list[dict[str, str]] = []
+    fresh_review_ts = (datetime.now(UTC) - timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     def fake_urlopen(req, timeout=20):  # noqa: ANN001
         url = req.full_url
@@ -96,7 +97,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
                     "doing_business_as": "CallCatcher Ops",
                     "business_type": "SOLE_PROPRIETOR",
                     "edit_allowed": None,
-                    "date_updated": "2026-02-24T20:15:32Z",
+                    "date_updated": fresh_review_ts,
                     "url": "https://messaging.twilio.com/v1/Tollfree/Verifications/HH123",
                 }
             )

@@ -15,6 +15,8 @@ from autonomy.tools.fastmail_inbox_sync import (
     _looks_like_stripe_payment,
 )
 from autonomy.tools.live_job import (
+    _apply_outreach_runtime_policy,
+    _should_block_deliverability,
     _filter_call_list_rows_for_hygiene,
     _maybe_write_call_list,
     _compute_sms_channel_budgets,
@@ -532,6 +534,84 @@ def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
     assert budgets2["total_remaining"] == 1
     assert budgets2["interest_reserve_remaining"] == 0
     assert budgets2["followup_remaining"] == 1
+
+
+def test_should_block_deliverability_trips_at_threshold() -> None:
+    assert (
+        _should_block_deliverability(
+            gate_enabled=True,
+            emailed=10,
+            bounce_rate=0.05,
+            min_emailed=10,
+            max_bounce_rate=0.05,
+        )
+        is True
+    )
+    assert (
+        _should_block_deliverability(
+            gate_enabled=True,
+            emailed=9,
+            bounce_rate=0.20,
+            min_emailed=10,
+            max_bounce_rate=0.05,
+        )
+        is False
+    )
+
+
+def test_apply_outreach_runtime_policy_pauses_email_only_on_deliverability_block() -> None:
+    cfg = SimpleNamespace(
+        agents={
+            "outreach": {
+                "min_score": 60,
+                "daily_send_limit": 30,
+                "followup": {"enabled": True, "daily_send_limit": 15},
+            }
+        }
+    )
+    guardrails: dict[str, object] = {}
+
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env={},
+        high_intent_only=False,
+        deliverability_block=True,
+        guardrails=guardrails,
+    )
+
+    outreach_cfg = dict(cfg.agents["outreach"])
+    follow_cfg = dict(outreach_cfg["followup"])
+    assert int(outreach_cfg["daily_send_limit"]) == 0
+    assert bool(follow_cfg["enabled"]) is False
+    assert int(follow_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["deliverability_email_paused_only"]) is True
+
+
+def test_apply_outreach_runtime_policy_respects_high_intent_controls() -> None:
+    cfg = SimpleNamespace(
+        agents={
+            "outreach": {
+                "min_score": 75,
+                "daily_send_limit": 30,
+                "followup": {"enabled": True, "daily_send_limit": 15},
+            }
+        }
+    )
+    guardrails: dict[str, object] = {}
+
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env={"HIGH_INTENT_EMAIL_MIN_SCORE": "80", "HIGH_INTENT_SKIP_COLD_EMAIL": "1"},
+        high_intent_only=True,
+        deliverability_block=False,
+        guardrails=guardrails,
+    )
+
+    outreach_cfg = dict(cfg.agents["outreach"])
+    assert int(outreach_cfg["min_score"]) == 80
+    assert int(outreach_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["high_intent_skip_cold_email"]) is True
+    assert bool(guardrails["deliverability_email_paused_only"]) is False
 
 
 def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(monkeypatch, tmp_path: Path) -> None:

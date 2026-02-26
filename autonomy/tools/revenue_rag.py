@@ -35,6 +35,15 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
 def _safe_float(value: Any) -> float:
     try:
         return float(value or 0.0)
@@ -45,6 +54,34 @@ def _safe_float(value: Any) -> float:
 def _derive_bottleneck(metrics: dict[str, Any]) -> str:
     if _safe_int(metrics.get("stripe_payments")) > 0:
         return "has_revenue"
+
+    calls_budget_remaining = metrics.get("calls_budget_remaining")
+    sms_budget_remaining = metrics.get("sms_budget_remaining")
+    calls_attempted_this_run = metrics.get("calls_attempted_this_run")
+    sms_attempted_this_run = metrics.get("sms_attempted_this_run")
+    has_channel_capacity_context = all(
+        value is not None
+        for value in (
+            calls_budget_remaining,
+            sms_budget_remaining,
+            calls_attempted_this_run,
+            sms_attempted_this_run,
+        )
+    )
+    channel_capacity_exhausted_no_throughput = bool(
+        has_channel_capacity_context
+        and _safe_int(calls_budget_remaining) <= 0
+        and _safe_int(sms_budget_remaining) <= 0
+        and _safe_int(calls_attempted_this_run) == 0
+        and _safe_int(sms_attempted_this_run) == 0
+    )
+
+    if bool(metrics.get("deliverability_blocked")) and (
+        bool(metrics.get("stop_loss_blocked"))
+        or bool(metrics.get("paid_kill_switch"))
+        or channel_capacity_exhausted_no_throughput
+    ):
+        return "outreach_paralyzed"
     if bool(metrics.get("deliverability_blocked")):
         return "email_deliverability_blocked"
     if _safe_int(metrics.get("interested_signals")) > 0 and _safe_int(metrics.get("booked_total")) == 0:
@@ -67,6 +104,16 @@ def _derive_hypothesis_and_actions(bottleneck: str) -> tuple[str, list[str], flo
                 "Attach margin tracking to each active account before adding new acquisition spend.",
             ],
             0.85,
+        )
+    if bottleneck == "outreach_paralyzed":
+        return (
+            "All outbound channels are effectively constrained, so zero-booking outcomes are expected until one channel is restored.",
+            [
+                "Unblock at least one outbound channel today (email, calls, or SMS) before scaling lead intake.",
+                "Temporarily route effort to the first available channel and cap spend until response signal appears.",
+                "Track channel availability status as a prerequisite KPI before judging conversion performance.",
+            ],
+            0.95,
         )
     if bottleneck == "email_deliverability_blocked":
         return (
@@ -154,12 +201,18 @@ def build_revenue_lesson(
         ),
         "deliverability_blocked": bool(guardrails.get("deliverability_blocked")),
         "bounce_rate_recent": _safe_float(guardrails.get("deliverability_recent_bounce_rate")),
+        "stop_loss_blocked": bool(guardrails.get("stop_loss_blocked")),
+        "paid_kill_switch": bool(guardrails.get("paid_kill_switch")),
         "calls_today_billable": _safe_int(guardrails.get("calls_today")),
-        "calls_budget_remaining": _safe_int(guardrails.get("calls_budget_remaining")),
+        "calls_budget_remaining": _optional_int(guardrails.get("calls_budget_remaining")),
         "sms_today_billable": _safe_int(guardrails.get("sms_today")),
-        "sms_budget_remaining": _safe_int(guardrails.get("sms_budget_remaining")),
-        "calls_attempted_this_run": _safe_int(getattr(auto_calls, "attempted", 0)),
-        "sms_attempted_this_run": _safe_int(getattr(sms_followup, "attempted", 0)),
+        "sms_budget_remaining": _optional_int(guardrails.get("sms_budget_remaining")),
+        "calls_attempted_this_run": (
+            None if auto_calls is None else _safe_int(getattr(auto_calls, "attempted", 0))
+        ),
+        "sms_attempted_this_run": (
+            None if sms_followup is None else _safe_int(getattr(sms_followup, "attempted", 0))
+        ),
         "interested_signals": interested_signals,
         "opt_out_signals": _safe_int(getattr(twilio_inbox_result, "opt_out", 0)),
     }
