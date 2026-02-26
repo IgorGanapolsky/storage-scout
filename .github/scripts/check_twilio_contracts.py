@@ -102,7 +102,6 @@ def main() -> int:
                 )
             )
             continue
-        text = _read_text(path)
         if not _has_log_action_calls(path):
             violations.append(
                 Violation(
