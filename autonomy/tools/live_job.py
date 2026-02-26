@@ -405,6 +405,54 @@ def _deliverability_snapshot(store: ContextStore, *, days: int) -> dict[str, flo
     }
 
 
+def _should_block_deliverability(
+    *,
+    gate_enabled: bool,
+    emailed: int,
+    bounce_rate: float,
+    min_emailed: int,
+    max_bounce_rate: float,
+) -> bool:
+    return bool(
+        bool(gate_enabled)
+        and int(emailed) >= int(min_emailed)
+        and float(bounce_rate) >= float(max_bounce_rate)
+    )
+
+
+def _apply_outreach_runtime_policy(
+    *,
+    cfg,
+    env: dict[str, str],
+    high_intent_only: bool,
+    deliverability_block: bool,
+    guardrails: dict[str, object],
+) -> None:
+    outreach_cfg = dict((cfg.agents.get("outreach") or {}))
+    follow_cfg = dict((outreach_cfg.get("followup") or {}))
+
+    guardrails["deliverability_email_paused_only"] = bool(deliverability_block)
+
+    if high_intent_only:
+        min_email_score = max(0, _int_env(env.get("HIGH_INTENT_EMAIL_MIN_SCORE"), 80))
+        outreach_cfg["min_score"] = max(int(outreach_cfg.get("min_score") or 0), min_email_score)
+        if truthy(env.get("HIGH_INTENT_SKIP_COLD_EMAIL"), default=True):
+            outreach_cfg["daily_send_limit"] = 0
+        follow_cfg["enabled"] = bool(follow_cfg.get("enabled", True))
+        guardrails["high_intent_email_min_score"] = int(outreach_cfg["min_score"])
+        guardrails["high_intent_skip_cold_email"] = bool(outreach_cfg.get("daily_send_limit", 0) == 0)
+
+    if deliverability_block:
+        # Pause email sends only; continue engine ingestion/goals/observer execution.
+        outreach_cfg["daily_send_limit"] = 0
+        follow_cfg["enabled"] = False
+        follow_cfg["daily_send_limit"] = 0
+        guardrails["deliverability_pause_reason"] = "deliverability_bounce_rate"
+
+    outreach_cfg["followup"] = follow_cfg
+    cfg.agents["outreach"] = outreach_cfg
+
+
 def _compute_sms_channel_budgets(
     *,
     daily_sms_cap: int,
@@ -1138,10 +1186,12 @@ def main() -> None:
     deliverability_min_emails = max(1, _int_env(env.get("DELIVERABILITY_MIN_EMAILS"), 10))
     deliverability_snapshot = _deliverability_snapshot(guard_store, days=deliverability_window_days)
     deliverability_max_bounce = max(0.0, min(1.0, _float_env(env.get("DELIVERABILITY_MAX_BOUNCE_RATE"), 0.05)))
-    deliverability_block = bool(
-        deliverability_gate_enabled
-        and int(deliverability_snapshot["emailed"] or 0) >= int(deliverability_min_emails)
-        and float(deliverability_snapshot["bounce_rate"] or 0.0) > float(deliverability_max_bounce)
+    deliverability_block = _should_block_deliverability(
+        gate_enabled=deliverability_gate_enabled,
+        emailed=int(deliverability_snapshot["emailed"] or 0),
+        bounce_rate=float(deliverability_snapshot["bounce_rate"] or 0.0),
+        min_emailed=deliverability_min_emails,
+        max_bounce_rate=deliverability_max_bounce,
     )
     guardrails["deliverability_gate_enabled"] = bool(deliverability_gate_enabled)
     guardrails["deliverability_window_days"] = int(deliverability_window_days)
@@ -1165,32 +1215,26 @@ def main() -> None:
                 "min_emails": int(deliverability_min_emails),
             },
         )
-        engine_result = {
-            "sent_initial": 0,
-            "sent_followup": 0,
-            "goal_tasks_generated": 0,
-            "goal_tasks_done": 0,
-            "goal_tasks_failed": 0,
-            "guard_blocked": "deliverability_bounce_rate",
-        }
-        print("live_job: engine blocked by deliverability gate", file=sys.stderr)
-    else:
-        if high_intent_only:
-            outreach_cfg = dict((cfg.agents.get("outreach") or {}))
-            follow_cfg = dict((outreach_cfg.get("followup") or {}))
-            min_email_score = max(0, _int_env(env.get("HIGH_INTENT_EMAIL_MIN_SCORE"), 80))
-            outreach_cfg["min_score"] = max(int(outreach_cfg.get("min_score") or 0), min_email_score)
-            if truthy(env.get("HIGH_INTENT_SKIP_COLD_EMAIL"), default=True):
-                outreach_cfg["daily_send_limit"] = 0
-            follow_cfg["enabled"] = bool(follow_cfg.get("enabled", True))
-            outreach_cfg["followup"] = follow_cfg
-            cfg.agents["outreach"] = outreach_cfg
-            guardrails["high_intent_email_min_score"] = int(outreach_cfg["min_score"])
-            guardrails["high_intent_skip_cold_email"] = bool(outreach_cfg.get("daily_send_limit", 0) == 0)
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env=env,
+        high_intent_only=high_intent_only,
+        deliverability_block=deliverability_block,
+        guardrails=guardrails,
+    )
 
-        # 2) Run outreach (initial + follow-ups) using live config.
-        engine = Engine(cfg)
-        engine_result = engine.run()
+    # 2) Run outreach engine every day; guardrails may pause email sends without
+    # stopping ingestion, goals, and observer tasks.
+    engine = Engine(cfg)
+    engine_result = engine.run()
+    if deliverability_block:
+        engine_result = dict(engine_result)
+        engine_result.setdefault("guard_blocked", "deliverability_bounce_rate_email_only")
+        print(
+            "live_job: deliverability gate paused email sends; engine run continued",
+            file=sys.stderr,
+        )
+    else:
         print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     has_revenue_signal = bool(
