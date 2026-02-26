@@ -32,6 +32,12 @@ from typing import Any
 
 from autonomy.context_store import ContextStore
 from autonomy.tools.agent_commerce import request_json
+from autonomy.tools.retell_caller import (
+    get_retell_call,
+    load_retell_config,
+    map_retell_to_outcome,
+    place_retell_call,
+)
 from autonomy.utils import UTC, EMAIL_RE, is_business_hours, normalize_us_phone, now_utc_iso, truthy
 
 
@@ -307,8 +313,12 @@ def run_auto_calls(
             reason="disabled",
         )
 
+    # Prefer Retell AI for conversational calls when configured.
+    retell_cfg = load_retell_config(env)
+    use_retell = retell_cfg is not None
+
     cfg = load_twilio_config(env)
-    if cfg is None:
+    if cfg is None and not use_retell:
         return AutoCallResult(
             attempted=0,
             completed=0,
@@ -379,10 +389,21 @@ def run_auto_calls(
             # Place call and wait for terminal status (best-effort).
             attempted_at = now_utc_iso()
             try:
-                created = create_call(cfg, to_number=to_phone, env=env)
-                call_sid = str(created.get("sid") or "")
-                final = wait_for_call_terminal_status(cfg, call_sid=call_sid, env=env) if call_sid else created
-                outcome, notes = map_twilio_call_to_outcome(final)
+                if use_retell:
+                    metadata = {
+                        "lead_id": lead_id,
+                        "company": str(row_map.get("company") or ""),
+                        "service": str(row_map.get("service") or ""),
+                    }
+                    created = place_retell_call(retell_cfg, to_phone, metadata)
+                    call_id = str(created.get("call_id") or "")
+                    final = get_retell_call(retell_cfg, call_id) if call_id else created
+                    outcome, notes = map_retell_to_outcome(final)
+                else:
+                    created = create_call(cfg, to_number=to_phone, env=env)
+                    call_sid = str(created.get("sid") or "")
+                    final = wait_for_call_terminal_status(cfg, call_sid=call_sid, env=env) if call_sid else created
+                    outcome, notes = map_twilio_call_to_outcome(final)
             except Exception as exc:
                 notes, error_details = _format_exception_notes(exc)
                 outcome = "failed"
@@ -408,11 +429,42 @@ def run_auto_calls(
             if store.get_lead_status(lead_id) == "new":
                 store.mark_contacted(lead_id)
 
-            twilio_sid = str(final.get("sid") or "").strip()
-            trace_id = f"twilio:{twilio_sid}" if twilio_sid else f"twilio:{attempted_at}"
+            if use_retell:
+                retell_call_id = str(final.get("call_id") or "").strip()
+                trace_id = f"retell:{retell_call_id}" if retell_call_id else f"retell:{attempted_at}"
+                analysis = final.get("call_analysis") or {}
+                agent_id_str = "agent.autocall.retell.v1"
+                provider_payload = {
+                    "retell": {
+                        "call_id": retell_call_id,
+                        "call_status": str(final.get("call_status") or ""),
+                        "disconnection_reason": str(final.get("disconnection_reason") or ""),
+                        "transcript": str(final.get("transcript") or ""),
+                        "call_summary": str(analysis.get("call_summary") or ""),
+                        "call_successful": analysis.get("call_successful"),
+                        "in_voicemail": analysis.get("in_voicemail"),
+                        "user_sentiment": str(analysis.get("user_sentiment") or ""),
+                    },
+                }
+            else:
+                twilio_sid = str(final.get("sid") or "").strip()
+                trace_id = f"twilio:{twilio_sid}" if twilio_sid else f"twilio:{attempted_at}"
+                agent_id_str = "agent.autocall.twilio.v1"
+                provider_payload = {
+                    "twilio": {
+                        "status": str(final.get("status") or ""),
+                        "answered_by": str(final.get("answered_by") or ""),
+                        "sid": str(final.get("sid") or ""),
+                        "error_code": final.get("error_code"),
+                        "http_status": final.get("http_status"),
+                        "error_type": final.get("error_type"),
+                        "error_message": final.get("error_message"),
+                        "error_more_info": final.get("error_more_info"),
+                    },
+                }
 
             store.log_action(
-                agent_id="agent.autocall.twilio.v1",
+                agent_id=agent_id_str,
                 action_type="call.attempt",
                 trace_id=trace_id,
                 payload={
@@ -425,16 +477,7 @@ def run_auto_calls(
                     "phone": str(row_map.get("phone") or ""),
                     "city": str(row_map.get("city") or ""),
                     "state": state,
-                    "twilio": {
-                        "status": str(final.get("status") or ""),
-                        "answered_by": str(final.get("answered_by") or ""),
-                        "sid": str(final.get("sid") or ""),
-                        "error_code": final.get("error_code"),
-                        "http_status": final.get("http_status"),
-                        "error_type": final.get("error_type"),
-                        "error_message": final.get("error_message"),
-                        "error_more_info": final.get("error_more_info"),
-                    },
+                    **provider_payload,
                 },
             )
     finally:
