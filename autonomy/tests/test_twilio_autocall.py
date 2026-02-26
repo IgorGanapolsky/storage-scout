@@ -7,6 +7,8 @@ from datetime import datetime as real_datetime
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.call_list import CallListRow
@@ -508,7 +510,7 @@ def test_fetch_twilio_balance_success(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
     env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}
-    assert fetch_twilio_balance(env) == 4.97
+    assert fetch_twilio_balance(env) == pytest.approx(4.97)
 
 
 def test_fetch_twilio_balance_missing_creds() -> None:
