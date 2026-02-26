@@ -166,6 +166,24 @@ def _auth_header(cfg: TwilioConfig) -> str:
     return f"Basic {b64}"
 
 
+def fetch_twilio_balance(env: dict[str, str]) -> float | None:
+    """Fetch current Twilio account balance in USD. Returns None on failure."""
+    sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
+    token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
+    if not sid or not token:
+        return None
+    raw_auth = f"{sid}:{token}".encode()
+    b64 = base64.b64encode(raw_auth).decode("ascii")
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Balance.json"
+    req = urllib.request.Request(url, headers={"Authorization": f"Basic {b64}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return float(data.get("balance", 0))
+    except Exception:
+        return None
+
+
 def _twilio_request(
     *,
     cfg: TwilioConfig,
@@ -329,6 +347,22 @@ def run_auto_calls(
             failed=0,
             skipped=0,
             reason="missing_twilio_env",
+        )
+
+    # Balance guard: refuse to call if Twilio balance is below threshold.
+    min_balance = float((env.get("TWILIO_MIN_BALANCE") or "5.00").strip() or 5.00)
+    balance = fetch_twilio_balance(env)
+    if balance is not None and balance < min_balance:
+        return AutoCallResult(
+            attempted=0,
+            completed=0,
+            spoke=0,
+            voicemail=0,
+            no_answer=0,
+            wrong_number=0,
+            failed=0,
+            skipped=len(call_rows),
+            reason=f"low_balance=${balance:.2f}<${min_balance:.2f}",
         )
 
     max_calls = int((env.get("AUTO_CALLS_MAX_PER_RUN") or "10").strip() or 10)

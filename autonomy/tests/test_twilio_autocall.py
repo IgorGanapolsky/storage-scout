@@ -17,6 +17,7 @@ from autonomy.tools.twilio_autocall import (
     _is_business_hours,
     _is_reasonable_email,
     _lead_called_recently,
+    fetch_twilio_balance,
     load_twilio_config,
     map_twilio_call_to_outcome,
     normalize_us_phone_e164,
@@ -233,6 +234,7 @@ def test_run_auto_calls_end_to_end(monkeypatch) -> None:
         return state != "TX"
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", fake_is_business_hours)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.fetch_twilio_balance", lambda env: 100.0)
 
     post_calls = {"n": 0}
 
@@ -312,6 +314,7 @@ def test_run_auto_calls_accepts_call_list_row_dataclass(monkeypatch) -> None:
     )
     monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
     monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.fetch_twilio_balance", lambda env: 100.0)
 
     rows = [
         CallListRow(
@@ -389,6 +392,7 @@ def test_run_auto_calls_records_twilio_http_error_details(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
     monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.fetch_twilio_balance", lambda env: 100.0)
 
     result = run_auto_calls(
         sqlite_path=sqlite_path,
@@ -491,3 +495,157 @@ def test_live_job_report_includes_auto_calls_section() -> None:
     assert "- status: ok" in report
     assert "SMS follow-up (Twilio)" in report
     assert "- delivered: 1" in report
+
+
+# ---------------------------------------------------------------------------
+# Balance guard
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_twilio_balance_success(monkeypatch) -> None:
+    def fake_urlopen(req, timeout=10):  # noqa: ANN001
+        return _FakeHTTPResponse({"balance": "4.97", "currency": "USD"})
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+    env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}
+    assert fetch_twilio_balance(env) == 4.97
+
+
+def test_fetch_twilio_balance_missing_creds() -> None:
+    assert fetch_twilio_balance({}) is None
+    assert fetch_twilio_balance({"TWILIO_ACCOUNT_SID": "AC123"}) is None
+
+
+def test_fetch_twilio_balance_api_error(monkeypatch) -> None:
+    def fake_urlopen(req, timeout=10):  # noqa: ANN001
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
+    env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}
+    assert fetch_twilio_balance(env) is None
+
+
+def test_run_auto_calls_low_balance_blocks(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "5",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+        "TWILIO_MIN_BALANCE": "5.00",
+    }
+
+    # Balance is $1.45 — below $5.00 threshold
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.fetch_twilio_balance",
+        lambda env: 1.45,
+    )
+
+    call_rows = [{"email": "test@example.com", "phone": "9546211439", "state": "FL"}]
+    result = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_rows)
+    assert result.attempted == 0
+    assert result.skipped == 1
+    assert "low_balance" in result.reason
+    assert "$1.45" in result.reason
+
+
+def test_run_auto_calls_balance_ok_proceeds(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        email = "balok@example.com"
+        store.upsert_lead(
+            Lead(
+                id=email, name="Test", company="Co", email=email,
+                phone="9546211439", service="Dentist", city="X", state="FL",
+                source="test", score=100, status="new", email_method="direct",
+            )
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+        "TWILIO_MIN_BALANCE": "5.00",
+    }
+
+    # Balance is $20.00 — above threshold, should proceed
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.fetch_twilio_balance",
+        lambda env: 20.00,
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.urllib.request.urlopen",
+        lambda req, timeout=20: _FakeHTTPResponse(
+            {"sid": "CA5", "status": "completed", "answered_by": "human"}
+            if req.get_method() == "GET"
+            else {"sid": "CA5", "status": "queued"}
+        ),
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+
+    call_rows = [{"email": "balok@example.com", "phone": "9546211439", "state": "FL"}]
+    result = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_rows)
+    assert result.reason == "ok"
+    assert result.attempted == 1
+
+
+def test_run_auto_calls_balance_check_failure_allows_calls(monkeypatch) -> None:
+    """If the balance API fails, we should still allow calls (fail-open)."""
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_autocall_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_autocall_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        email = "failopen@example.com"
+        store.upsert_lead(
+            Lead(
+                id=email, name="Test", company="Co", email=email,
+                phone="9546211439", service="Dentist", city="X", state="FL",
+                source="test", score=100, status="new", email_method="direct",
+            )
+        )
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_CALLS_MAX_PER_RUN": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+
+    # Balance API returns None (failure) — should proceed
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.fetch_twilio_balance",
+        lambda env: None,
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall._is_business_hours", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.urllib.request.urlopen",
+        lambda req, timeout=20: _FakeHTTPResponse(
+            {"sid": "CA6", "status": "completed", "answered_by": "human"}
+            if req.get_method() == "GET"
+            else {"sid": "CA6", "status": "queued"}
+        ),
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_autocall.time.sleep", lambda _s: None)
+
+    call_rows = [{"email": "failopen@example.com", "phone": "9546211439", "state": "FL"}]
+    result = run_auto_calls(sqlite_path=sqlite_path, audit_log=audit_log, env=env, call_rows=call_rows)
+    assert result.reason == "ok"
+    assert result.attempted == 1
