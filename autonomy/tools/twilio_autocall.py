@@ -167,20 +167,36 @@ def _auth_header(cfg: TwilioConfig) -> str:
 
 
 def fetch_twilio_balance(env: dict[str, str]) -> float | None:
-    """Fetch current Twilio account balance in USD. Returns None on failure."""
+    """Fetch current Twilio account balance in USD.
+
+    Returns ``None`` when credentials are missing, transport fails, or payload
+    does not expose a parseable numeric balance.
+    """
     sid = (env.get("TWILIO_ACCOUNT_SID") or "").strip()
     token = (env.get("TWILIO_AUTH_TOKEN") or "").strip()
     if not sid or not token:
         return None
-    raw_auth = f"{sid}:{token}".encode()
-    b64 = base64.b64encode(raw_auth).decode("ascii")
+
+    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("ascii")
     url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Balance.json"
-    req = urllib.request.Request(url, headers={"Authorization": f"Basic {b64}"})
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return float(data.get("balance", 0))
-    except Exception:
+        payload = request_json(
+            method="GET",
+            url=url,
+            headers={"Authorization": f"Basic {auth}"},
+            payload=None,
+            timeout_secs=10,
+            agent_id="agent.autocall.twilio.v1",
+            env=env,
+            urlopen_func=urllib.request.urlopen,
+        )
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+    raw_balance = payload.get("balance")
+    try:
+        return float(raw_balance)
+    except (TypeError, ValueError):
         return None
 
 
