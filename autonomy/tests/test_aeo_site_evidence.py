@@ -48,6 +48,7 @@ def test_funnel_pages_have_analytics_and_cta_tracking() -> None:
         "intake.html": "intake_aeo",
         "thanks.html": "thanks_aeo",
         "workflow-subscription.html": "workflow_subscription_aeo",
+        "service.html": "service_aeo",
     }
 
     for file_name, event_category in expected_event_categories.items():
@@ -70,6 +71,7 @@ def test_machine_readable_assets_cover_aeo_core_pages() -> None:
         "https://callcatcherops.com/callcatcherops/",
         "https://callcatcherops.com/callcatcherops/intake.html",
         "https://callcatcherops.com/callcatcherops/workflow-subscription.html",
+        "https://callcatcherops.com/callcatcherops/service.html",
         "https://callcatcherops.com/callcatcherops/aeo-faq.html",
     ]
 
@@ -83,6 +85,22 @@ def test_machine_readable_assets_cover_aeo_core_pages() -> None:
 def test_offer_pages_explicitly_reject_guarantee_language() -> None:
     index_html = _read(AEO / "index.html")
     plan_html = _read(AEO / "workflow-subscription.html")
+    service_html = _read(AEO / "service.html")
 
     assert "No. We do not guarantee" in index_html
     assert "No ranking or revenue guarantees" in plan_html
+    assert "No ranking or revenue guarantees" in service_html
+
+
+def test_service_page_has_structured_offer_catalog_and_sla_terms() -> None:
+    html = _read(AEO / "service.html")
+    jsonld = _extract_jsonld(html)
+    schema_types = {block.get("@type") for block in jsonld}
+
+    assert "Service" in schema_types
+    service_block = next(block for block in jsonld if block.get("@type") == "Service")
+    offers = service_block.get("offers", {})
+
+    assert offers.get("@type") == "OfferCatalog"
+    assert "itemListElement" in offers
+    assert "Kickoff timeline: 5 to 7 business days post-intake" in html

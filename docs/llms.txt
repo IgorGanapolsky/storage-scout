@@ -10,6 +10,7 @@
 - https://callcatcherops.com/callcatcherops/intake.html
 - https://callcatcherops.com/callcatcherops/thanks.html
 - https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- https://callcatcherops.com/callcatcherops/service.html
 - https://callcatcherops.com/callcatcherops/aeo-faq.html
 - https://callcatcherops.com/unsubscribe.html
 
@@ -38,6 +39,7 @@ CallCatcher Ops provides autonomous AEO execution for small and local businesses
 - Onboarding: https://callcatcherops.com/callcatcherops/intake.html
 - Setup sprint: https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
 - Plan details: https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- Service catalog: https://callcatcherops.com/callcatcherops/service.html
 
 ## Contact
 - hello@callcatcherops.com
