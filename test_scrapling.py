@@ -1,9 +1,10 @@
-from scrapling import StealthyFetcher
+import pytest
 
-def test():
+scrapling = pytest.importorskip("scrapling")
+StealthyFetcher = scrapling.StealthyFetcher
+
+
+def test_scrapling_fetch_example_domain() -> None:
     with StealthyFetcher() as fetcher:
         page = fetcher.get("https://example.com")
-        print("Success:", "Example Domain" in page.text)
-
-if __name__ == "__main__":
-    test()
+    assert "Example Domain" in page.text

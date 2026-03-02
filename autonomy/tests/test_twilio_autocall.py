@@ -7,6 +7,10 @@ from datetime import datetime as real_datetime
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
+pytest.importorskip("dotenv")
+
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools import live_job as live_job_mod
 from autonomy.tools.call_list import CallListRow
