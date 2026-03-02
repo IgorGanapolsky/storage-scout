@@ -25,7 +25,7 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 - `autonomy/context_store.py` - SQLite context store
 - `autonomy/providers.py` - lead + email providers
 - `autonomy/agents.py` - scoring + message generation
-- `autonomy/tools/lead_gen_broward.py` - Google Places lead generator (Broward County)
+- `autonomy/tools/lead_gen_broward.py` - Google Places lead generator (multi-market; Broward compatible)
 - `autonomy/tools/scoreboard.py` - local outreach scoreboard (no PII)
 - `autonomy/tools/opt_out.py` - record opt-outs into sqlite
 - `autonomy/tools/fastmail_inbox_sync.py` - mark bounces/replies from inbox signals (no PII output)
@@ -119,13 +119,23 @@ Install hourly watchdog scheduling (macOS launchd):
 python3 autonomy/tools/install_launchd_tollfree_watchdog.py
 ```
 
-## Lead Generation (Broward County)
-`autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places.
+## Lead Generation (Multi-Market)
+`autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places across a rotating market list.
 
 Example:
 ```bash
 export GOOGLE_PLACES_API_KEY=...
-python autonomy/tools/lead_gen_broward.py --limit 30
+python3 autonomy/tools/lead_gen_broward.py --limit 120 --markets autonomy/data/us_growth_markets.json --output autonomy/state/leads_callcatcherops_growth.csv
+```
+
+Daily growth run (lead generation only):
+```bash
+bash autonomy/tools/run_daily_leads.sh 120
+```
+
+Daily growth cycle (generate leads + run outreach engine):
+```bash
+bash autonomy/tools/run_growth_cycle.sh 120
 ```
 
 ## Scoreboard

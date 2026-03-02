@@ -15,9 +15,9 @@
     "outreach": {
       "agent_id": "agent.outreach.v1",
       "permissions": ["lead.read", "lead.write", "email.send"],
-      "daily_send_limit": 30,
+      "daily_send_limit": 120,
       "min_score": 60,
-      "target_services": ["med spa", "dentist"],
+      "target_services": ["med spa", "dentist", "plumber", "hvac", "storage facility", "auto repair", "family law"],
       "allowed_email_methods": ["direct"],
       "blocked_local_parts": ["info", "contact", "hello", "office", "support", "sales", "service", "team", "admin", "appointments", "booking", "inquiries"],
       "bounce_pause": { "enabled": true, "window_days": 7, "threshold": 0.05, "min_emailed": 10 },
@@ -25,7 +25,7 @@
         "enabled": true,
         "min_days_since_last_email": 2,
         "max_emails_per_lead": 5,
-        "daily_send_limit": 15
+        "daily_send_limit": 60
       }
     },
     "ai_writer": {
@@ -39,6 +39,11 @@
     }
   },
   "lead_sources": [
+    {
+      "type": "csv",
+      "path": "autonomy/state/leads_callcatcherops_growth.csv",
+      "source": "google_places_growth"
+    },
     {
       "type": "csv",
       "path": "autonomy/state/leads_callcatcherops_real.csv",
