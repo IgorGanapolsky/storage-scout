@@ -12,11 +12,10 @@ from random import SystemRandom
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 from dotenv import load_dotenv
 
 load_dotenv()
-
-from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 
 DEFAULT_CATEGORIES = [
     "med spa",

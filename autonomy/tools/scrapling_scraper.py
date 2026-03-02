@@ -13,20 +13,18 @@ Usage as library:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 import time
 from urllib.parse import urljoin
 
-from dotenv import load_dotenv
-load_dotenv()
-
-from scrapling import StealthyFetcher
 import openai
-
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
+from dotenv import load_dotenv
+from scrapling import StealthyFetcher
+
+load_dotenv()
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +66,7 @@ def extract_contact_name_llm(html: str) -> str:
                 if len(name) > 4 and " " in name:
                     return name
         return ""
-    
+
     # Simple truncation to avoid huge token costs
     text_content = re.sub(r'<[^>]+>', ' ', html)
     text_content = ' '.join(text_content.split())[:10000]
@@ -171,7 +169,7 @@ def enrich_lead(lead: dict) -> dict:
                 # Update notes to reflect scrape source.
                 notes = lead.get("notes", "")
                 notes = re.sub(r"email=\w+", "email=scrapling_scrape", notes)
-                if not "email=" in notes:
+                if "email=" not in notes:
                     notes += "; email=scrapling_scrape"
                 lead["notes"] = notes
 
