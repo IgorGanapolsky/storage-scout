@@ -1,46 +1,43 @@
 # CallCatcher Ops
 
-> Missed call recovery and appointment booking automation for local service businesses.
+> Done-for-you Answer Engine Optimization (AEO) for local businesses.
 
 ## Canonical
 - https://callcatcherops.com/callcatcherops/
 
 ## Key Pages
 - https://callcatcherops.com/callcatcherops/
-- https://callcatcherops.com/callcatcherops/assessment.html
-- https://callcatcherops.com/callcatcherops/dentist.html
 - https://callcatcherops.com/callcatcherops/intake.html
 - https://callcatcherops.com/callcatcherops/thanks.html
 - https://callcatcherops.com/callcatcherops/workflow-subscription.html
-- https://callcatcherops.com/callcatcherops/ai-crawl-monetization.html
-- https://callcatcherops.com/callcatcherops/baseline-example.pdf
+- https://callcatcherops.com/callcatcherops/aeo-faq.html
 - https://callcatcherops.com/unsubscribe.html
 
 ## Service Definition
-CallCatcher Ops helps service businesses recover missed inbound calls, follow up quickly with compliant SMS/callback workflows, and turn recovered leads into booked appointments.
+CallCatcher Ops provides autonomous AEO execution for small and local businesses. The service includes buyer-question content architecture, schema implementation, authority signal alignment, and recurring optimization for AI recommendation visibility.
 
 ## Ideal Customers
-- Home services companies
-- Med spas and clinics
-- Dental and health practices
-- Local franchises with call-driven lead flow
+- Local service businesses
+- Multi-location service operators
+- Teams that want outsourced AI visibility execution
+- Founders prioritizing execution over manual growth ops
 
 ## Outcomes
-- Fewer lost phone leads
-- Faster response time after missed calls
-- More booked appointments from existing demand
-- Clear attribution of recovered revenue
+- Increased AI-readable coverage for high-intent questions
+- Better citation eligibility in AI answer engines
+- Stronger consistency across authority signals and profiles
+- Weekly evidence of shipped work and iteration priorities
+
+## Operating Model
+- One onboarding form
+- Async approvals only when legally required
+- Weekly implementation cadence
+- Transparent reporting cadence
 
 ## CTAs
-- Free baseline call: https://calendly.com/igorganapolsky/audit-call
-- Priority kickoff ($249): https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
-- AI workflow subscription ($197/mo): https://callcatcherops.com/callcatcherops/workflow-subscription.html
-- AI crawl monetization offer: https://callcatcherops.com/callcatcherops/ai-crawl-monetization.html
-- AI crawl monetization assessment: https://callcatcherops.com/callcatcherops/assessment.html
-
-## Pricing Docs
-- https://github.com/IgorGanapolsky/storage-scout/blob/main/business/callcatcherops/pricing.md
-- https://github.com/IgorGanapolsky/storage-scout/blob/main/business/callcatcherops/system.md
+- Onboarding: https://callcatcherops.com/callcatcherops/intake.html
+- Setup sprint: https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
+- Plan details: https://callcatcherops.com/callcatcherops/workflow-subscription.html
 
 ## Contact
 - hello@callcatcherops.com
