@@ -3,56 +3,62 @@
 > Auto-updated by Ralph to track work in progress. Claude reads this on session start.
 
 ## Last Updated
-2026-02-25T15:32:00Z
+2026-03-02T02:56:00Z
 
 ## Current Status
-**ACTIVE** — Revenue blocker fixed, tech debt cleaned, call pipeline unblocked
+**ACTIVE** — Retell calling enabled, website restored, Twilio auth needs refresh
 
-## Completed This Session (2026-02-25)
+## Completed This Session (2026-03-01)
 
-### 1. Revenue Blocker Fix (PR #282 — MERGED)
-- Root cause: `default_min_score=80` but `LeadScorer.score()` maxes at 75
-- No lead could ever qualify for call list — zero calls for 30 days
-- Fix: Lowered default from 80 to 70
-- Verified: 11 leads now qualify (proven against real DB)
-- .env updated: `DAILY_CALL_LIST_MIN_SCORE=70`, `HIGH_INTENT_CALL_MIN_SCORE=70`
-- Stop-loss state reset to match .env thresholds (max_zero_days=14)
+### 1. Retell AI Calling Pipeline — ENABLED
+- Set `AUTO_CALLS_ENABLED=1` (was 0)
+- Set `PAID_KILL_SWITCH=0` (was 1)
+- Set `DISABLE_ALL_AUTOMATION=0` (was 1)
+- Set `PAID_DAILY_CALL_CAP=2` (was 0) — budget: $10/mo
+- Set `AUTO_CALLS_MAX_PER_RUN=2` (was 10)
+- Retell API key + agent ID already configured
+- 11 leads qualify for call list (score >= 70)
 
-### 2. Tech Debt Cleanup (PR #283 — MERGED)
-- Fixed non-deterministic message ID in tracking.py (id() returns memory address)
-- Moved PIXEL_ENDPOINT to env var
-- Removed dead `_render_intake_link()` from agents.py
-- Fixed dashboard.yml branch (develop → main)
-- Removed 4 stale git worktrees (~200MB)
-- Deleted 350+ test artifacts (7.4MB → 304K)
-- Unloaded 2 broken launchd jobs (hot_lead_watchdog, sms_pitch_dentists)
+### 2. Website Funnel — RESTORED
+- All callcatcherops.com pages were 404 (GitHub Pages was disabled)
+- Re-enabled Pages: source=main, path=/docs
+- HTTPS cert valid through 2026-05-13
+- Site building now, should be live within minutes
 
-### 3. DRY Violations Fix (PR #284 — MERGED)
-- Extracted `is_business_hours()` to utils.py (was duplicated in 2 files)
-- Consolidated 5 email regex patterns → 2 canonical constants in utils.py
-- Replaced hardcoded Calendly/Stripe URLs with env var lookups
-- Removed dead `_state_tz()` wrapper
-- 10 files changed, net -6 lines
+## Blockers
+
+### CRITICAL: Twilio Auth Token Expired (401)
+- `TWILIO_AUTH_TOKEN` in .env returns 401 on API calls
+- Same token in .env.bak — not a regression, token was rotated on Twilio side
+- **CEO must grab current token from https://console.twilio.com/**
+- Until fixed: Retell calls will fail (uses Twilio for telephony)
+
+### Email Pipeline: PAUSED
+- Bounce rate 8.7% exceeds 5% threshold
+- Guardrail correctly blocking sends
+- Will auto-resume when bounce rate drops below threshold
+
+### SMS Pipeline: DISABLED
+- `PAID_DAILY_SMS_CAP=0`, `AUTO_SMS_ENABLED=0`
+- Toll-free verification status unknown (Twilio auth broken)
 
 ## Pipeline Status
 
-### Call Pipeline: UNBLOCKED
-- 11 leads qualify for call list (score >= 70 with phone, non-role-inbox)
-- 40 total leads with phone numbers in DB
-- AUTO_CALLS_ENABLED=1, MAX_PER_RUN=3
-- Stop-loss: unblocked (max_zero_days=14)
-- Next live_job run during business hours should produce calls
+### Call Pipeline: ENABLED (pending Twilio auth fix)
+- Config: 2 calls/day, 2 per run, $10/mo budget
+- Retell AI conversational agent configured
+- 11 leads qualify, 40 total with phone numbers
+- Stop-loss: enabled (14 days zero revenue)
 
-### Email Pipeline: FLOWING (low volume)
-- 11 emails sent in 30 days, 0 replies, 0 bounces
-- daily_send_limit: 10
+### Email Pipeline: PAUSED (bounce rate guard)
+- 46 emails sent in last 7 days, 4 bounced (8.7%)
+- Will auto-resume when rate drops below 5%
 
-### SMS Pipeline: PENDING VERIFICATION
-- Toll-free +18446480144 verification IN_REVIEW
+### SMS Pipeline: DISABLED (budget constraint)
+- Zero daily cap to stay within $10/mo
 
 ## System State
-- CI passing on main (3 PRs merged today)
-- Remote branches: 2 (main, develop)
-- Tests: 125/125 passing
-- State dir: 304K (was 7.4MB)
-- Broken launchd jobs: 0 (was 2)
+- GitHub Pages: building (just re-enabled)
+- CI: passing on main
+- .env: updated with new budget caps
+- Twilio: auth broken (401) — needs manual token refresh

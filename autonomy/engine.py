@@ -104,6 +104,7 @@ class Engine:
                 leads = LeadSourceCSV(path=src["path"], source=src["source"]).load()
                 for lead in leads:
                     lead.score = self.scorer.score(lead)
+                    print(f"DEBUG: Ingested lead {lead.email} - Score: {lead.score}")
                     self.store.upsert_lead(lead)
 
     def _build_outreach_policy(self, outreach_cfg: dict) -> OutreachPolicy:
@@ -204,17 +205,22 @@ class Engine:
 
         sent = 0
         # Fetch extra rows because policy filters can discard many leads (e.g. role inboxes).
-        for row in self.store.get_unsent_leads(
+        unsent = list(self.store.get_unsent_leads(
             min_score=min_score,
             limit=max(limit * 6, 50),
             email_methods=policy.email_methods_filter,
-        ):
+        ))
+        print(f"DEBUG: Found {len(unsent)} unsent leads above min_score {min_score}")
+        for row in unsent:
             lead = Lead(**row)
             if self.store.is_opted_out(lead.email):
+                print(f"DEBUG: Lead {lead.email} opted out")
                 continue
             if not self._lead_passes_outreach_policy(lead, policy):
+                print(f"DEBUG: Lead {lead.email} failed outreach policy (local part: {email_local_part(lead.email)})")
                 continue
 
+            print(f"DEBUG: Sending to {lead.email}...")
             trace_id = str(uuid.uuid4())
             msg = self.writer.render(lead)
             mid = generate_message_id(lead.id, 1)
