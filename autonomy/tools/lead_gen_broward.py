@@ -12,6 +12,10 @@ from random import SystemRandom
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 
 DEFAULT_CATEGORIES = [
@@ -552,10 +556,9 @@ def main() -> None:
     if not leads:
         raise SystemExit("No new leads generated. Try different categories or rerun later.")
 
-    # Enrich leads with Anchor Browser (fills missing names + upgrades guessed emails).
-    # Gracefully skips if ANCHOR_API_KEY is not set.
+    # Enrich leads with Scrapling (fills missing names + upgrades guessed emails).
     try:
-        from autonomy.tools.anchor_scraper import enrich_leads_batch, is_available
+        from autonomy.tools.scrapling_scraper import enrich_leads_batch, is_available
 
         if is_available():
             needs_enrichment = [
@@ -564,10 +567,10 @@ def main() -> None:
                 or "email=guess" in (row.get("notes") or "")
             ]
             if needs_enrichment:
-                print(f"Enriching {len(needs_enrichment)} leads via Anchor Browser...")
+                print(f"Enriching {len(needs_enrichment)} leads via Scrapling...")
                 enrich_leads_batch(needs_enrichment)
                 enriched = sum(1 for row in needs_enrichment if (row.get("name") or "").strip())
-                print(f"Anchor Browser: {enriched}/{len(needs_enrichment)} leads enriched with names")
+                print(f"Scrapling: {enriched}/{len(needs_enrichment)} leads enriched with names")
     except ImportError:
         # Anchor Browser integration is optional; skip enrichment if missing
         pass
