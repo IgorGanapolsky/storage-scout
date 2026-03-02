@@ -7,10 +7,12 @@
 
 ## Key Pages
 - https://callcatcherops.com/callcatcherops/
+- https://callcatcherops.com/callcatcherops/assessment.html
 - https://callcatcherops.com/callcatcherops/dentist.html
 - https://callcatcherops.com/callcatcherops/intake.html
 - https://callcatcherops.com/callcatcherops/thanks.html
 - https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- https://callcatcherops.com/callcatcherops/ai-crawl-monetization.html
 - https://callcatcherops.com/callcatcherops/baseline-example.pdf
 - https://callcatcherops.com/unsubscribe.html
 
@@ -32,7 +34,9 @@ CallCatcher Ops helps service businesses recover missed inbound calls, follow up
 ## CTAs
 - Free baseline call: https://calendly.com/igorganapolsky/audit-call
 - Priority kickoff ($249): https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
-- AI workflow subscription ($497/mo): https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- AI workflow subscription ($197/mo): https://callcatcherops.com/callcatcherops/workflow-subscription.html
+- AI crawl monetization offer: https://callcatcherops.com/callcatcherops/ai-crawl-monetization.html
+- AI crawl monetization assessment: https://callcatcherops.com/callcatcherops/assessment.html
 
 ## Pricing Docs
 - https://github.com/IgorGanapolsky/storage-scout/blob/main/business/callcatcherops/pricing.md

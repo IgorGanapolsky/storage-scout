@@ -31,6 +31,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://callcatcherops.com/callcatcherops/assessment.html</loc>
+    <lastmod>2026-03-02</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://callcatcherops.com/callcatcherops/ai-crawl-monetization.html</loc>
+    <lastmod>2026-03-02</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://callcatcherops.com/callcatcherops/baseline-example.html</loc>
     <lastmod>2026-02-15</lastmod>
     <changefreq>monthly</changefreq>
@@ -44,7 +56,7 @@
   </url>
   <url>
     <loc>https://callcatcherops.com/llms.txt</loc>
-    <lastmod>2026-02-13</lastmod>
+    <lastmod>2026-03-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
