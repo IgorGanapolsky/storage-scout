@@ -21,6 +21,7 @@ node_modules/
 .claude/memory/
 .claude/ralph/
 .claude/tmp/
+.claude/artifacts/
 
 # Autonomy runtime state
 autonomy/state/
