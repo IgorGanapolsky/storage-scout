@@ -1,12 +1,12 @@
 # CallCatcher Ops
 
-Missed-call recovery for local service businesses: missed-call text-back, rapid callbacks, booking automation, and attribution.
+Managed Answer Engine Optimization (AEO) service for local businesses: AI-readable content, schema operations, authority signal alignment, and weekly evidence reporting.
 
-CallCatcher Ops helps businesses stop losing inbound phone leads by combining:
-- missed-call SMS follow-up (text-back),
-- rapid callback workflows,
-- booking-ready intake and routing,
-- attribution reporting tied to booked jobs.
+CallCatcher Ops helps businesses get recommended in AI answer channels by combining:
+- buyer-question answer architecture,
+- FAQ/service schema maintenance,
+- authority and citation consistency operations,
+- attribution reporting tied to qualified leads and booked calls.
 
 ## Live URLs
 - Website: `https://callcatcherops.com/callcatcherops/`
@@ -28,25 +28,24 @@ Not included:
 - legacy side experiments and unrelated products
 
 ## Core Offer
-- Free Baseline: review your current call flow + missed-call leakage estimate
-- Priority Kickoff ($249): reserve an implementation slot (credited toward build)
-- QuickStart Build: implement missed-call recovery and booking automation
-- AI Workflow Subscription ($197/mo): monitor, optimize, and report conversion impact
+- Setup Sprint ($249 one-time): initial AEO architecture and baseline deployment
+- AEO Autopilot ($497/mo): weekly content/schema/authority operations with evidence reporting
+- Multi-Location Program (custom): roll out per-location answer systems and reporting
 - AI Crawl Monetization (from $500): map, build, and optimize AI-referred traffic into booked calls/forms
 
 See: `business/callcatcherops/pricing.md`
 
 ## Ideal Customer Profile
-- Local service businesses that rely on inbound calls
-- Typical verticals: med spas, dental, clinics, home services, local franchises
-- Typical pain: missed calls during peak hours or after-hours
-- Goal: recover lead flow and increase booked jobs from existing demand
+- Local service businesses with clear purchase-intent demand
+- Typical verticals: med spas, dental, clinics, home services, storage, local franchises
+- Typical pain: poor visibility in AI answer channels and inconsistent authority signals
+- Goal: increase qualified pipeline from AI-assisted buyer discovery
 
 ## How Revenue Is Created
-1. A missed call occurs.
-2. Automation initiates compliant follow-up and callback routing.
-3. Lead is converted to booked appointment.
-4. Booked outcomes and conversion metrics are tracked for optimization.
+1. Buyer asks high-intent questions in AI/search channels.
+2. Structured answer assets and authority signals increase recommendation eligibility.
+3. Prospect lands on intake/service pages and enters pipeline.
+4. Booked outcomes and conversion metrics are tracked for weekly iteration.
 
 ## Observability (How We Know It's Working)
 Signal we track (no PII in reports):
@@ -57,6 +56,11 @@ Operationally:
 - live outreach DB: `autonomy/state/autonomy_live.sqlite3` (gitignored)
 - scoreboard tool: `autonomy/tools/scoreboard.py`
 - daily automation: `autonomy/tools/live_job.py` (inbox sync + outreach + daily report via email or ntfy)
+
+Max-reach acquisition loop:
+- lead generation at scale: `autonomy/tools/run_daily_leads.sh`
+- end-to-end growth cycle: `autonomy/tools/run_growth_cycle.sh`
+- market list: `autonomy/data/us_growth_markets.json`
 
 Daily report delivery (set in local `.env`):
 - `REPORT_DELIVERY=email|ntfy|both|none` (default: `email`)
@@ -119,4 +123,4 @@ missed call text back, call answering automation, missed call recovery, inbound 
 
 ## Current Status
 - Stage: active build and go-to-market execution
-- Objective: first paid CallCatcher client and retained monthly revenue
+- Objective: maximize qualified business reach and grow retained monthly service revenue

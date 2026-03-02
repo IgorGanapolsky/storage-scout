@@ -1,68 +1,82 @@
-# Outreach Scripts
+# Outreach Scripts (Managed AEO Service)
 
-**Cold Email 1 (Initial)**
-Subject: Quick fix for missed calls at {{BusinessName}}
+## Positioning
+- Offer: done-for-you Answer Engine Optimization (AEO) implementation service.
+- Promise: one onboarding handoff, then we execute weekly.
+- No promise: ranking/revenue guarantees.
+
+## Cold Email 1 (Initial)
+Subject: Can we run AEO execution for {{BusinessName}}?
 
 Hi {{FirstName}},
 
-Noticed {{BusinessName}} takes calls from new customers. Most local teams miss 20–35% of inbound calls after hours or during rushes. We install missed-call text-back + call-back automations that recover those leads in under a week.
+I reviewed {{BusinessName}} and found clear buyer-intent questions you could own in AI answers (ChatGPT/Perplexity/Copilot).
 
-Want a free 10‑minute baseline showing how many leads you’re losing and what recovery would look like?
+We run this as a managed service: question-answer pages, schema updates, authority consistency fixes, and weekly evidence reporting.
 
-Example baseline (1 page): https://callcatcherops.com/callcatcherops/baseline-example.pdf
-Book a free baseline call: https://calendly.com/igorganapolsky/audit-call
+If useful, start here and we begin the setup sprint:
+https://callcatcherops.com/callcatcherops/intake.html
+
+Service scope:
+https://callcatcherops.com/callcatcherops/service.html
 
 — {{SenderName}}
 CallCatcher Ops
 hello@callcatcherops.com
 
-**Cold Email 2 (Follow‑up, Day 3)**
-Subject: Example recovery numbers for {{BusinessName}}
+## Cold Email 2 (Follow-up, Day 3)
+Subject: AEO setup for {{BusinessName}} in 5–7 business days
 
 Hi {{FirstName}},
 
-Quick follow-up. If you average {{CallVolume}} inbound calls/day, recovering even 3–5 missed calls/week typically covers the monthly fee. I can run the baseline and send the results.
+Quick follow-up: we can launch {{BusinessName}} with a managed AEO setup sprint and then run weekly execution with no manual ops load on your team.
 
-Example baseline (1 page): https://callcatcherops.com/callcatcherops/baseline-example.pdf
-Book a free baseline call: https://calendly.com/igorganapolsky/audit-call
+Onboarding:
+https://callcatcherops.com/callcatcherops/intake.html
+
+Catalog + terms:
+https://callcatcherops.com/callcatcherops/service.html
 
 — {{SenderName}}
 
-**Cold Email 3 (Day 7)**
-Subject: Close the loop
+## Cold Email 3 (Day 7)
+Subject: Should I close this out?
 
 Hi {{FirstName}},
 
-If missed calls aren’t a priority right now, no worries. If you want the baseline later, reply “baseline” and I’ll send it over.
+If outsourced AEO execution is not a priority this month, I can close this thread.
 
-Example baseline (1 page): https://callcatcherops.com/callcatcherops/baseline-example.pdf
-Book a free baseline call: https://calendly.com/igorganapolsky/audit-call
+If you want us to run it, submit onboarding and we take it from there:
+https://callcatcherops.com/callcatcherops/intake.html
 
 — {{SenderName}}
 
-**LinkedIn DM (Short)**
-Hey {{FirstName}} — we help local service teams recover missed calls with SMS call-back and booking automation. Want a quick baseline for {{BusinessName}}?
+## LinkedIn DM (Short)
+Hey {{FirstName}} — we run done-for-you AEO for local businesses (Q/A content, schema, authority ops, weekly reporting). Want us to run it for {{BusinessName}}?
 
-**Voicemail Script**
-“Hey {{FirstName}}, this is {{SenderName}} with CallCatcher Ops. We help local service businesses recover missed calls with SMS call-back and booking automation. If you want a quick baseline for {{BusinessName}}, text or call me back at {{Phone}}. Again, {{Phone}}. Thanks.”
+## Voicemail Script
+“Hey {{FirstName}}, this is {{SenderName}} with CallCatcher Ops. We run done-for-you AEO execution so businesses show up in AI recommendations. If you want us to run this for {{BusinessName}}, go to callcatcherops.com slash callcatcherops slash intake. Again, callcatcherops dot com slash callcatcherops slash intake.”
 
-**Post-Voicemail Email (Same Day)**
-Subject: Just tried calling — missed calls at {{BusinessName}}
+## Post-Voicemail Email (Same Day)
+Subject: Just called — managed AEO for {{BusinessName}}
 
 Hi {{FirstName}},
 
-Just tried you by phone. I’m with CallCatcher Ops. I can run a free 1-page missed-call baseline for {{BusinessName}} and show what recovery would look like.
+Just tried you by phone. We run managed AEO execution end-to-end for local businesses.
 
-Example baseline (1 page): https://callcatcherops.com/callcatcherops/baseline-example.pdf
-Book a free baseline call: https://calendly.com/igorganapolsky/audit-call
+Onboarding:
+https://callcatcherops.com/callcatcherops/intake.html
+
+Service catalog:
+https://callcatcherops.com/callcatcherops/service.html
 
 — {{SenderName}}
 
-**SMS (If Opt‑in)**
-Hi {{FirstName}} — this is {{SenderName}} from CallCatcher Ops. Want a 10‑minute missed‑call recovery baseline for {{BusinessName}}?
+## SMS (If Opt-in)
+Hi {{FirstName}} — {{SenderName}} from CallCatcher Ops. We run done-for-you AEO execution for local businesses. Want us to set up {{BusinessName}}? https://callcatcherops.com/callcatcherops/intake.html
 
-**Follow‑up Cadence**
-- Day 1: Email 1 + call (if phone is available)
+## Follow-up Cadence
+- Day 1: Email 1 + call (if phone available)
 - Day 2: Call + voicemail + post-voicemail email
 - Day 4: Email 2
 - Day 7: Email 3

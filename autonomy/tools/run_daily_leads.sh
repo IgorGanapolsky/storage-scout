@@ -19,6 +19,17 @@ if [[ -z "${GOOGLE_PLACES_API_KEY:-}" ]]; then
   exit 1
 fi
 
-LIMIT="${1:-30}"
-CATEGORIES="${LEADGEN_CATEGORIES:-med spa,plumber,dentist,hvac,roofing,electrician,chiropractor,urgent care,pest control}"
-python3 "$ROOT/autonomy/tools/lead_gen_broward.py" --limit "$LIMIT" --categories "$CATEGORIES" --output "$ROOT/autonomy/state/leads_callcatcherops_real.csv"
+LIMIT="${1:-120}"
+CATEGORIES="${LEADGEN_CATEGORIES:-med spa,plumber,dentist,hvac,roofing,electrician,chiropractor,urgent care,pest control,storage facility,auto repair,physical therapy,veterinary clinic,family law}"
+MARKET_FILE="${LEADGEN_MARKET_FILE:-$ROOT/autonomy/data/us_growth_markets.json}"
+DEFAULT_STATE="${LEADGEN_DEFAULT_STATE:-FL}"
+CURSOR_KEY="${LEADGEN_CURSOR_KEY:-us_growth_markets}"
+OUTPUT_PATH="${LEADGEN_OUTPUT_PATH:-$ROOT/autonomy/state/leads_callcatcherops_growth.csv}"
+
+python3 "$ROOT/autonomy/tools/lead_gen_broward.py" \
+  --limit "$LIMIT" \
+  --categories "$CATEGORIES" \
+  --markets "$MARKET_FILE" \
+  --state "$DEFAULT_STATE" \
+  --cursor-key "$CURSOR_KEY" \
+  --output "$OUTPUT_PATH"
