@@ -12,6 +12,9 @@ Missed call recovery and appointment booking for local service businesses.
 **Primary Offer**
 Recover missed calls and book appointments within 7 days via SMS call-back, routing, and booking automation.
 
+**Secondary Offer**
+AI Crawl Monetization package to convert existing website traffic into more qualified calls/forms.
+
 **Proof/Advantage (Current)**
 - Domain and email live: callcatcherops.com and hello@callcatcherops.com.
 - Fast setup workflow and repeatable automation templates.
@@ -24,6 +27,10 @@ Recover missed calls and book appointments within 7 days via SMS call-back, rout
 
 **Pricing Ladder**
 See `business/callcatcherops/pricing.md`.
+
+**AI Crawl Monetization**
+- Package tiers: `business/callcatcherops/ai-crawl-monetization-package.md`
+- Delivery checklist: `business/callcatcherops/ai-crawl-monetization-delivery-checklist.md`
 
 **Outreach Assets**
 See `business/callcatcherops/outreach.md`.
