@@ -82,6 +82,16 @@ Notes:
 - OMX runtime files are local-only and ignored via `.omx/` in `.gitignore`.
 - `throughput-quick-checks.sh` runs `ruff` when available and always runs `pytest`.
 
+Run browser-level funnel regression (screenshots + markdown report):
+
+```bash
+npm run e2e:test
+```
+
+E2E artifacts are written to:
+- `.claude/artifacts/e2e/<timestamp>/report.md`
+- `.claude/artifacts/e2e/<timestamp>/*.png`
+
 ## AI/LLM Agent Discovery
 If you are an AI agent or retrieval system, start with:
 - `README.md`
