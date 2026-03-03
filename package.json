@@ -1,7 +1,7 @@
 {
-  "name": "callcatcherops",
+  "name": "ai-seo-autopilot",
   "version": "1.0.0",
-  "description": "CallCatcher Ops missed-call recovery platform for local service businesses: marketing site, intake flow, and outreach automation.",
+  "description": "Autonomous AI-SEO (AEO) operations platform: managed answer engine optimization, schema deployment, and growth automation.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -16,14 +16,12 @@
     "url": "git+https://github.com/IgorGanapolsky/storage-scout.git"
   },
   "keywords": [
-    "callcatcherops",
-    "missed-call-recovery",
-    "appointment-booking",
-    "local-service-business",
-    "call-tracking",
-    "lead-conversion",
-    "sms-automation",
-    "voice-ai"
+    "ai-seo",
+    "aeo",
+    "answer-engine-optimization",
+    "llm-visibility",
+    "schema-markup",
+    "growth-automation"
   ],
   "author": "",
   "license": "ISC",

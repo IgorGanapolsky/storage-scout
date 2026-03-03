@@ -37,7 +37,7 @@ def test_watchdog_returns_missing_env_when_twilio_not_configured() -> None:
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env={},
-        company_name="CallCatcher Ops",
+        company_name="AEO Autopilot",
         state_path=state_path,
     )
     assert result.reason == "missing_twilio_env"
@@ -73,7 +73,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
                             "status": "TWILIO_REJECTED",
                             "error_code": 30485,
                             "rejection_reason": "Entity Misclassification",
-                            "business_name": "CallCatcher Ops",
+                            "business_name": "AEO Autopilot",
                             "doing_business_as": "",
                             "business_type": "SOLE_PROPRIETOR",
                             "edit_allowed": True,
@@ -94,7 +94,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
                     "error_code": None,
                     "rejection_reason": None,
                     "business_name": "Igor Ganapolsky",
-                    "doing_business_as": "CallCatcher Ops",
+                    "doing_business_as": "AEO Autopilot",
                     "business_type": "SOLE_PROPRIETOR",
                     "edit_allowed": None,
                     "date_updated": fresh_review_ts,
@@ -112,13 +112,13 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
         "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "1",
         "TWILIO_TOLLFREE_AUTOFIX_ENABLED": "1",
         "TWILIO_BUSINESS_LEGAL_NAME": "Igor Ganapolsky",
-        "TWILIO_BUSINESS_DBA_NAME": "CallCatcher Ops",
+        "TWILIO_BUSINESS_DBA_NAME": "AEO Autopilot",
     }
     result = run_twilio_tollfree_watchdog(
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env=env,
-        company_name="CallCatcher Ops",
+        company_name="AEO Autopilot",
         state_path=state_path,
     )
     assert result.reason == "auto_fix_applied"
@@ -129,7 +129,7 @@ def test_watchdog_auto_fixes_30485_and_moves_to_review(monkeypatch) -> None:
     assert result.should_alert is False
     assert posted, "Expected remediation POST call"
     assert posted[0]["BusinessName"] == "Igor Ganapolsky"
-    assert posted[0]["DoingBusinessAs"] == "CallCatcher Ops"
+    assert posted[0]["DoingBusinessAs"] == "AEO Autopilot"
 
 
 def test_watchdog_alerts_when_in_review_is_stale(monkeypatch) -> None:
@@ -157,7 +157,7 @@ def test_watchdog_alerts_when_in_review_is_stale(monkeypatch) -> None:
                             "sid": "HH123",
                             "status": "IN_REVIEW",
                             "business_name": "Igor Ganapolsky",
-                            "doing_business_as": "CallCatcher Ops",
+                            "doing_business_as": "AEO Autopilot",
                             "business_type": "SOLE_PROPRIETOR",
                             "date_updated": "2026-02-20T00:00:00Z",
                             "url": "https://messaging.twilio.com/v1/Tollfree/Verifications/HH123",
@@ -179,7 +179,7 @@ def test_watchdog_alerts_when_in_review_is_stale(monkeypatch) -> None:
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env=env,
-        company_name="CallCatcher Ops",
+        company_name="AEO Autopilot",
         state_path=state_path,
     )
     assert result.status == "IN_REVIEW"
@@ -218,7 +218,7 @@ def test_watchdog_alerts_on_transition_to_approved(monkeypatch, tmp_path: Path) 
                             "error_code": None,
                             "rejection_reason": None,
                             "business_name": "Igor Ganapolsky",
-                            "doing_business_as": "CallCatcher Ops",
+                            "doing_business_as": "AEO Autopilot",
                             "business_type": "SOLE_PROPRIETOR",
                             "edit_allowed": None,
                             "date_updated": "2026-02-24T20:15:32Z",
@@ -242,7 +242,7 @@ def test_watchdog_alerts_on_transition_to_approved(monkeypatch, tmp_path: Path) 
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env=env,
-        company_name="CallCatcher Ops",
+        company_name="AEO Autopilot",
         state_path=state_path,
     )
     assert result.status == "TWILIO_APPROVED"
@@ -283,7 +283,7 @@ def test_watchdog_suppresses_duplicate_stale_alert_within_cooldown(monkeypatch, 
                             "sid": "HH123",
                             "status": "IN_REVIEW",
                             "business_name": "Igor Ganapolsky",
-                            "doing_business_as": "CallCatcher Ops",
+                            "doing_business_as": "AEO Autopilot",
                             "business_type": "SOLE_PROPRIETOR",
                             "date_updated": stale_dt,
                             "url": "https://messaging.twilio.com/v1/Tollfree/Verifications/HH123",
@@ -306,7 +306,7 @@ def test_watchdog_suppresses_duplicate_stale_alert_within_cooldown(monkeypatch, 
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         env=env,
-        company_name="CallCatcher Ops",
+        company_name="AEO Autopilot",
         state_path=state_path,
     )
     assert result.status == "IN_REVIEW"

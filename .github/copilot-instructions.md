@@ -1,14 +1,14 @@
-# GitHub Copilot Instructions for CallCatcher Ops
+# GitHub Copilot Instructions for AEO Autopilot
 
-This repository is focused on one business: CallCatcher Ops.
+This repository is focused on one business: AEO Autopilot.
 
 ## Product Context
-- Offer: missed-call recovery + appointment booking automation for local service businesses
+- Offer: autonomous AI-SEO execution for local service businesses
 - Revenue path: landing page -> intake -> audit/build -> managed growth
 - Primary code areas:
-  - `docs/callcatcherops/` (public website + intake)
+  - `docs/ai-seo/` (public website + intake)
   - `autonomy/` (outreach engine, dry-run default)
-  - `business/callcatcherops/` (offers, pricing, scripts)
+  - `business/ai-seo/` (offers, pricing, scripts)
 
 ## Non-Negotiable Rules
 - Never add or commit secrets, API keys, tokens, or PII.

@@ -7,13 +7,13 @@ from autonomy.tools.funnel_watchdog import _derive_urls, _extract_ctas_from_html
 
 def test_funnel_watchdog_derive_urls_from_intake_and_unsubscribe_template() -> None:
     urls = _derive_urls(
-        intake_url="https://callcatcherops.com/callcatcherops/intake.html",
-        unsubscribe_url_template="https://callcatcherops.com/unsubscribe.html?email={{email}}",
+        intake_url="https://aiseoautopilot.com/ai-seo/intake.html",
+        unsubscribe_url_template="https://aiseoautopilot.com/unsubscribe.html?email={{email}}",
     )
-    assert urls["landing"] == "https://callcatcherops.com/callcatcherops/"
-    assert urls["intake"] == "https://callcatcherops.com/callcatcherops/intake.html"
-    assert urls["thanks"] == "https://callcatcherops.com/callcatcherops/thanks.html"
-    assert urls["unsubscribe"] == "https://callcatcherops.com/unsubscribe.html"
+    assert urls["landing"] == "https://aiseoautopilot.com/ai-seo/"
+    assert urls["intake"] == "https://aiseoautopilot.com/ai-seo/intake.html"
+    assert urls["thanks"] == "https://aiseoautopilot.com/ai-seo/thanks.html"
+    assert urls["unsubscribe"] == "https://aiseoautopilot.com/unsubscribe.html"
 
 
 def test_funnel_watchdog_extracts_calendly_and_stripe_links() -> None:
@@ -30,14 +30,14 @@ def test_funnel_watchdog_flags_missing_stripe_cta(monkeypatch, tmp_path: Path) -
     intake_html = '<a href="https://calendly.com/igorganapolsky/audit-call">Book</a>'
 
     def fake_http_get(url: str, *, timeout: int = 14, max_bytes: int = 320_000) -> tuple[int, str]:
-        if url == "https://callcatcherops.com/callcatcherops/":
-            return 200, "<html>callcatcher landing</html>"
-        if url == "https://callcatcherops.com/callcatcherops/intake.html":
+        if url == "https://aiseoautopilot.com/ai-seo/":
+            return 200, "<html>AEO Autopilot landing</html>"
+        if url == "https://aiseoautopilot.com/ai-seo/intake.html":
             return 200, intake_html
-        if url == "https://callcatcherops.com/callcatcherops/thanks.html":
-            return 200, "<html>callcatcher thanks</html>"
-        if url == "https://callcatcherops.com/unsubscribe.html":
-            return 200, "<html>callcatcher unsubscribe</html>"
+        if url == "https://aiseoautopilot.com/ai-seo/thanks.html":
+            return 200, "<html>AEO Autopilot thanks</html>"
+        if url == "https://aiseoautopilot.com/unsubscribe.html":
+            return 200, "<html>AEO Autopilot unsubscribe</html>"
         if url == "https://calendly.com/igorganapolsky/audit-call":
             return 200, "<html>schedule</html>"
         return 404, ""
@@ -47,8 +47,8 @@ def test_funnel_watchdog_flags_missing_stripe_cta(monkeypatch, tmp_path: Path) -
 
     result = run_funnel_watchdog(
         repo_root=tmp_path,
-        intake_url="https://callcatcherops.com/callcatcherops/intake.html",
-        unsubscribe_url_template="https://callcatcherops.com/unsubscribe.html?email={{email}}",
+        intake_url="https://aiseoautopilot.com/ai-seo/intake.html",
+        unsubscribe_url_template="https://aiseoautopilot.com/unsubscribe.html?email={{email}}",
     )
 
     issue_names = {issue.name for issue in result.issues}

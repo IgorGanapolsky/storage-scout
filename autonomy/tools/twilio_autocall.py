@@ -61,11 +61,11 @@ def _default_twiml() -> str:
     # Short, natural voicemail — no "automated call" language, clear CTA.
     msg = (
         "Hey there, this is a quick message for the office manager. "
-        "My name is Igor with CallCatcher. "
-        "We work with local practices that are missing calls after hours or during busy times. "
-        "I'd love to send over a free one page report showing how many calls your office might be missing each week. "
+        "My name is Igor with AEO Autopilot. "
+        "We work with local practices that want stronger AI search visibility and better booking conversion. "
+        "I'd love to send over a free one page report showing where your visibility and conversion path can improve. "
         "If you're interested, just text the word yes back to this number, "
-        "or visit callcatcherops dot com. "
+        "or visit aiseoautopilot dot com. "
         "Thanks so much, have a great day."
     )
     return f'<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Matthew">{msg}</Say></Response>'

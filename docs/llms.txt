@@ -1,45 +1,17 @@
-# CallCatcher Ops
+# AEO Autopilot
 
-> Done-for-you Answer Engine Optimization (AEO) for local businesses.
+> Autonomous AI-SEO execution for businesses.
 
-## Canonical
-- https://callcatcherops.com/callcatcherops/
+## Canonical URLs
+- https://aiseoautopilot.com/ai-seo/
+- https://aiseoautopilot.com/ai-seo/intake.html
+- https://aiseoautopilot.com/ai-seo/thanks.html
+- https://aiseoautopilot.com/ai-seo/workflow-subscription.html
+- https://aiseoautopilot.com/ai-seo/service.html
+- https://aiseoautopilot.com/ai-seo/aeo-faq.html
 
-## Key Pages
-- https://callcatcherops.com/callcatcherops/
-- https://callcatcherops.com/callcatcherops/intake.html
-- https://callcatcherops.com/callcatcherops/thanks.html
-- https://callcatcherops.com/callcatcherops/workflow-subscription.html
-- https://callcatcherops.com/callcatcherops/service.html
-- https://callcatcherops.com/callcatcherops/aeo-faq.html
-- https://callcatcherops.com/unsubscribe.html
-
-## Service Definition
-CallCatcher Ops provides autonomous AEO execution for small and local businesses. The service includes buyer-question content architecture, schema implementation, authority signal alignment, and recurring optimization for AI recommendation visibility.
-
-## Ideal Customers
-- Local service businesses
-- Multi-location service operators
-- Teams that want outsourced AI visibility execution
-- Founders prioritizing execution over manual growth ops
-
-## Outcomes
-- Increased AI-readable coverage for high-intent questions
-- Better citation eligibility in AI answer engines
-- Stronger consistency across authority signals and profiles
-- Weekly evidence of shipped work and iteration priorities
-
-## Operating Model
-- One onboarding form
-- Async approvals only when legally required
-- Weekly implementation cadence
-- Transparent reporting cadence
-
-## CTAs
-- Onboarding: https://callcatcherops.com/callcatcherops/intake.html
-- Setup sprint: https://buy.stripe.com/4gMaEX0I4f5IdWh6i73sI01
-- Plan details: https://callcatcherops.com/callcatcherops/workflow-subscription.html
-- Service catalog: https://callcatcherops.com/callcatcherops/service.html
-
-## Contact
-- hello@callcatcherops.com
+## Business Docs
+- business/ai-seo/README.md
+- business/ai-seo/pricing.md
+- business/ai-seo/system.md
+- business/ai-seo/outreach.md

@@ -17,9 +17,9 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 
 ## Files
 - `autonomy/config.example.json` - configuration template
-- `autonomy/config.callcatcherops.json` - CallCatcher Ops config (dry-run default)
-- `autonomy/data/leads_callcatcherops.csv` - sample lead list
-- `autonomy/state/leads_callcatcherops_real.csv` - real lead list (gitignored; do not commit)
+- `autonomy/config.ai-seo.json` - AEO Autopilot config (dry-run default)
+- `autonomy/data/leads_ai_seo.csv` - sample lead list
+- `autonomy/state/leads_ai_seo_real.csv` - real lead list (gitignored; do not commit)
 - `autonomy/run.py` - entrypoint
 - `autonomy/engine.py` - orchestration logic
 - `autonomy/context_store.py` - SQLite context store
@@ -120,12 +120,12 @@ python3 autonomy/tools/install_launchd_tollfree_watchdog.py
 ```
 
 ## Lead Generation (Multi-Market)
-`autonomy/tools/lead_gen_broward.py` generates CSV leads for CallCatcher Ops using Google Places across a rotating market list.
+`autonomy/tools/lead_gen_broward.py` generates CSV leads for AEO Autopilot using Google Places across a rotating market list.
 
 Example:
 ```bash
 export GOOGLE_PLACES_API_KEY=...
-python3 autonomy/tools/lead_gen_broward.py --limit 120 --markets autonomy/data/us_growth_markets.json --output autonomy/state/leads_callcatcherops_growth.csv
+python3 autonomy/tools/lead_gen_broward.py --limit 120 --markets autonomy/data/us_growth_markets.json --output autonomy/state/leads_ai_seo_growth.csv
 ```
 
 Daily growth run (lead generation only):
@@ -171,7 +171,7 @@ Set in local `.env`:
 Twilio API calls now include lightweight agent identity headers plus optional request signing and per-call metering.
 
 Set in local `.env`:
-- `AGENT_COMMERCE_AGENT_ID=agent.callcatcherops.v1` (optional override)
+- `AGENT_COMMERCE_AGENT_ID=agent.ai-seo-autopilot.v1` (optional override)
 - `AGENT_COMMERCE_PROTOCOL=acp-lite/2026-02` (optional override)
 - `AGENT_COMMERCE_SIGNING_KEY=...` (optional; enables `X-Agent-Signature` HMAC header)
 - `AGENT_COMMERCE_METERING_ENABLED=1` (default on)

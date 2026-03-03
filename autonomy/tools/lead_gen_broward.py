@@ -266,7 +266,7 @@ def fetch_html(url: str) -> str:
     if not url:
         return ""
     try:
-        req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.1"})
+        req = Request(url, headers={"User-Agent": "ai-seo-autopilot-leadgen/1.1"})
         with urlopen(req, timeout=WEB_TIMEOUT_SECS) as resp:
             content_type = (resp.headers.get("Content-Type") or "").lower()
             if "text/html" not in content_type:
@@ -398,7 +398,7 @@ def discover_best_email(website: str, domain: str) -> tuple[str, str]:
 
 
 def request_json(url: str) -> dict:
-    req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.0"})
+    req = Request(url, headers={"User-Agent": "ai-seo-autopilot-leadgen/1.0"})
     with urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -596,7 +596,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate local business leads via Google Places.")
     parser.add_argument("--limit", type=int, default=30, help="Number of leads to generate.")
     # Default to autonomy/state to avoid accidentally committing real lead data.
-    parser.add_argument("--output", type=Path, default=STATE_DIR / "leads_callcatcherops_real.csv")
+    parser.add_argument("--output", type=Path, default=STATE_DIR / "leads_ai_seo_real.csv")
     parser.add_argument("--replace", action="store_true", help="Replace output file instead of appending.")
     parser.add_argument(
         "--categories",

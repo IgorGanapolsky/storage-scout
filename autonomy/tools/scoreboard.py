@@ -175,14 +175,14 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CallCatcher Ops outreach scoreboard (local).")
+    parser = argparse.ArgumentParser(description="AEO Autopilot outreach scoreboard (local).")
     parser.add_argument("--sqlite", default="autonomy/state/autonomy_live.sqlite3", help="Path to sqlite DB.")
     parser.add_argument("--days", type=int, default=7, help="Window for recent metrics.")
     args = parser.parse_args()
 
     board = load_scoreboard(Path(args.sqlite), days=int(args.days))
 
-    print("CallCatcher Ops Scoreboard")
+    print("AEO Autopilot Scoreboard")
     print(f"As-of (UTC): {datetime.now(UTC).replace(microsecond=0).isoformat()}")
     print("")
     print(

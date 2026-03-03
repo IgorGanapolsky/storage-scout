@@ -317,10 +317,10 @@ def _resolve_config_path(*, repo_root: Path, config_arg: str) -> Path:
     """
 
     requested = (repo_root / config_arg).resolve()
-    default_live = (repo_root / "autonomy" / "state" / "config.callcatcherops.live.json").resolve()
+    default_live = (repo_root / "autonomy" / "state" / "config.ai-seo.live.json").resolve()
 
     if requested == default_live and not requested.exists():
-        alt = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
+        alt = (repo_root / "autonomy" / "config.ai-seo.json").resolve()
         if alt.exists():
             return alt
 
@@ -655,7 +655,7 @@ def _send_ntfy(
     for topic in topics:
         url = f"{server}/{topic}"
         headers = {
-            "User-Agent": "callcatcherops-live-job/1.0",
+            "User-Agent": "ai-seo-autopilot-live-job/1.0",
             "Title": title,
             "Priority": str(int(priority)),
         }
@@ -699,7 +699,7 @@ def _format_report(
 ) -> str:
     now_utc = datetime.now(UTC).replace(microsecond=0).isoformat()
     lines: list[str] = []
-    lines.append("CallCatcher Ops Daily Report")
+    lines.append("AEO Autopilot Daily Report")
     lines.append(f"As-of (UTC): {now_utc}")
     lines.append("")
     lines.append("Lead gen")
@@ -1024,8 +1024,8 @@ def _maybe_write_call_list(*, cfg, env: dict, repo_root: Path) -> dict | None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CallCatcher Ops live daily job: inbox sync + outreach + report.")
-    parser.add_argument("--config", default="autonomy/state/config.callcatcherops.live.json", help="Live config path.")
+    parser = argparse.ArgumentParser(description="AEO Autopilot live daily job: inbox sync + outreach + report.")
+    parser.add_argument("--config", default="autonomy/state/config.ai-seo.live.json", help="Live config path.")
     parser.add_argument(
         "--dotenv",
         default=".env",
@@ -1581,8 +1581,8 @@ def main() -> None:
 
     if should_send:
         is_urgent_update = last_sent_date == today_utc and urgent_change
-        subject = f"CallCatcher Ops {'Urgent Update' if is_urgent_update else 'Daily Report'} ({today_utc})"
-        tags = "callcatcherops"
+        subject = f"AEO Autopilot {'Urgent Update' if is_urgent_update else 'Daily Report'} ({today_utc})"
+        tags = "ai-seo-autopilot"
         priority = 5 if is_urgent_update else 3
         if urgent_change:
             tags += ",urgent"

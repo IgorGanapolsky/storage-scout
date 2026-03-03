@@ -61,7 +61,7 @@ def generate():
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>CallCatcher Ops - Live Dashboard</title>
+    <title>AEO Autopilot - Live Dashboard</title>
     <meta http-equiv="refresh" content="300">
     <style>
         body {{ font-family: -apple-system, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; color: #333; }}
@@ -79,7 +79,7 @@ def generate():
     </style>
 </head>
 <body>
-    <h1>CallCatcher Ops: Dashboard</h1>
+    <h1>AEO Autopilot: Dashboard</h1>
     <p class="live">ENGINE LIVE</p>
     <p style="color:#666;">Last updated: {ts} UTC &middot; DB: {db_label}</p>
 
@@ -108,7 +108,7 @@ def generate():
 
     html += """    </table>
 
-    <p class="meta">CallCatcher Ops &middot; Coral Springs, FL &middot; hello@callcatcherops.com</p>
+    <p class="meta">AEO Autopilot &middot; Coral Springs, FL &middot; hello@aiseoautopilot.com</p>
 </body>
 </html>
 """

@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Host: callcatcherops.com
-Sitemap: https://callcatcherops.com/sitemap.xml
+Host: aiseoautopilot.com
+Sitemap: https://aiseoautopilot.com/sitemap.xml

@@ -1,4 +1,4 @@
-"""Goal-driven autonomous task planner for CallCatcher Ops.
+"""Goal-driven autonomous task planner for AEO Autopilot.
 
 Loads business goals, evaluates current state, generates and tracks
 daily tasks that advance the highest-priority unmet objectives.
@@ -61,17 +61,17 @@ TASK_TEMPLATES: dict[str, list[str]] = {
         "Draft personalized cold email for leads in the {vertical} vertical (direct email only)",
     ],
     "content": [
-        "Draft LinkedIn post about missed-call revenue leak for {vertical} businesses",
+        "Draft LinkedIn post about AI-SEO revenue impact for {vertical} businesses",
         "Write a short case-study-style post with industry miss-rate benchmarks",
         "Draft a LinkedIn poll asking local business owners about their call handling",
     ],
     "landing_page": [
-        "Build a vertical-specific landing page for {vertical} at docs/callcatcherops/{vertical}.html",
+        "Build a vertical-specific landing page for {vertical} at docs/ai-seo/{vertical}.html",
         "Add testimonial/social-proof section to the {vertical} landing page",
     ],
     "research": [
         "Analyze which outreach subject lines got replies vs bounces in the last 7 days",
-        "Research competitor missed-call services and document pricing/features",
+        "Research competitor AEO services and document pricing/positioning",
         "Identify top 3 Facebook groups where {vertical} owners discuss operations",
     ],
     "social": [
@@ -201,7 +201,7 @@ class GoalPlanner:
         """Pick a random template for a task type with variable substitution."""
         templates = TASK_TEMPLATES.get(task_type, [])
         if not templates:
-            return f"Execute {task_type} task for CallCatcher Ops"
+            return f"Execute {task_type} task for AEO Autopilot"
         template = random.choice(templates)
         vertical = random.choice(VERTICALS)
         city = random.choice(CITIES)

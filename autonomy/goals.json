@@ -1,54 +1,38 @@
 {
-  "version": 2,
-  "updated_at": "2026-02-16",
+  "version": 3,
+  "updated_at": "2026-03-03",
   "objectives": [
     {
-      "id": "revenue-first-client",
+      "id": "first-paid-aeo-client",
       "priority": 1,
       "category": "revenue",
-      "goal": "Land first paying CallCatcher client within 30 days via phone-first outreach",
-      "metrics": ["paid_client_count >= 1"],
-      "task_types": ["phone_outreach", "lead_gen", "content"]
+      "goal": "Land first paying AI-SEO/AEO client within 30 days",
+      "metrics": ["paid_aeo_clients_count >= 1"],
+      "task_types": ["outbound", "landing_page", "content", "sales"]
     },
     {
-      "id": "book-5-audits",
+      "id": "qualified-pipeline-20",
       "priority": 2,
-      "category": "conversion",
-      "goal": "Get 5 free baselines booked via phone calls (email is follow-up only)",
-      "metrics": ["intake_submissions >= 5"],
-      "task_types": ["phone_outreach", "content", "landing_page"]
-    },
-    {
-      "id": "pipeline-20-leads",
-      "priority": 3,
       "category": "pipeline",
-      "goal": "Build pipeline of 20 qualified leads (dentists in South Florida with direct emails)",
+      "goal": "Build pipeline of 20 qualified prospects with buyer contact data",
       "metrics": ["qualified_leads >= 20"],
-      "task_types": ["lead_gen", "research"]
+      "task_types": ["lead_gen", "research", "outbound"]
     },
     {
-      "id": "linkedin-500",
+      "id": "book-5-strategy-calls",
+      "priority": 3,
+      "category": "conversion",
+      "goal": "Book 5 qualified AEO strategy calls",
+      "metrics": ["strategy_calls_booked >= 5"],
+      "task_types": ["outbound", "funnel", "follow_up"]
+    },
+    {
+      "id": "ship-proof-assets",
       "priority": 4,
-      "category": "brand",
-      "goal": "Grow LinkedIn to 500 connections in local business space",
-      "metrics": ["linkedin_connections >= 500"],
-      "task_types": ["content", "social"]
-    },
-    {
-      "id": "vertical-pages",
-      "priority": 5,
       "category": "marketing",
-      "goal": "Ship 3 vertical-specific landing pages (med spa, dental, HVAC)",
-      "metrics": ["landing_pages_shipped >= 3"],
+      "goal": "Ship proof assets (service page, FAQ, onboarding, evidence page)",
+      "metrics": ["proof_assets_ready == true"],
       "task_types": ["landing_page", "content"]
-    },
-    {
-      "id": "lead-scoring-automation",
-      "priority": 6,
-      "category": "automation",
-      "goal": "Automate lead scoring from intake form submissions",
-      "metrics": ["auto_score_enabled == true"],
-      "task_types": ["automation"]
     }
   ]
 }

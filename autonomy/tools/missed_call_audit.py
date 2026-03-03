@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Missed-call audit: call a business phone at multiple times and log what happens.
+"""Phone response audit: call a business phone at multiple times and log what happens.
 
 Usage:
     python3 -m autonomy.tools.missed_call_audit \
@@ -179,7 +179,7 @@ def save_audit(result: AuditResult, output_dir: Path | None = None) -> Path:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Run a missed-call audit on a business phone number.")
+    p = argparse.ArgumentParser(description="Run a phone response audit on a business phone number.")
     p.add_argument("--phone", required=True, help="Business phone number to audit (US format)")
     p.add_argument("--company", required=True, help="Business name")
     p.add_argument("--service", default="dentist", help="Service type (dentist, plumber, hvac, etc.)")
@@ -196,7 +196,7 @@ def main() -> None:
     args = parse_args()
     env = dict(os.environ)
 
-    print(f"Running missed-call audit for {args.company} ({args.phone})")
+    print(f"Running phone response audit for {args.company} ({args.phone})")
     print(f"  Service: {args.service} | State: {args.state} | Calls: {args.calls}")
 
     result = run_audit(

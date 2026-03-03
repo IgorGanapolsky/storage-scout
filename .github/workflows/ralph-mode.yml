@@ -210,13 +210,13 @@ jobs:
 
             AUDIT CHECKLIST:
             □ Security: No hardcoded secrets, proper input validation
-            □ Logic: Business logic is correct for missed-call recovery and outreach
+            □ Logic: Business logic is correct for AEO execution and outreach
             □ Quality: Code follows project patterns, is maintainable
             □ Tests: Test coverage is adequate, edge cases handled
             □ Performance: No obvious performance issues
             □ Breaking changes: Existing functionality preserved
 
-            CRITICAL CHECKS for CallCatcher Ops:
+            CRITICAL CHECKS for AEO Autopilot:
             - No secrets, credentials, or private lead data committed
             - Outreach engine remains dry-run by default unless explicitly configured
             - Marketing CTA flow remains valid: landing page -> intake -> thanks

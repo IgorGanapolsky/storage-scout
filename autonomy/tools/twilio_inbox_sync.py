@@ -186,7 +186,7 @@ def _already_processed(store: ContextStore, inbound_sid: str) -> bool:
 
 def _interest_reply_text(booking_url: str, kickoff_url: str) -> str:
     return (
-        "Great, thanks for replying. Book your free 5-min missed-call baseline here: "
+        "Great, thanks for replying. Book your free 5-min AI visibility baseline here: "
         f"{booking_url} "
         "Want priority setup? Reserve your kickoff here: "
         f"{kickoff_url} Reply STOP to opt out."

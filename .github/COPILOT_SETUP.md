@@ -1,4 +1,4 @@
-# GitHub Copilot Setup Checklist (CallCatcher Ops)
+# GitHub Copilot Setup Checklist (AEO Autopilot)
 
 ## Enable Copilot Features
 1. Open repository settings for `IgorGanapolsky/storage-scout`.
@@ -14,6 +14,6 @@
 - `.github/workflows/claude-review.yml`
 
 ## Validation
-1. Open a PR touching `docs/callcatcherops/` or `autonomy/`.
+1. Open a PR touching `docs/ai-seo/` or `autonomy/`.
 2. Confirm Copilot/Claude reviews trigger.
 3. Confirm recommendations align with CallCatcher scope and do not reference removed experiments.
