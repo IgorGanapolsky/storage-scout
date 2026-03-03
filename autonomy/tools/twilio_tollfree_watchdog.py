@@ -536,7 +536,7 @@ def main() -> None:
         default="autonomy/state/twilio_tollfree_watchdog_state.json",
         help="State file used for transition/cooldown dedupe.",
     )
-    parser.add_argument("--company-name", default="CallCatcher Ops")
+    parser.add_argument("--company-name", default="AEO Autopilot")
     parser.add_argument(
         "--exit-on-alert",
         action="store_true",

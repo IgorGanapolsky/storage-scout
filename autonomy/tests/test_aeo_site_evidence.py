@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
-AEO = DOCS / "callcatcherops"
+AEO = DOCS / "ai-seo"
 
 
 def _read(path: Path) -> str:
@@ -68,18 +68,18 @@ def test_machine_readable_assets_cover_aeo_core_pages() -> None:
     robots = _read(DOCS / "robots.txt")
 
     required_urls = [
-        "https://callcatcherops.com/callcatcherops/",
-        "https://callcatcherops.com/callcatcherops/intake.html",
-        "https://callcatcherops.com/callcatcherops/workflow-subscription.html",
-        "https://callcatcherops.com/callcatcherops/service.html",
-        "https://callcatcherops.com/callcatcherops/aeo-faq.html",
+        "https://aiseoautopilot.com/ai-seo/",
+        "https://aiseoautopilot.com/ai-seo/intake.html",
+        "https://aiseoautopilot.com/ai-seo/workflow-subscription.html",
+        "https://aiseoautopilot.com/ai-seo/service.html",
+        "https://aiseoautopilot.com/ai-seo/aeo-faq.html",
     ]
 
     for url in required_urls:
         assert url in llms
         assert url in sitemap
 
-    assert "Sitemap: https://callcatcherops.com/sitemap.xml" in robots
+    assert "Sitemap: https://aiseoautopilot.com/sitemap.xml" in robots
 
 
 def test_offer_pages_explicitly_reject_guarantee_language() -> None:

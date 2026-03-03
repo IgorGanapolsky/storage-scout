@@ -121,8 +121,8 @@ def _smtp_probe(email: str) -> bool:
     try:
         smtp = smtplib.SMTP(timeout=8)
         smtp.connect(mx_host, 25)
-        smtp.helo("callcatcherops.com")
-        smtp.mail("verify@callcatcherops.com")
+        smtp.helo("aiseoautopilot.com")
+        smtp.mail("verify@aiseoautopilot.com")
         code, _ = smtp.rcpt(email)
         smtp.quit()
         # 250 = OK, 251 = forwarding. Anything 4xx/5xx means reject.

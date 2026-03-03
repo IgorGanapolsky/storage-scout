@@ -557,7 +557,7 @@ def main() -> None:
     parser.add_argument("--no-require-phone", action="store_true", help="Include leads without phone numbers.")
     parser.add_argument(
         "--source-csv",
-        default="autonomy/state/leads_callcatcherops_real.csv",
+        default="autonomy/state/leads_ai_seo_real.csv",
         help="Optional CSV to pull website URLs from (matched by email).",
     )
     parser.add_argument(

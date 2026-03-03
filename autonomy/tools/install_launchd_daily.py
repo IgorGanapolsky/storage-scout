@@ -4,12 +4,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-LABEL = "com.callcatcherops.autonomy.daily"
+LABEL = "com.ai-seo-autopilot.autonomy.daily"
 
 
 def _plist_content(*, python_exe: str, repo_root: Path) -> str:
     job_script = repo_root / "autonomy" / "tools" / "live_job.py"
-    config_path = repo_root / "autonomy" / "state" / "config.callcatcherops.live.json"
+    config_path = repo_root / "autonomy" / "state" / "config.ai-seo.live.json"
     out_log = repo_root / "autonomy" / "state" / "launchd_daily.out.log"
     err_log = repo_root / "autonomy" / "state" / "launchd_daily.err.log"
 

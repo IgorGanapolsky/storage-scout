@@ -72,11 +72,11 @@ class AIOutreachWriter:
     def _system_prompt(self, observations: str = "") -> str:
         base = (
             f"You write short, personalized cold outreach emails for {self.company_name}, "
-            f"a missed-call recovery service for local businesses. "
+            f"an autonomous AI-SEO service for local businesses. "
             f"Keep emails under 100 words. Be conversational, not salesy. "
             f"CTA can be 'Reply YES' or a direct link to the setup page if the business has verified pain. "
-            f"Setup link: {self.kickoff_url} ($249 setup fee). "
-            f"Frame as: free pilot, pay per recovered call ($25/call, no monthly fee). "
+            f"Setup link: {self.kickoff_url}. "
+            f"Frame as: done-for-you AI-SEO sprint with baseline + implementation plan. "
             f"Always include the unsubscribe link."
         )
         if observations:
@@ -119,7 +119,7 @@ class AIOutreachWriter:
                 body = text.replace(line, "", 1).strip()
                 break
         if not subject:
-            subject = f"missed calls = lost jobs for {lead.company or 'your team'}"
+            subject = f"AEO execution plan for {lead.company or 'your team'}"
         body += self._unsubscribe_footer(lead.email)
         return {"subject": subject, "body": body}
 

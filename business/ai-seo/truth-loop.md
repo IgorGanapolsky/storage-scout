@@ -1,4 +1,4 @@
-# Strategy Truth Loop (CallCatcher Ops)
+# Strategy Truth Loop (AEO Autopilot)
 
 Use this loop for strategic questions about money, viability, and execution.
 

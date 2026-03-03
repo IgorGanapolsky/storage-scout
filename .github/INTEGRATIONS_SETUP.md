@@ -1,4 +1,4 @@
-# Integration Setup Guide (CallCatcher Ops)
+# Integration Setup Guide (AEO Autopilot)
 
 This document lists third-party integrations and required GitHub secrets for this repository.
 

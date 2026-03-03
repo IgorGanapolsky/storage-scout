@@ -144,7 +144,7 @@ def test_fastmail_booking_and_payment_detection_heuristics() -> None:
     )
     assert _looks_like_calendly_booking(
         "no-reply@example.com",
-        "You are scheduled with CallCatcher Ops",
+        "You are scheduled with AEO Autopilot",
         "",
     )
     assert _looks_like_stripe_payment(
@@ -214,7 +214,7 @@ def test_live_job_report_formatting() -> None:
         scoreboard_days=30,
         kpi={"bookings_today": 0, "payments_today": 0, "bookings_window": 0, "payments_window": 0},
     )
-    assert "CallCatcher Ops Daily Report" in report
+    assert "AEO Autopilot Daily Report" in report
     assert "Lead hygiene" in report
     assert "- invalid_marked: 2" in report
     assert "Revenue KPI" in report
@@ -624,7 +624,7 @@ def test_maybe_write_call_list_high_intent_sanitizes_bounced_and_score_floor(mon
     (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
 
     cfg = SimpleNamespace(
-        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_callcatcherops_real.csv"}],
+        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_ai_seo_real.csv"}],
         agents={"outreach": {"target_services": ["Dentist"]}},
         storage={"sqlite_path": "autonomy/state/autonomy_live.sqlite3"},
     )

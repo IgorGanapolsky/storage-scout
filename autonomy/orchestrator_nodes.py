@@ -280,7 +280,7 @@ class ReportingNode(Node):
         )
 
         # 3. Deliver
-        smtp_user = state.env.get("SMTP_USER", "hello@callcatcherops.com")
+        smtp_user = state.env.get("SMTP_USER", "hello@aiseoautopilot.com")
         smtp_password = state.env.get("SMTP_PASSWORD")
         report_to = state.env.get("REPORT_TO_EMAIL")
 
@@ -290,7 +290,7 @@ class ReportingNode(Node):
                     smtp_user=smtp_user,
                     smtp_password=smtp_password,
                     to_email=report_to,
-                    subject=f"CallCatcher Ops Report - {datetime.now(UTC).date().isoformat()}",
+                    subject=f"AEO Autopilot Report - {datetime.now(UTC).date().isoformat()}",
                     body=report_txt
                 )
             except Exception as e:

@@ -25,8 +25,8 @@ from autonomy.orchestrator_nodes import (
 log = logging.getLogger(__name__)
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CallCatcher Ops - Agentic Orchestrator")
-    parser.add_argument("--config", default="autonomy/state/config.callcatcherops.live.json")
+    parser = argparse.ArgumentParser(description="AEO Autopilot - Agentic Orchestrator")
+    parser.add_argument("--config", default="autonomy/state/config.ai-seo.live.json")
     parser.add_argument("--env-file", default=".env")
     args = parser.parse_args()
 
@@ -35,7 +35,7 @@ def main() -> None:
     # Resolve config with fallback to tracked version
     requested = (repo_root / args.config).resolve()
     if not requested.exists():
-        requested = (repo_root / "autonomy" / "config.callcatcherops.json").resolve()
+        requested = (repo_root / "autonomy" / "config.ai-seo.json").resolve()
 
     cfg = load_config(requested)
     env = load_dotenv(repo_root / args.env_file)

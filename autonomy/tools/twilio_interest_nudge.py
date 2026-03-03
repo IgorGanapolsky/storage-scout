@@ -101,7 +101,7 @@ def _normalize_phone(payload_phone_e164: str, payload_phone_raw: str) -> str:
 
 def _build_nudge_body(*, booking_url: str, kickoff_url: str) -> str:
     return (
-        "Quick follow-up: if you want your missed-call recovery baseline, book here: "
+        "Quick follow-up: if you want your AI visibility baseline, book here: "
         f"{booking_url} "
         "Need priority setup? Reserve kickoff here: "
         f"{kickoff_url} Reply STOP to opt out."

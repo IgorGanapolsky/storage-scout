@@ -1,13 +1,13 @@
 ---
 name: autonomous-cto
-description: Run CallCatcher Ops autonomously with a revenue-first focus while keeping CI, analytics, and the site healthy.
+description: Run AEO Autopilot autonomously with a revenue-first focus while keeping CI, analytics, and the site healthy.
 triggers:
   - autonomous cto
-  - callcatcher autonomy
+  - aeo autonomy
   - revenue loop
 ---
 
-# Autonomous CTO Playbook (CallCatcher Ops)
+# Autonomous CTO Playbook (AEO Autopilot)
 
 ## Core Objectives
 - Keep the revenue path live: payment CTA, booking CTA, thank-you flow.
@@ -22,7 +22,7 @@ triggers:
 - Never commit secrets. Store secrets only in `.env` and GitHub Secrets.
 
 ## Verification Checklist
-- Site loads at `https://callcatcherops.com/callcatcherops/`.
+- Site loads at `https://aiseoautopilot.com/ai-seo/`.
 - GA4 Realtime shows an active user after page load.
 - CI checks pass on default branch.
 - Security overview shows no open alerts.

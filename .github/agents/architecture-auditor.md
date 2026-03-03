@@ -1,6 +1,6 @@
 # Agent: Architecture Auditor
 
-Audit PRs for tools-layer governance in CallCatcher Ops.
+Audit PRs for tools-layer governance in AEO Autopilot.
 
 ## Scope
 - Review changes under `autonomy/tools/**`.

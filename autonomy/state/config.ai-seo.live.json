@@ -1,14 +1,14 @@
 {
   "mode": "live",
   "company": {
-    "name": "CallCatcher Ops",
-    "website": "https://callcatcherops.com",
-    "intake_url": "https://callcatcherops.com/callcatcherops/intake.html",
-    "reply_to": "hello@callcatcherops.com",
+    "name": "AEO Autopilot",
+    "website": "https://aiseoautopilot.com",
+    "intake_url": "https://aiseoautopilot.com/ai-seo/intake.html",
+    "reply_to": "hello@aiseoautopilot.com",
     "mailing_address": "11909 Glenmore Drive, Coral Springs, FL 33071",
-    "signature": "\u2014 CallCatcher Ops",
+    "signature": "\u2014 AEO Autopilot",
     "booking_url": "https://calendly.com/igorganapolsky/audit-call",
-    "baseline_example_url": "https://callcatcherops.com/callcatcherops/baseline-example.pdf"
+    "baseline_example_url": "https://aiseoautopilot.com/ai-seo/baseline-example.pdf"
   },
   "agents": {
     "outreach": {
@@ -67,20 +67,20 @@
   "lead_sources": [
     {
       "type": "csv",
-      "path": "autonomy/state/leads_callcatcherops_real.csv",
-      "source": "callcatcherops_live"
+      "path": "autonomy/state/leads_ai_seo_real.csv",
+      "source": "ai-seo-autopilot_live"
     }
   ],
   "email": {
     "provider": "smtp",
     "smtp_host": "smtp.fastmail.com",
     "smtp_port": 587,
-    "smtp_user": "hello@callcatcherops.com",
+    "smtp_user": "hello@aiseoautopilot.com",
     "smtp_password_env": "SMTP_PASSWORD"
   },
   "compliance": {
     "include_unsubscribe": true,
-    "unsubscribe_url": "https://callcatcherops.com/unsubscribe.html?email={{email}}",
+    "unsubscribe_url": "https://aiseoautopilot.com/unsubscribe.html?email={{email}}",
     "can_spam_required": true
   },
   "storage": {
