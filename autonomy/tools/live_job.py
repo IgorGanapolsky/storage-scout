@@ -43,10 +43,10 @@ from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_less
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_interest_nudge import InterestNudgeResult, run_interest_nudges
-from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync  # noqa: F401
+from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
 from autonomy.tools.twilio_tollfree_watchdog import (
     TwilioTollfreeWatchdogResult,
-    run_twilio_tollfree_watchdog,  # noqa: F401
+    run_twilio_tollfree_watchdog,
 )
 from autonomy.tools.twilio_warm_close import WarmCloseResult, run_warm_close_loop
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
@@ -56,6 +56,8 @@ from autonomy.utils import UTC, truthy
 TWILIO_HARD_DISABLED_REASON = "hard_disabled_twilio"
 TWILIO_SID_PRESENT_SQL = "COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''"
 TWILIO_WARM_CLOSE_AGENT_ID = "agent.sms.twilio.warm_close.v1"
+# Keep import bindings alive for test monkeypatch targets and compatibility hooks.
+_TWILIO_COMPAT_SHIMS = (run_twilio_inbox_sync, run_twilio_tollfree_watchdog)
 
 
 def _run_missed_call_audits(*, call_list: list[CallListRow], env: dict[str, str]) -> list[dict]:
