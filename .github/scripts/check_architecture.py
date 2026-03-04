@@ -22,6 +22,7 @@ APPROVED_TWILIO_WRAPPER_FILES = frozenset(
         "twilio_interest_nudge.py",
         "twilio_sms.py",
         "twilio_tollfree_watchdog.py",
+        "twilio_warm_close.py",
     }
 )
 
