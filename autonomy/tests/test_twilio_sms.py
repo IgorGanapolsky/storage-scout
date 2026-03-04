@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.twilio_sms import (
+    _parse_http_error,
     _is_business_hours,
     _lead_texted_recently,
     load_sms_config,
@@ -239,6 +240,15 @@ def test_send_sms_http_error(monkeypatch) -> None:
     except urllib.error.HTTPError as exc:
         assert exc.code == 400
         exc.close()
+
+
+def test_parse_http_error_extracts_payload_and_closes_stream() -> None:
+    exc = _build_http_error(status=400, payload={"code": 21610, "message": "Unsubscribed recipient"})
+    status_code, error_data, error_message = _parse_http_error(exc)
+    assert status_code == 400
+    assert int(error_data.get("code") or 0) == 21610
+    assert error_message == "Unsubscribed recipient"
+    assert exc.fp is None or bool(getattr(exc.fp, "closed", True))
 
 
 # --- run_sms_followup (end-to-end) ---
@@ -623,5 +633,99 @@ def test_run_sms_followup_sends_second_nudge(monkeypatch) -> None:
         ).fetchone()
         assert row is not None
         assert str(row["phase"] or "") == "second_nudge"
+    finally:
+        store_check.conn.close()
+
+
+def test_run_sms_followup_second_nudge_handles_http_error(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        lead_id = "nudge-fail@clinic.com"
+        store.upsert_lead(
+            Lead(
+                id=lead_id,
+                name="Test",
+                company="Nudge Dental",
+                email=lead_id,
+                phone="9546211439",
+                service="Dentist",
+                city="Margate",
+                state="FL",
+                source="test",
+                score=100,
+                status="contacted",
+                email_method="direct",
+            )
+        )
+        store.log_action(
+            agent_id="agent.sms.twilio.v1",
+            action_type="sms.attempt",
+            trace_id="sms-init-fail",
+            payload={
+                "lead_id": lead_id,
+                "phone": "(954) 621-1439",
+                "company": "Nudge Dental",
+                "service": "Dentist",
+                "city": "Margate",
+                "state": "FL",
+                "outcome": "delivered",
+                "phase": "initial",
+                "twilio": {"sid": "SM_INIT_FAIL", "status": "delivered"},
+            },
+        )
+        old_ts = (real_datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
+        store.conn.execute("UPDATE actions SET ts=? WHERE trace_id='sms-init-fail'", (old_ts,))
+        store.conn.commit()
+    finally:
+        store.conn.close()
+
+    env = {
+        "AUTO_SMS_ENABLED": "1",
+        "AUTO_SMS_SECOND_NUDGE_ENABLED": "1",
+        "AUTO_SMS_SECOND_NUDGE_MIN_HOURS": "6",
+        "AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._is_business_hours",
+        lambda state, start_hour, end_hour, allow_weekends=False: True,
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms.urllib.request.urlopen",
+        lambda req, timeout=20: (_ for _ in ()).throw(
+            _build_http_error(status=400, payload={"code": 21610, "message": "Unsubscribed recipient"})
+        ),
+    )
+
+    result = run_sms_followup(sqlite_path=sqlite_path, audit_log=audit_log, env=env)
+    assert result.reason == "ok"
+    assert result.attempted == 1
+    assert result.failed == 1
+    assert result.delivered == 0
+
+    store_check = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = store_check.conn.execute(
+            """
+            SELECT
+              json_extract(payload_json, '$.phase') AS phase,
+              json_extract(payload_json, '$.twilio.error_code') AS error_code,
+              json_extract(payload_json, '$.twilio.http_status') AS http_status
+            FROM actions
+            WHERE action_type='sms.attempt'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        assert row is not None
+        assert str(row["phase"] or "") == "second_nudge"
+        assert int(row["error_code"] or 0) == 21610
+        assert int(row["http_status"] or 0) == 400
     finally:
         store_check.conn.close()
