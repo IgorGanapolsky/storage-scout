@@ -1168,6 +1168,7 @@ def _format_report(
         lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
+    lines.append(f"- sent_warm_close: {int(engine_result.get('sent_warm_close') or 0)}")
     lines.append(f"- sent_followup: {int(engine_result.get('sent_followup') or 0)}")
     if guardrails:
         lines.append("")

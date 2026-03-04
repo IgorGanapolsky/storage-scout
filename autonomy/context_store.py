@@ -10,6 +10,10 @@ from typing import Any
 UTC = timezone.utc
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = REPO_ROOT / "autonomy" / "state"
+LEAD_COLUMNS = "id, name, company, email, phone, service, city, state, source, score, status, email_method"
+LEAD_COLUMNS_WITH_ALIAS = (
+    "l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status, l.email_method"
+)
 
 
 def _resolve_under_state_dir(raw_path: str) -> Path:
@@ -210,8 +214,8 @@ class ContextStore:
     ) -> Iterable[sqlite3.Row]:
         cur = self.conn.cursor()
 
-        sql = """
-            SELECT id, name, company, email, phone, service, city, state, source, score, status, email_method
+        sql = f"""
+            SELECT {LEAD_COLUMNS}
             FROM leads
             WHERE status = 'new' AND score >= ?
         """
@@ -239,9 +243,9 @@ class ContextStore:
     ) -> Iterable[sqlite3.Row]:
         """Return contacted leads eligible for an email follow-up."""
         cur = self.conn.cursor()
-        sql = """
+        sql = f"""
             SELECT
-              l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status, l.email_method,
+              {LEAD_COLUMNS_WITH_ALIAS},
               COALESCE((
                 SELECT COUNT(1)
                 FROM messages m
@@ -273,6 +277,68 @@ class ContextStore:
             params.extend([(m or "unknown") for m in email_methods])
         sql += """
             ORDER BY last_email_ts ASC
+            LIMIT ?
+        """
+        params.append(int(limit))
+        cur.execute(sql, tuple(params))
+        return cur.fetchall()
+
+    def get_warm_close_leads(
+        self,
+        min_score: int,
+        limit: int,
+        cooldown_cutoff_ts: str,
+        *,
+        warm_close_step: int = 90,
+        email_methods: list[str] | None = None,
+    ) -> Iterable[sqlite3.Row]:
+        """Return replied/interested leads eligible for a warm-close email."""
+        cur = self.conn.cursor()
+        sql = f"""
+            SELECT
+              {LEAD_COLUMNS_WITH_ALIAS},
+              COALESCE((
+                SELECT MAX(a.ts)
+                FROM actions a
+                WHERE COALESCE(json_extract(a.payload_json, '$.lead_id'), '') = l.id
+                  AND (
+                    a.action_type = 'lead.reply'
+                    OR (
+                      a.action_type = 'sms.inbound'
+                      AND COALESCE(json_extract(a.payload_json, '$.classification'), '') = 'interested'
+                    )
+                  )
+              ), '') AS last_signal_ts
+            FROM leads l
+            WHERE LOWER(COALESCE(l.status, '')) IN ('interested', 'replied')
+              AND l.score >= ?
+              AND COALESCE(l.email, '') <> ''
+              AND NOT EXISTS (
+                SELECT 1 FROM opt_outs o WHERE o.email = l.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM messages m
+                WHERE m.lead_id = l.id
+                  AND m.channel = 'email'
+                  AND m.status = 'sent'
+                  AND m.step = ?
+                  AND m.ts >= ?
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM actions c
+                WHERE c.action_type IN ('conversion.booking', 'conversion.payment')
+                  AND COALESCE(json_extract(c.payload_json, '$.lead_id'), '') = l.id
+              )
+        """
+        params: list[object] = [int(min_score), int(warm_close_step), str(cooldown_cutoff_ts)]
+        if email_methods:
+            placeholders = ",".join(["?"] * len(email_methods))
+            sql += f" AND COALESCE(l.email_method,'unknown') IN ({placeholders})"
+            params.extend([(m or "unknown") for m in email_methods])
+        sql += """
+            ORDER BY last_signal_ts DESC, l.score DESC
             LIMIT ?
         """
         params.append(int(limit))
