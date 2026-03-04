@@ -11,10 +11,14 @@ from autonomy.engine import Engine, load_config  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Autonomous Outreach Engine")
-    parser.add_argument("--config", default="autonomy/config.ai-seo.json")
+    parser.add_argument("--config", default="autonomy/state/config.ai-seo.live.json")
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    repo_root = Path(__file__).resolve().parents[1]
+    config_arg = Path(args.config)
+    config_path = config_arg if config_arg.is_absolute() else (repo_root / config_arg).resolve()
+
+    config = load_config(str(config_path))
     engine = Engine(config)
     result = engine.run()
     print(result)
