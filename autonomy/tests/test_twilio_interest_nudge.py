@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.twilio_interest_nudge import run_interest_nudges
 from autonomy.utils import UTC
@@ -72,10 +74,28 @@ def _seed_interested_inbound(
         store.conn.close()
 
 
-def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
+def _new_test_paths() -> tuple[Path, Path]:
     run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    return (
+        Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3"),
+        Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl"),
+    )
+
+
+def _nudge_env() -> dict[str, str]:
+    return {
+        "AUTO_INTEREST_NUDGE_ENABLED": "1",
+        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
+        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
+        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19540000000",
+    }
+
+
+def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_test_paths()
     _seed_interested_inbound(
         sqlite_path=sqlite_path,
         audit_log=audit_log,
@@ -93,15 +113,7 @@ def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
 
     monkeypatch.setattr("autonomy.tools.twilio_interest_nudge.urllib.request.urlopen", fake_urlopen)
 
-    env = {
-        "AUTO_INTEREST_NUDGE_ENABLED": "1",
-        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
-        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
-        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19540000000",
-    }
+    env = _nudge_env()
 
     first = run_interest_nudges(
         sqlite_path=sqlite_path,
@@ -134,9 +146,7 @@ def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
 
 
 def test_interest_nudge_disabled() -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_test_paths()
 
     result = run_interest_nudges(
         sqlite_path=sqlite_path,
@@ -147,9 +157,7 @@ def test_interest_nudge_disabled() -> None:
 
 
 def test_interest_nudge_missing_twilio_env_when_enabled() -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_test_paths()
 
     result = run_interest_nudges(
         sqlite_path=sqlite_path,
@@ -159,90 +167,40 @@ def test_interest_nudge_missing_twilio_env_when_enabled() -> None:
     assert result.reason == "missing_twilio_env"
 
 
-def test_interest_nudge_skips_after_conversion_booking(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
-    lead_id = "booked@example.com"
+@pytest.mark.parametrize(
+    ("action_type", "lead_id", "phone", "inbound_sid"),
+    [
+        ("conversion.booking", "booked@example.com", "+19545550113", "MM_IN_BOOKED"),
+        ("conversion.payment", "paid@example.com", "+19545550114", "MM_IN_PAID"),
+    ],
+)
+def test_interest_nudge_skips_after_conversion(monkeypatch, action_type: str, lead_id: str, phone: str, inbound_sid: str) -> None:
+    sqlite_path, audit_log = _new_test_paths()
     _seed_interested_inbound(
         sqlite_path=sqlite_path,
         audit_log=audit_log,
         lead_id=lead_id,
-        phone_e164="+19545550113",
-        inbound_sid="MM_IN_BOOKED",
+        phone_e164=phone,
+        inbound_sid=inbound_sid,
     )
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     try:
         store.log_action(
             agent_id="agent.inbox_sync.v1",
-            action_type="conversion.booking",
-            trace_id="booking-1",
+            action_type=action_type,
+            trace_id=f"{action_type}-1",
             payload={"lead_id": lead_id},
         )
     finally:
         store.conn.close()
 
     def fail_if_called(req, timeout=20):  # noqa: ANN001
-        raise AssertionError("should not send SMS when booking conversion exists")
+        raise AssertionError(f"should not send SMS when {action_type} exists")
 
     monkeypatch.setattr("autonomy.tools.twilio_interest_nudge.urllib.request.urlopen", fail_if_called)
 
-    env = {
-        "AUTO_INTEREST_NUDGE_ENABLED": "1",
-        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
-        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
-        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19540000000",
-    }
-    result = run_interest_nudges(sqlite_path=sqlite_path, audit_log=audit_log, env=env)
-    assert result.reason == "ok"
-    assert result.candidates == 1
-    assert result.nudged == 0
-    assert result.skipped >= 1
-
-
-def test_interest_nudge_skips_after_conversion_payment(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
-    lead_id = "paid@example.com"
-    _seed_interested_inbound(
-        sqlite_path=sqlite_path,
-        audit_log=audit_log,
-        lead_id=lead_id,
-        phone_e164="+19545550114",
-        inbound_sid="MM_IN_PAID",
-    )
-
-    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
-    try:
-        store.log_action(
-            agent_id="agent.inbox_sync.v1",
-            action_type="conversion.payment",
-            trace_id="payment-1",
-            payload={"lead_id": lead_id},
-        )
-    finally:
-        store.conn.close()
-
-    def fail_if_called(req, timeout=20):  # noqa: ANN001
-        raise AssertionError("should not send SMS when payment conversion exists")
-
-    monkeypatch.setattr("autonomy.tools.twilio_interest_nudge.urllib.request.urlopen", fail_if_called)
-
-    env = {
-        "AUTO_INTEREST_NUDGE_ENABLED": "1",
-        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
-        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
-        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19540000000",
-    }
-    result = run_interest_nudges(sqlite_path=sqlite_path, audit_log=audit_log, env=env)
+    result = run_interest_nudges(sqlite_path=sqlite_path, audit_log=audit_log, env=_nudge_env())
     assert result.reason == "ok"
     assert result.candidates == 1
     assert result.nudged == 0
