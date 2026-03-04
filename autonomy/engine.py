@@ -266,6 +266,23 @@ class Engine:
         )
         return status
 
+    @staticmethod
+    def _lead_from_row(row: dict) -> Lead:
+        return Lead(
+            id=row["id"],
+            name=row["name"],
+            company=row["company"],
+            email=row["email"],
+            phone=row["phone"],
+            service=row["service"],
+            city=row["city"],
+            state=row["state"],
+            source=row["source"],
+            score=row["score"],
+            status=row["status"],
+            email_method=row["email_method"],
+        )
+
     def run_initial_outreach(self) -> int:
         outreach_cfg = self.config.agents["outreach"]
         min_score = int(outreach_cfg["min_score"])
@@ -360,20 +377,7 @@ class Engine:
             cutoff_ts=cutoff_ts,
             email_methods=policy.email_methods_filter,
         ):
-            lead = Lead(
-                id=row["id"],
-                name=row["name"],
-                company=row["company"],
-                email=row["email"],
-                phone=row["phone"],
-                service=row["service"],
-                city=row["city"],
-                state=row["state"],
-                source=row["source"],
-                score=row["score"],
-                status=row["status"],
-                email_method=row["email_method"],
-            )
+            lead = self._lead_from_row(row)
             if self.store.is_opted_out(lead.email):
                 continue
             if not self._lead_passes_outreach_policy(lead, policy):
@@ -436,20 +440,7 @@ class Engine:
             warm_close_step=WARM_CLOSE_EMAIL_STEP,
             email_methods=policy.email_methods_filter,
         ):
-            lead = Lead(
-                id=row["id"],
-                name=row["name"],
-                company=row["company"],
-                email=row["email"],
-                phone=row["phone"],
-                service=row["service"],
-                city=row["city"],
-                state=row["state"],
-                source=row["source"],
-                score=row["score"],
-                status=row["status"],
-                email_method=row["email_method"],
-            )
+            lead = self._lead_from_row(row)
             if self.store.is_opted_out(lead.email):
                 continue
             if not self._lead_passes_outreach_policy(lead, policy):

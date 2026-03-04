@@ -138,6 +138,30 @@ def _make_engine(*, sqlite_path: str, audit_log: str, outreach_cfg: dict) -> Eng
     return engine
 
 
+def _lead(
+    *,
+    email: str,
+    status: str,
+    score: int = 90,
+    email_method: str = "direct",
+    name: str = "",
+) -> Lead:
+    return Lead(
+        id=email,
+        name=name or email.split("@", 1)[0],
+        company=email,
+        email=email,
+        phone="",
+        service="med spa",
+        city="Miami",
+        state="FL",
+        source="t",
+        score=score,
+        status=status,
+        email_method=email_method,
+    )
+
+
 def test_engine_blocks_fastmail_outreach_by_default(monkeypatch) -> None:
     tmp = f"test_{uuid.uuid4().hex}"
     sqlite_path, audit_log = _tmp_state_paths(tmp)
@@ -400,22 +424,7 @@ def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
     blocked_method = "method@example.com"
 
     def _put(email: str, status: str, method: str = "direct") -> None:
-        store.upsert_lead(
-            Lead(
-                id=email,
-                name=email.split("@", 1)[0],
-                company=email,
-                email=email,
-                phone="",
-                service="med spa",
-                city="Miami",
-                state="FL",
-                source="t",
-                score=90,
-                status=status,
-                email_method=method,
-            )
-        )
+        store.upsert_lead(_lead(email=email, status=status, score=90, email_method=method))
 
     _put(eligible_newer, "interested")
     _put(eligible_older, "replied")
@@ -486,22 +495,7 @@ def test_engine_run_warm_close_emails_sends_and_logs() -> None:
         },
     )
     lead_id = "reply@example.com"
-    engine.store.upsert_lead(
-        Lead(
-            id=lead_id,
-            name="Reply Lead",
-            company="Reply Co",
-            email=lead_id,
-            phone="",
-            service="med spa",
-            city="Miami",
-            state="FL",
-            source="t",
-            score=95,
-            status="replied",
-            email_method="direct",
-        )
-    )
+    engine.store.upsert_lead(_lead(email=lead_id, status="replied", score=95, name="Reply Lead"))
     engine.store.log_action("agent", "lead.reply", "trace-reply", {"lead_id": lead_id})
 
     sent = engine.run_warm_close_emails()
@@ -550,22 +544,7 @@ def test_engine_run_returns_sent_warm_close_metric() -> None:
         },
     )
     lead_id = "interested@example.com"
-    engine.store.upsert_lead(
-        Lead(
-            id=lead_id,
-            name="Interested Lead",
-            company="Interested Co",
-            email=lead_id,
-            phone="",
-            service="med spa",
-            city="Miami",
-            state="FL",
-            source="t",
-            score=90,
-            status="interested",
-            email_method="direct",
-        )
-    )
+    engine.store.upsert_lead(_lead(email=lead_id, status="interested", score=90, name="Interested Lead"))
     engine.store.log_action("agent", "lead.reply", "trace-int", {"lead_id": lead_id})
 
     result = engine.run()
