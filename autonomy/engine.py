@@ -219,6 +219,53 @@ class Engine:
             lines.extend(["", f"Unsubscribe: {unsub}"])
         return {"subject": subject, "body": "\n".join(lines).strip() + "\n"}
 
+    def _send_logged_email(
+        self,
+        *,
+        lead: Lead,
+        msg: dict[str, str],
+        step: int,
+        agent_id: str,
+        kind: str,
+        extra_payload: dict[str, object] | None = None,
+    ) -> str:
+        trace_id = str(uuid.uuid4())
+        mid = generate_message_id(lead.id, step)
+        pixel_url = tracking_pixel_url(mid)
+        html_body = wrap_html_email(msg["body"], pixel_url)
+        status = self.sender.send(
+            to_email=lead.email,
+            subject=msg["subject"],
+            body=msg["body"],
+            reply_to=self.config.company["reply_to"],
+            html_body=html_body,
+        )
+        self.store.add_message(
+            lead_id=lead.id,
+            channel="email",
+            subject=msg["subject"],
+            body=msg["body"],
+            status=status,
+            step=step,
+        )
+        payload: dict[str, object] = {
+            "kind": kind,
+            "lead_id": lead.id,
+            "email": lead.email,
+            "status": status,
+            "step": step,
+            "mode": self.config.mode,
+        }
+        if extra_payload:
+            payload.update(extra_payload)
+        self.store.log_action(
+            agent_id=agent_id,
+            action_type="email.send",
+            trace_id=trace_id,
+            payload=payload,
+        )
+        return status
+
     def run_initial_outreach(self) -> int:
         outreach_cfg = self.config.agents["outreach"]
         min_score = int(outreach_cfg["min_score"])
@@ -259,42 +306,16 @@ class Engine:
                 continue
 
             print(f"DEBUG: Sending to {lead.email}...")
-            trace_id = str(uuid.uuid4())
             msg = self.writer.render(lead)
-            mid = generate_message_id(lead.id, 1)
-            pixel_url = tracking_pixel_url(mid)
-            html_body = wrap_html_email(msg["body"], pixel_url)
-            status = self.sender.send(
-                to_email=lead.email,
-                subject=msg["subject"],
-                body=msg["body"],
-                reply_to=self.config.company["reply_to"],
-                html_body=html_body,
-            )
-
-            self.store.add_message(
-                lead_id=lead.id,
-                channel="email",
-                subject=msg["subject"],
-                body=msg["body"],
-                status=status,
+            status = self._send_logged_email(
+                lead=lead,
+                msg=msg,
                 step=1,
+                agent_id=agent_id,
+                kind="initial",
             )
             if status == "sent":
                 self.store.mark_contacted(lead.id)
-            self.store.log_action(
-                agent_id=agent_id,
-                action_type="email.send",
-                trace_id=trace_id,
-                payload={
-                    "kind": "initial",
-                    "lead_id": lead.id,
-                    "email": lead.email,
-                    "status": status,
-                    "step": 1,
-                    "mode": self.config.mode,
-                },
-            )
             if status == "sent":
                 sent += 1
                 if sent >= limit:
@@ -361,39 +382,13 @@ class Engine:
             sent_count = int(row["email_message_count"] or 0)
             step = sent_count + 1
 
-            trace_id = str(uuid.uuid4())
             msg = self.writer.render_followup(lead, step=step)
-            mid = generate_message_id(lead.id, step)
-            pixel_url = tracking_pixel_url(mid)
-            html_body = wrap_html_email(msg["body"], pixel_url)
-            status = self.sender.send(
-                to_email=lead.email,
-                subject=msg["subject"],
-                body=msg["body"],
-                reply_to=self.config.company["reply_to"],
-                html_body=html_body,
-            )
-
-            self.store.add_message(
-                lead_id=lead.id,
-                channel="email",
-                subject=msg["subject"],
-                body=msg["body"],
-                status=status,
+            status = self._send_logged_email(
+                lead=lead,
+                msg=msg,
                 step=step,
-            )
-            self.store.log_action(
                 agent_id=agent_id,
-                action_type="email.send",
-                trace_id=trace_id,
-                payload={
-                    "kind": f"followup_{step}",
-                    "lead_id": lead.id,
-                    "email": lead.email,
-                    "status": status,
-                    "step": step,
-                    "mode": self.config.mode,
-                },
+                kind=f"followup_{step}",
             )
             if status == "sent":
                 sent += 1
@@ -460,36 +455,14 @@ class Engine:
             if not self._lead_passes_outreach_policy(lead, policy):
                 continue
 
-            trace_id = str(uuid.uuid4())
             msg = self._render_warm_close_email(lead)
-            pixel_url = tracking_pixel_url(generate_message_id(lead.id, WARM_CLOSE_EMAIL_STEP))
-            html_body = wrap_html_email(msg["body"], pixel_url)
-            status = self.sender.send(
-                to_email=lead.email,
-                subject=msg["subject"],
-                body=msg["body"],
-                reply_to=self.config.company["reply_to"],
-                html_body=html_body,
-            )
-            self.store.add_message(
-                lead_id=lead.id,
-                channel="email",
-                subject=msg["subject"],
-                body=msg["body"],
-                status=status,
+            status = self._send_logged_email(
+                lead=lead,
+                msg=msg,
                 step=WARM_CLOSE_EMAIL_STEP,
-            )
-            self.store.log_action(
                 agent_id=agent_id,
-                action_type="email.send",
-                trace_id=trace_id,
-                payload={
-                    "kind": "warm_close_email",
-                    "lead_id": lead.id,
-                    "email": lead.email,
-                    "status": status,
-                    "step": WARM_CLOSE_EMAIL_STEP,
-                    "mode": self.config.mode,
+                kind="warm_close_email",
+                extra_payload={
                     "trigger": "status_replied_or_interested",
                     "last_signal_ts": str(row["last_signal_ts"] or ""),
                 },
