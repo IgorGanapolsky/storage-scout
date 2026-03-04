@@ -1,0 +1,21 @@
+{
+  "env": {
+    "AUTO_CALLS_ENABLED": "1",
+    "AUTO_SMS_ENABLED": "1",
+    "PAID_DAILY_CALL_CAP": "12",
+    "PAID_DAILY_SMS_CAP": "12"
+  },
+  "config": {
+    "company": {
+      "booking_url": "https://calendly.com/igorganapolsky/audit-call"
+    },
+    "agents": {
+      "outreach": {
+        "daily_send_limit": 10,
+        "followup": {
+          "daily_send_limit": 5
+        }
+      }
+    }
+  }
+}

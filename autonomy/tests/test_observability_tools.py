@@ -20,7 +20,10 @@ from autonomy.tools.fastmail_inbox_sync import (
 pytest.importorskip("dotenv")
 
 from autonomy.tools.live_job import (
+    _apply_edit_mode_config_overrides,
+    _apply_edit_mode_env_overrides,
     _apply_outreach_runtime_policy,
+    _check_approval_gate,
     _should_block_deliverability,
     _filter_call_list_rows_for_hygiene,
     _maybe_write_call_list,
@@ -118,6 +121,15 @@ def test_context_store_mark_status_by_email_and_scoreboard_counts() -> None:
     assert board.email_sent_total == 2
     assert board.bookings_total == 1
     assert board.stripe_payments_total == 1
+    store.close()
+
+
+def test_context_store_close_is_idempotent() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+    store.close()
+    store.close()
 
 
 def test_fastmail_bounce_recipient_extraction_and_bounce_detection() -> None:
@@ -466,6 +478,67 @@ def test_leadgen_category_parsing() -> None:
     assert _parse_categories("  med spa, plumbing ,, Clinics  ") == ["med spa", "plumbing", "clinics"]
 
 
+def test_edit_mode_env_overrides_apply_as_strings() -> None:
+    env = {"AUTO_CALLS_ENABLED": "0", "PAID_DAILY_CALL_CAP": "0"}
+    payload = {"env": {"AUTO_CALLS_ENABLED": 1, "PAID_DAILY_CALL_CAP": 12, "NEW_FLAG": True}}
+    applied = _apply_edit_mode_env_overrides(env=env, payload=payload)
+    assert applied == 3
+    assert env["AUTO_CALLS_ENABLED"] == "1"
+    assert env["PAID_DAILY_CALL_CAP"] == "12"
+    assert env["NEW_FLAG"] == "True"
+
+
+def test_edit_mode_config_overrides_deep_merge_without_dropping_defaults() -> None:
+    cfg = SimpleNamespace(
+        mode="live",
+        company={"name": "CallCatcher Ops", "booking_url": "https://cal.example.com/original"},
+        agents={"outreach": {"daily_send_limit": 25, "followup": {"enabled": True, "daily_send_limit": 15}}},
+        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_callcatcherops_real.csv", "source": "callcatcher"}],
+        email={"smtp_user": "hello@callcatcherops.com"},
+        compliance={"unsubscribe_url": "https://callcatcherops.com/unsubscribe.html?email={{email}}"},
+        storage={"sqlite_path": "autonomy/state/autonomy_live.sqlite3", "audit_log": "autonomy/state/audit_live.jsonl"},
+    )
+    payload = {
+        "config": {
+            "company": {"booking_url": "https://cal.example.com/ai-seo"},
+            "agents": {"outreach": {"daily_send_limit": 10, "followup": {"daily_send_limit": 5}}},
+        }
+    }
+
+    applied = _apply_edit_mode_config_overrides(cfg=cfg, payload=payload)
+    assert applied == 2
+    assert cfg.company["name"] == "CallCatcher Ops"
+    assert cfg.company["booking_url"] == "https://cal.example.com/ai-seo"
+    outreach = dict(cfg.agents["outreach"])
+    assert int(outreach["daily_send_limit"]) == 10
+    assert bool(outreach["followup"]["enabled"]) is True
+    assert int(outreach["followup"]["daily_send_limit"]) == 5
+
+
+def test_approval_gate_blocks_without_grant_and_allows_with_grant() -> None:
+    blocked, reason = _check_approval_gate(
+        action="calls.twilio",
+        env={
+            "APPROVAL_GATE_ENABLED": "1",
+            "APPROVAL_REQUIRED_ACTIONS": "calls.twilio,sms.twilio",
+            "APPROVAL_GRANTS": "",
+        },
+    )
+    assert blocked is False
+    assert reason == "approval_required"
+
+    allowed, reason2 = _check_approval_gate(
+        action="calls.twilio",
+        env={
+            "APPROVAL_GATE_ENABLED": "1",
+            "APPROVAL_REQUIRED_ACTIONS": "calls.twilio,sms.twilio",
+            "APPROVAL_GRANTS": "calls.twilio",
+        },
+    )
+    assert allowed is True
+    assert reason2 == ""
+
+
 def test_count_actions_today_paid_scope_filters_non_billable() -> None:
     tmp = f"test_{uuid.uuid4().hex}"
     sqlite_path, audit_log = _tmp_state_paths(tmp)
@@ -504,6 +577,7 @@ def test_count_actions_today_paid_scope_filters_non_billable() -> None:
     assert _count_actions_today(store, action_type="call.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.interest_nudge", paid_only=True) == 1
+    store.close()
 
 
 def test_compute_sms_channel_budgets_holds_interest_reserve() -> None:

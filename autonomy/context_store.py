@@ -58,7 +58,25 @@ class ContextStore:
         self.audit_log.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.sqlite_path)
         self.conn.row_factory = sqlite3.Row
+        self._closed = False
         self._init_schema()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        with contextlib.suppress(sqlite3.Error, ValueError):
+            self.conn.close()
+        self._closed = True
+
+    def __enter__(self) -> "ContextStore":
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb) -> bool:
+        self.close()
+        return False
+
+    def __del__(self) -> None:
+        self.close()
 
     def _init_schema(self) -> None:
         cur = self.conn.cursor()

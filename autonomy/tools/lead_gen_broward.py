@@ -14,6 +14,13 @@ from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency in local/CI environments
+    def load_dotenv(*_args, **_kwargs) -> bool:
+        return False
+
+load_dotenv()
 
 try:
     from dotenv import load_dotenv
@@ -660,7 +667,7 @@ def main() -> None:
                 enriched = sum(1 for row in needs_enrichment if (row.get("name") or "").strip())
                 print(f"Scrapling: {enriched}/{len(needs_enrichment)} leads enriched with names")
     except ImportError:
-        # Anchor Browser integration is optional; skip enrichment if missing
+        # Scrapling enrichment is optional; skip when dependency is unavailable.
         pass
 
     write_leads(args.output, leads, replace=args.replace)

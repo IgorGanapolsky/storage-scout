@@ -391,6 +391,8 @@ def sync_fastmail_inbox(
     finally:
         with contextlib.suppress(Exception):
             imap.logout()
+        with contextlib.suppress(Exception):
+            store.close()
 
     return InboxSyncResult(
         processed_messages=processed,

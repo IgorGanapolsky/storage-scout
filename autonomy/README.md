@@ -18,6 +18,7 @@ It runs in **dry-run** by default and becomes live when credentials are provided
 ## Files
 - `autonomy/config.example.json` - configuration template
 - `autonomy/config.ai-seo.json` - AEO Autopilot config (dry-run default)
+- `autonomy/edit_mode.overrides.example.json` - Edit Mode override template (local copy into `autonomy/state/`)
 - `autonomy/data/leads_ai_seo.csv` - sample lead list
 - `autonomy/state/leads_ai_seo_real.csv` - real lead list (gitignored; do not commit)
 - `autonomy/run.py` - entrypoint
@@ -166,6 +167,45 @@ Set in local `.env`:
 - `REPORT_DELIVERY=email|ntfy|both|none` (default: `email`)
 - `NTFY_SERVER=https://ntfy.sh` (optional; for `REPORT_DELIVERY=ntfy|both`)
 - `NTFY_TOPIC=topic-name[,another-topic]` (required for `REPORT_DELIVERY=ntfy|both`)
+
+## Edit Mode (Runtime Overrides)
+Use a local JSON override file to adjust live behavior without code deploys.
+
+Set in local `.env`:
+- `EDIT_MODE_ENABLED=1` (default on)
+- `EDIT_MODE_OVERRIDE_PATH=autonomy/state/edit_mode.overrides.json`
+
+Override file shape:
+```json
+{
+  "env": {
+    "AUTO_CALLS_ENABLED": "1",
+    "PAID_DAILY_CALL_CAP": "12"
+  },
+  "config": {
+    "company": {
+      "booking_url": "https://calendly.com/igorganapolsky/audit-call"
+    },
+    "agents": {
+      "outreach": {
+        "daily_send_limit": 10
+      }
+    }
+  }
+}
+```
+
+`env` keys are stringified and applied before runtime checks. `config` is deep-merged into the loaded config.
+
+## Approval Gate (Semi-Autonomous Risk Control)
+Use approval gates to require explicit grants for risky action categories while keeping the system autonomous by default.
+
+Set in local `.env`:
+- `APPROVAL_GATE_ENABLED=1`
+- `APPROVAL_REQUIRED_ACTIONS=calls.twilio,sms.twilio,sms.interest_nudge,report.email,report.ntfy`
+- `APPROVAL_GRANTS=calls.twilio,sms.twilio` (per-run allow list; use `*` to allow all)
+
+When gate is enabled and an action is required but not granted, live job blocks that action and records a guardrail block event.
 
 ## Agent Commerce (Lightweight, Non-Crypto)
 Twilio API calls now include lightweight agent identity headers plus optional request signing and per-call metering.
