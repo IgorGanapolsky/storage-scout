@@ -18,6 +18,7 @@ from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
 from autonomy.tools.scoreboard import Scoreboard
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
+    _format_exception_notes,
     _is_business_hours,
     _is_reasonable_email,
     _lead_called_recently,
@@ -78,6 +79,48 @@ def test_map_twilio_call_to_outcome() -> None:
     assert map_twilio_call_to_outcome({"status": "completed", "answered_by": "human"})[0] == "spoke"
     assert map_twilio_call_to_outcome({"status": "completed"})[0] == "spoke"
     assert map_twilio_call_to_outcome({"status": "something-else"})[0] == "no_answer"
+
+
+def test_format_exception_notes_handles_invalid_http_error_json() -> None:
+    exc = urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json",
+        code=400,
+        msg="Bad Request",
+        hdrs=None,
+        fp=io.BytesIO(b"not-json"),
+    )
+    notes, details = _format_exception_notes(exc)
+    assert str(details.get("error_type") or "") == "HTTPError"
+    assert int(details.get("http_status") or 0) == 400
+    assert "status=400" in notes
+
+
+def test_format_exception_notes_handles_non_dict_http_error_json() -> None:
+    exc = urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json",
+        code=400,
+        msg="Bad Request",
+        hdrs=None,
+        fp=io.BytesIO(b"[]"),
+    )
+    notes, details = _format_exception_notes(exc)
+    assert str(details.get("error_type") or "") == "HTTPError"
+    assert int(details.get("http_status") or 0) == 400
+    assert notes == "exception=HTTPError status=400"
+
+
+def test_format_exception_notes_handles_empty_http_error_body() -> None:
+    exc = urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json",
+        code=503,
+        msg="Service Unavailable",
+        hdrs=None,
+        fp=io.BytesIO(b""),
+    )
+    notes, details = _format_exception_notes(exc)
+    assert str(details.get("error_type") or "") == "HTTPError"
+    assert int(details.get("http_status") or 0) == 503
+    assert notes == "exception=HTTPError status=503"
 
 
 def test_load_twilio_config_requires_e164_from_number() -> None:
@@ -529,6 +572,37 @@ def test_fetch_twilio_balance_api_error(monkeypatch) -> None:
     monkeypatch.setattr("autonomy.tools.twilio_autocall.urllib.request.urlopen", fake_urlopen)
     env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}
     assert fetch_twilio_balance(env) is None
+
+
+def test_fetch_twilio_balance_non_numeric_balance(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_autocall.urllib.request.urlopen",
+        lambda req, timeout=10: _FakeHTTPResponse({"balance": "not-a-number", "currency": "USD"}),
+    )
+    env = {"TWILIO_ACCOUNT_SID": "AC123", "TWILIO_AUTH_TOKEN": "token"}
+    assert fetch_twilio_balance(env) is None
+
+
+def test_run_auto_calls_disabled_reason() -> None:
+    result = run_auto_calls(
+        sqlite_path=Path(f"autonomy/state/test_autocall_{uuid4().hex}.sqlite3"),
+        audit_log=Path(f"autonomy/state/test_autocall_{uuid4().hex}.jsonl"),
+        env={},
+        call_rows=[{"email": "x@example.com", "phone": "9546211439", "state": "FL"}],
+    )
+    assert result.reason == "disabled"
+    assert result.attempted == 0
+
+
+def test_run_auto_calls_missing_twilio_env_reason() -> None:
+    result = run_auto_calls(
+        sqlite_path=Path(f"autonomy/state/test_autocall_{uuid4().hex}.sqlite3"),
+        audit_log=Path(f"autonomy/state/test_autocall_{uuid4().hex}.jsonl"),
+        env={"AUTO_CALLS_ENABLED": "1"},
+        call_rows=[{"email": "x@example.com", "phone": "9546211439", "state": "FL"}],
+    )
+    assert result.reason == "missing_twilio_env"
+    assert result.attempted == 0
 
 
 def test_run_auto_calls_low_balance_blocks(monkeypatch) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import os
@@ -26,7 +27,7 @@ def test_context_store_migrates_email_method_column_and_normalizes_unknown() -> 
     # Seed a legacy leads table (no email_method column).
     Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
     Path(audit_log).parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(sqlite_path) as conn:
+    with contextlib.closing(sqlite3.connect(sqlite_path)) as conn:
         conn.execute(
             """
             CREATE TABLE leads (
@@ -76,6 +77,7 @@ def test_context_store_migrates_email_method_column_and_normalizes_unknown() -> 
 
     method = cur.execute("SELECT email_method FROM leads WHERE id=?", ("a@example.com",)).fetchone()[0]
     assert method == "unknown"
+    store.close()
 
 
 def test_lead_source_csv_infers_email_method(tmp_path: Path) -> None:

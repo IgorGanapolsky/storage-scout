@@ -129,6 +129,93 @@ def _auth_header(cfg: TwilioSmsConfig) -> str:
     return f"Basic {b64}"
 
 
+def _parse_http_error(exc: urllib.error.HTTPError) -> tuple[int, dict[str, Any], str]:
+    status_code = int(getattr(exc, "code", 0) or 0)
+    error_body = ""
+    try:
+        with contextlib.suppress(Exception):
+            error_body = exc.read().decode("utf-8", errors="replace")
+    finally:
+        with contextlib.suppress(Exception):
+            exc.close()
+    error_data: dict[str, Any] = {}
+    with contextlib.suppress(Exception):
+        parsed = json.loads(error_body)
+        if isinstance(parsed, dict):
+            error_data = parsed
+    error_message = str(error_data.get("message", str(exc)))
+    return status_code, error_data, error_message
+
+
+def _record_twilio_http_failure(
+    payload: dict[str, Any],
+    *,
+    status_code: int,
+    error_data: dict[str, Any],
+    error_message: str,
+) -> None:
+    payload["outcome"] = "failed"
+    payload["twilio"] = {
+        "sid": "",
+        "status": "exception",
+        "error_code": error_data.get("code"),
+        "http_status": status_code,
+        "error_type": "HTTPError",
+        "error_message": error_message,
+    }
+    payload["notes"] = (
+        f"exception=HTTPError status={status_code} "
+        f"code={error_data.get('code', '')} "
+        f"message={error_message}"
+    )
+
+
+def _record_twilio_exception_failure(payload: dict[str, Any], exc: Exception) -> None:
+    payload["outcome"] = "failed"
+    payload["twilio"] = {
+        "sid": "",
+        "status": "exception",
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+    }
+    payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
+
+
+def _dispatch_sms_attempt(
+    *,
+    cfg: TwilioSmsConfig,
+    payload: dict[str, Any],
+    result: SmsResult,
+    to_number: str,
+    env: dict[str, str],
+    body_override: str | None = None,
+) -> None:
+    try:
+        resp = send_sms(cfg, to_number=to_number, body_override=body_override, env=env)
+        sid = resp.get("sid", "")
+        status = resp.get("status", "")
+        payload["outcome"] = "delivered"
+        payload["twilio"] = {
+            "sid": sid,
+            "status": status,
+            "error_code": resp.get("error_code"),
+            "error_message": resp.get("error_message"),
+        }
+        result.delivered += 1
+    except urllib.error.HTTPError as exc:
+        status_code, error_data, error_message = _parse_http_error(exc)
+        _record_twilio_http_failure(
+            payload,
+            status_code=status_code,
+            error_data=error_data,
+            error_message=error_message,
+        )
+        result.failed += 1
+    except Exception as exc:
+        _record_twilio_exception_failure(payload, exc)
+        result.failed += 1
+
+
 def send_sms(
     cfg: TwilioSmsConfig,
     *,
@@ -345,50 +432,13 @@ def run_sms_followup(
             "twilio": {},
         }
 
-        try:
-            resp = send_sms(cfg, to_number=phone, env=env)
-            sid = resp.get("sid", "")
-            status = resp.get("status", "")
-            payload["outcome"] = "delivered"
-            payload["twilio"] = {
-                "sid": sid,
-                "status": status,
-                "error_code": resp.get("error_code"),
-                "error_message": resp.get("error_message"),
-            }
-            result.delivered += 1
-        except urllib.error.HTTPError as exc:
-            error_body = ""
-            with contextlib.suppress(Exception):
-                error_body = exc.read().decode("utf-8", errors="replace")
-            error_data: dict[str, Any] = {}
-            with contextlib.suppress(Exception):
-                error_data = json.loads(error_body)
-            payload["outcome"] = "failed"
-            payload["twilio"] = {
-                "sid": "",
-                "status": "exception",
-                "error_code": error_data.get("code"),
-                "http_status": exc.code,
-                "error_type": "HTTPError",
-                "error_message": error_data.get("message", str(exc)),
-            }
-            payload["notes"] = (
-                f"exception=HTTPError status={exc.code} "
-                f"code={error_data.get('code', '')} "
-                f"message={error_data.get('message', str(exc))}"
-            )
-            result.failed += 1
-        except Exception as exc:
-            payload["outcome"] = "failed"
-            payload["twilio"] = {
-                "sid": "",
-                "status": "exception",
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            }
-            payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
-            result.failed += 1
+        _dispatch_sms_attempt(
+            cfg=cfg,
+            payload=payload,
+            result=result,
+            to_number=phone,
+            env=env,
+        )
 
         result.attempted += 1
         sent_count += 1
@@ -454,50 +504,14 @@ def run_sms_followup(
                 "twilio": {},
             }
 
-            try:
-                resp = send_sms(cfg, to_number=phone, body_override=cfg.second_nudge_body, env=env)
-                sid = resp.get("sid", "")
-                status = resp.get("status", "")
-                payload["outcome"] = "delivered"
-                payload["twilio"] = {
-                    "sid": sid,
-                    "status": status,
-                    "error_code": resp.get("error_code"),
-                    "error_message": resp.get("error_message"),
-                }
-                result.delivered += 1
-            except urllib.error.HTTPError as exc:
-                error_body = ""
-                with contextlib.suppress(Exception):
-                    error_body = exc.read().decode("utf-8", errors="replace")
-                error_data: dict[str, Any] = {}
-                with contextlib.suppress(Exception):
-                    error_data = json.loads(error_body)
-                payload["outcome"] = "failed"
-                payload["twilio"] = {
-                    "sid": "",
-                    "status": "exception",
-                    "error_code": error_data.get("code"),
-                    "http_status": exc.code,
-                    "error_type": "HTTPError",
-                    "error_message": error_data.get("message", str(exc)),
-                }
-                payload["notes"] = (
-                    f"exception=HTTPError status={exc.code} "
-                    f"code={error_data.get('code', '')} "
-                    f"message={error_data.get('message', str(exc))}"
-                )
-                result.failed += 1
-            except Exception as exc:
-                payload["outcome"] = "failed"
-                payload["twilio"] = {
-                    "sid": "",
-                    "status": "exception",
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                }
-                payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
-                result.failed += 1
+            _dispatch_sms_attempt(
+                cfg=cfg,
+                payload=payload,
+                result=result,
+                to_number=phone,
+                env=env,
+                body_override=cfg.second_nudge_body,
+            )
 
             result.attempted += 1
             store.log_action(

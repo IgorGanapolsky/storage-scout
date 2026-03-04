@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -52,7 +53,7 @@ def load_scoreboard(sqlite_path: Path, days: int) -> Scoreboard:
 
     cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
-    with sqlite3.connect(sqlite_path) as conn:
+    with contextlib.closing(sqlite3.connect(sqlite_path)) as conn:
         cur = conn.cursor()
 
         leads_total = _count(cur, "SELECT COUNT(1) FROM leads")

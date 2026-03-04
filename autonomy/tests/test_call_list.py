@@ -79,6 +79,7 @@ def test_call_list_includes_website_and_flags_role_inbox(tmp_path: Path) -> None
     assert r.website == "https://a.example.com"
     assert r.role_inbox == "yes"
     assert r.email_sent_count == 1
+    store.close()
 
 
 def test_call_list_prioritizes_warm_statuses() -> None:
@@ -119,6 +120,7 @@ def test_call_list_prioritizes_warm_statuses() -> None:
 
     ordered = [r.email for r in rows]
     assert ordered[:3] == ["replied@example.com", "contacted@example.com", "new@example.com"]
+    store.close()
 
 
 def test_call_list_high_intent_filters_role_inbox_and_low_scores() -> None:
@@ -187,6 +189,7 @@ def test_call_list_high_intent_filters_role_inbox_and_low_scores() -> None:
     )
 
     assert [r.email for r in rows] == ["jane@clinic.example"]
+    store.close()
 
 
 def test_call_list_enrichment_prioritizes_recent_spoke_signals() -> None:
@@ -238,6 +241,7 @@ def test_call_list_enrichment_prioritizes_recent_spoke_signals() -> None:
     assert rows[0].priority_score > rows[1].priority_score
     assert rows[0].recent_spoke == 1
     assert rows[1].recent_no_answer == 1
+    store.close()
 
 
 def test_call_list_can_disable_enrichment_for_static_ranking() -> None:
@@ -290,3 +294,4 @@ def test_call_list_can_disable_enrichment_for_static_ranking() -> None:
 
     # Without enrichment, static ordering still favors warm status buckets.
     assert [r.email for r in rows[:2]] == ["lowcontacted@clinic.example", "highnew@clinic.example"]
+    store.close()

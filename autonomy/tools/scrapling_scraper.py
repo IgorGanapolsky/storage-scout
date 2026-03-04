@@ -19,10 +19,18 @@ import re
 import time
 from urllib.parse import urljoin
 
-import openai
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
-from dotenv import load_dotenv
-from scrapling import StealthyFetcher
+
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency in CI/test environments
+    def load_dotenv(*_args, **_kwargs):  # pragma: no cover  # type: ignore[no-redef]
+        return False
+
+try:
+    import openai
+except Exception:  # pragma: no cover - optional dependency in local envs
+    openai = None  # pragma: no cover
 
 load_dotenv()
 
@@ -58,7 +66,7 @@ _NAME_PATTERNS = [
 def extract_contact_name_llm(html: str) -> str:
     """Extract the owner/dentist name from page HTML using OpenAI, with regex fallback."""
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not api_key or openai is None:
         for pattern in _NAME_PATTERNS:
             match = pattern.search(html)
             if match:
@@ -100,6 +108,8 @@ def scrape_website(base_url: str) -> dict:
 
     try:
         # Scrape homepage.
+        from scrapling import StealthyFetcher
+
         fetcher = StealthyFetcher()
         page = fetcher.fetch(base_url)
         html = page.body.decode("utf-8", errors="ignore")
@@ -198,10 +208,14 @@ def enrich_lead(lead: dict) -> dict:
 
 def enrich_leads_batch(leads: list[dict], max_per_session: int = 5) -> list[dict]:
     """Enrich a batch of leads using Scrapling."""
-    for i, lead in enumerate(leads):
-        enrich_lead(lead)
-        if i < len(leads) - 1:
-            time.sleep(1)  # Polite delay
+    batch_size = max(1, int(max_per_session or 1))
+    for start in range(0, len(leads), batch_size):
+        batch = leads[start : start + batch_size]
+        for offset, lead in enumerate(batch):
+            enrich_lead(lead)
+            is_last = (start + offset) >= (len(leads) - 1)
+            if not is_last:
+                time.sleep(1)  # Polite delay
     return leads
 
 if __name__ == "__main__":

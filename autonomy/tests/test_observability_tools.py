@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.fastmail_inbox_sync import (
     InboxSyncResult,
@@ -1168,11 +1170,8 @@ def test_resolve_config_path_default_live_missing_exits(tmp_path: Path) -> None:
     repo_root = tmp_path
     (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
 
-    try:
+    with pytest.raises(SystemExit, match="Missing required live config"):
         _resolve_config_path(repo_root=repo_root, config_arg="autonomy/state/config.ai-seo.live.json")
-        assert False, "expected SystemExit for missing default live config"
-    except SystemExit as exc:
-        assert "Missing required live config" in str(exc)
 
 
 def test_live_job_main_allows_no_fastmail_creds_when_sync_disabled_and_report_none(monkeypatch) -> None:
@@ -1289,11 +1288,8 @@ def test_live_job_main_email_report_requires_fastmail_creds_even_if_sync_disable
     monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
     monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
 
-    try:
+    with pytest.raises(SystemExit, match="Missing FASTMAIL_USER in \\.env"):
         live_job_main()
-        assert False, "expected SystemExit for missing FASTMAIL credentials"
-    except SystemExit as exc:
-        assert "Missing FASTMAIL_USER in .env" in str(exc)
 
 
 def test_live_job_main_email_report_requires_smtp_when_fastmail_user_present(monkeypatch) -> None:
@@ -1307,11 +1303,8 @@ def test_live_job_main_email_report_requires_smtp_when_fastmail_user_present(mon
     monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
     monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
 
-    try:
+    with pytest.raises(SystemExit, match="Missing SMTP_PASSWORD in \\.env"):
         live_job_main()
-        assert False, "expected SystemExit for missing SMTP password"
-    except SystemExit as exc:
-        assert "Missing SMTP_PASSWORD in .env" in str(exc)
 
 
 def test_live_job_main_email_report_requires_recipient(monkeypatch) -> None:
@@ -1325,11 +1318,8 @@ def test_live_job_main_email_report_requires_recipient(monkeypatch) -> None:
     monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
     monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
 
-    try:
+    with pytest.raises(SystemExit, match="Missing FASTMAIL_FORWARD_TO or --report-to"):
         live_job_main()
-        assert False, "expected SystemExit for missing report recipient"
-    except SystemExit as exc:
-        assert "Missing FASTMAIL_FORWARD_TO or --report-to" in str(exc)
 
 
 def test_live_job_main_ntfy_report_requires_topic(monkeypatch) -> None:
@@ -1341,11 +1331,8 @@ def test_live_job_main_ntfy_report_requires_topic(monkeypatch) -> None:
     monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
     monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
 
-    try:
+    with pytest.raises(SystemExit, match="Missing NTFY_TOPIC"):
         live_job_main()
-        assert False, "expected SystemExit for missing ntfy topic"
-    except SystemExit as exc:
-        assert "Missing NTFY_TOPIC" in str(exc)
 
 
 def test_live_job_main_applies_allow_fastmail_and_approval_defaults(monkeypatch) -> None:
