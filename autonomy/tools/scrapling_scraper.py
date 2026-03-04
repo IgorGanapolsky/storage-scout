@@ -126,7 +126,10 @@ def scrape_website(base_url: str) -> dict:
                 time.sleep(0.5)
 
     except Exception as exc:
-        log.warning("Failed to scrape website %s during enrichment (%s).", base_url, exc.__class__.__name__)
+        log.warning(
+            "Failed to scrape website during enrichment (error_type=%s).",
+            exc.__class__.__name__,
+        )
         return {"emails": emails, "name": name, "pages_scraped": pages_scraped}
 
     return {"emails": emails, "name": name, "pages_scraped": pages_scraped}
@@ -148,7 +151,7 @@ def enrich_lead(lead: dict) -> dict:
         website = "https://" + website
 
     try:
-        log.info("Scrapling starting for lead enrichment: %s", website)
+        log.info("Scrapling starting for lead enrichment.")
         result = scrape_website(website)
 
         # Fill in missing email.
@@ -179,15 +182,17 @@ def enrich_lead(lead: dict) -> dict:
             lead["name"] = result["name"]
 
         log.info(
-            "Enriched %s: emails_found=%d, has_name=%s, pages=%d",
-            website,
+            "Enriched lead: emails_found=%d, has_name=%s, pages=%d",
             len(result["emails"]),
             bool(result["name"]),
             result["pages_scraped"],
         )
 
     except Exception as exc:
-        log.warning("Scrapling enrichment failed for %s: %s", website, exc)
+        log.warning(
+            "Scrapling enrichment failed (error_type=%s).",
+            exc.__class__.__name__,
+        )
 
     return lead
 
