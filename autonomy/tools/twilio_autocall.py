@@ -40,6 +40,7 @@ from autonomy.tools.retell_caller import (
 )
 from autonomy.utils import UTC, EMAIL_RE, is_business_hours, normalize_us_phone, now_utc_iso, truthy
 
+TWILIO_AUTOCALL_AGENT_ID = "agent.autocall.twilio.v1"
 
 
 def normalize_us_phone_e164(raw_phone: str) -> str | None:
@@ -191,11 +192,11 @@ def fetch_twilio_balance(env: dict[str, str]) -> float | None:
             headers={"Authorization": f"Basic {auth}"},
             payload=None,
             timeout_secs=10,
-            agent_id="agent.autocall.twilio.v1",
+            agent_id=TWILIO_AUTOCALL_AGENT_ID,
             env=env,
             urlopen_func=urllib.request.urlopen,
         )
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+    except (TimeoutError, OSError, ValueError):
         return None
 
     raw_balance = payload.get("balance")
@@ -226,7 +227,7 @@ def _twilio_request(
         headers=headers,
         payload=payload,
         timeout_secs=timeout_secs,
-        agent_id="agent.autocall.twilio.v1",
+        agent_id=TWILIO_AUTOCALL_AGENT_ID,
         env=env,
         urlopen_func=urllib.request.urlopen,
     )
@@ -504,7 +505,7 @@ def run_auto_calls(
             else:
                 twilio_sid = str(final.get("sid") or "").strip()
                 trace_id = f"twilio:{twilio_sid}" if twilio_sid else f"twilio:{attempted_at}"
-                agent_id_str = "agent.autocall.twilio.v1"
+                agent_id_str = TWILIO_AUTOCALL_AGENT_ID
                 provider_payload = {
                     "twilio": {
                         "status": str(final.get("status") or ""),

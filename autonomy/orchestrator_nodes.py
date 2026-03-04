@@ -9,8 +9,9 @@ from autonomy.tools.lead_gen_broward import (
     DEFAULT_CATEGORIES,
     build_leads,
     get_api_key,
-    load_cities,
+    load_city_index,
     load_existing,
+    load_markets,
     save_city_index,
     write_leads,
 )
@@ -69,22 +70,32 @@ class IngestionNode(Node):
             state.metadata["ingestion_skipped"] = "limit_zero"
             return state
 
-        cities = load_cities(None)
-        existing_emails, _, _ = load_existing(output_path)
+        default_state = (state.env.get("LEADGEN_DEFAULT_STATE") or "FL").strip().upper() or "FL"
+        cursor_key = f"default:{default_state}"
+        try:
+            markets = load_markets(None, default_state=default_state)
+        except SystemExit:
+            state.metadata["ingestion_skipped"] = "missing_markets"
+            return state
 
-        # build_leads takes direct params
-        new_leads, _ = build_leads(
-            api_key=api_key,
+        start_index = load_city_index(cursor_key)
+        existing_emails, existing_domains, existing_phones = load_existing(output_path)
+
+        new_leads, new_index = build_leads(
+            markets=markets,
             categories=DEFAULT_CATEGORIES,
-            cities=cities,
             limit=limit,
+            start_index=start_index,
+            api_key=api_key,
             existing_emails=existing_emails,
+            existing_domains=existing_domains,
+            existing_phones=existing_phones,
         )
 
         if new_leads:
-            write_leads(state.sqlite_path, new_leads)
+            write_leads(output_path, new_leads, replace=False)
             state.leads_generated = len(new_leads)
-            save_city_index(state.repo_root, cities)
+            save_city_index(new_index, cursor_key)
 
         return state
 

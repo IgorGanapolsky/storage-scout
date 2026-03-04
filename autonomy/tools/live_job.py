@@ -33,8 +33,9 @@ from autonomy.tools.lead_gen_broward import (
     DEFAULT_CATEGORIES,
     build_leads,
     get_api_key,
-    load_cities,
+    load_city_index,
     load_existing,
+    load_markets,
     save_city_index,
     write_leads,
 )
@@ -53,6 +54,8 @@ from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
 
 TWILIO_HARD_DISABLED_REASON = "hard_disabled_twilio"
+TWILIO_SID_PRESENT_SQL = "COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''"
+TWILIO_WARM_CLOSE_AGENT_ID = "agent.sms.twilio.warm_close.v1"
 
 
 def _run_missed_call_audits(*, call_list: list[CallListRow], env: dict[str, str]) -> list[dict]:
@@ -339,15 +342,15 @@ def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bo
     if paid_only and action_type == "call.attempt":
         where.append("agent_id = ?")
         params.append("agent.autocall.twilio.v1")
-        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+        where.append(TWILIO_SID_PRESENT_SQL)
     elif paid_only and action_type in {"sms.attempt", "sms.interest_nudge"}:
         where.append("agent_id IN (?, ?)")
         params.extend(["agent.sms.twilio.v1", "agent.sms.twilio.nudge.v1"])
-        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+        where.append(TWILIO_SID_PRESENT_SQL)
     elif paid_only and action_type == "sms.warm_close":
         where.append("agent_id = ?")
-        params.append("agent.sms.twilio.warm_close.v1")
-        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+        params.append(TWILIO_WARM_CLOSE_AGENT_ID)
+        where.append(TWILIO_SID_PRESENT_SQL)
 
     sql = f"SELECT COUNT(1) FROM actions WHERE {' AND '.join(where)}"
     row = store.conn.execute(sql, tuple(params)).fetchone()
@@ -989,6 +992,36 @@ def _normalize_email_identity(value: str | None) -> str:
     return email
 
 
+def _resolve_runtime_smtp_user(*, email_cfg: dict[str, object], env: dict[str, str]) -> tuple[str, str]:
+    smtp_user_env = _normalize_email_identity(env.get("SMTP_USER") or "")
+    fastmail_user_env = _normalize_email_identity(env.get("FASTMAIL_USER") or "")
+    runtime_smtp_user = smtp_user_env or fastmail_user_env
+    if runtime_smtp_user:
+        email_cfg["smtp_user"] = runtime_smtp_user
+        source = "env.smtp_user" if smtp_user_env else "env.fastmail_user"
+        return runtime_smtp_user, source
+    return _normalize_email_identity(str(email_cfg.get("smtp_user") or "")), "config"
+
+
+def _resolve_runtime_reply_to(
+    *,
+    company_cfg: dict[str, object],
+    env: dict[str, str],
+    final_smtp_user: str,
+    original_reply_to: str,
+) -> tuple[str, str]:
+    reply_to_override = _normalize_email_identity(
+        env.get("REPLY_TO_EMAIL") or env.get("FASTMAIL_REPLY_TO") or ""
+    )
+    if reply_to_override:
+        company_cfg["reply_to"] = reply_to_override
+        return reply_to_override, "env.reply_to"
+    if final_smtp_user and original_reply_to != final_smtp_user:
+        company_cfg["reply_to"] = final_smtp_user
+        return final_smtp_user, "auto.smtp_user"
+    return _normalize_email_identity(str(company_cfg.get("reply_to") or "")), "config"
+
+
 def _apply_runtime_email_identity(*, cfg: Any, env: dict[str, str]) -> dict[str, object]:
     """Align SMTP sender/reply-to with runtime mailbox credentials when needed."""
     email_cfg = dict(getattr(cfg, "email", {}) or {})
@@ -997,25 +1030,13 @@ def _apply_runtime_email_identity(*, cfg: Any, env: dict[str, str]) -> dict[str,
     original_smtp_user = _normalize_email_identity(str(email_cfg.get("smtp_user") or ""))
     original_reply_to = _normalize_email_identity(str(company_cfg.get("reply_to") or ""))
 
-    smtp_source = "config"
-    smtp_user_env = _normalize_email_identity(env.get("SMTP_USER") or "")
-    fastmail_user_env = _normalize_email_identity(env.get("FASTMAIL_USER") or "")
-    runtime_smtp_user = smtp_user_env or fastmail_user_env
-    if runtime_smtp_user:
-        email_cfg["smtp_user"] = runtime_smtp_user
-        smtp_source = "env.smtp_user" if smtp_user_env else "env.fastmail_user"
-
-    final_smtp_user = _normalize_email_identity(str(email_cfg.get("smtp_user") or ""))
-    reply_source = "config"
-    reply_to_override = _normalize_email_identity(env.get("REPLY_TO_EMAIL") or env.get("FASTMAIL_REPLY_TO") or "")
-    if reply_to_override:
-        company_cfg["reply_to"] = reply_to_override
-        reply_source = "env.reply_to"
-    elif final_smtp_user and original_reply_to != final_smtp_user:
-        company_cfg["reply_to"] = final_smtp_user
-        reply_source = "auto.smtp_user"
-
-    final_reply_to = _normalize_email_identity(str(company_cfg.get("reply_to") or ""))
+    final_smtp_user, smtp_source = _resolve_runtime_smtp_user(email_cfg=email_cfg, env=env)
+    final_reply_to, reply_source = _resolve_runtime_reply_to(
+        company_cfg=company_cfg,
+        env=env,
+        final_smtp_user=final_smtp_user,
+        original_reply_to=original_reply_to,
+    )
     cfg.email = email_cfg
     cfg.company = company_cfg
     return {
@@ -1248,10 +1269,14 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
     except SystemExit:
         return 0
 
+    default_state = (env.get("LEADGEN_DEFAULT_STATE") or env.get("LEADGEN_STATE") or "FL").strip().upper() or "FL"
+    cursor_key = f"default:{default_state}"
     try:
-        cities = load_cities(None)
+        markets = load_markets(None, default_state=default_state)
     except SystemExit:
         return 0
+
+    start_index = load_city_index(cursor_key)
     categories_raw = (
         (env.get("DAILY_LEADGEN_CATEGORIES") or "").strip()
         or (env.get("LEADGEN_CATEGORIES") or "").strip()
@@ -1261,9 +1286,10 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
     existing_emails, existing_domains, existing_phones = load_existing(output_path)
     try:
         leads, new_index = build_leads(
-            cities=cities,
+            markets=markets,
             categories=categories,
             limit=limit,
+            start_index=start_index,
             api_key=api_key,
             existing_emails=existing_emails,
             existing_domains=existing_domains,
@@ -1278,7 +1304,7 @@ def _maybe_run_leadgen(*, cfg, env: dict, repo_root: Path) -> int:
         return 0
 
     write_leads(output_path, leads, replace=False)
-    save_city_index(new_index)
+    save_city_index(new_index, cursor_key)
     return len(leads)
 
 
