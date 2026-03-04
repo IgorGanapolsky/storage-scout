@@ -56,8 +56,6 @@ from autonomy.utils import UTC, truthy
 TWILIO_HARD_DISABLED_REASON = "hard_disabled_twilio"
 TWILIO_SID_PRESENT_SQL = "COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''"
 TWILIO_WARM_CLOSE_AGENT_ID = "agent.sms.twilio.warm_close.v1"
-# Keep import bindings alive for test monkeypatch targets and compatibility hooks.
-_TWILIO_COMPAT_SHIMS = (run_twilio_inbox_sync, run_twilio_tollfree_watchdog)
 
 
 def _run_missed_call_audits(*, call_list: list[CallListRow], env: dict[str, str]) -> list[dict]:
@@ -1429,6 +1427,8 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
+    # Keep symbol references explicit for monkeypatch targets in tests.
+    _ = (run_twilio_inbox_sync, run_twilio_tollfree_watchdog)
     env: dict[str, str] = {}
     dotenv_paths = [p.strip() for p in str(args.dotenv or "").split(",") if p.strip()]
     if not dotenv_paths:
