@@ -19,10 +19,13 @@ import re
 import time
 from urllib.parse import urljoin
 
-import openai
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 from dotenv import load_dotenv
-from scrapling import StealthyFetcher
+
+try:
+    import openai
+except Exception:  # pragma: no cover - optional dependency in local envs
+    openai = None
 
 load_dotenv()
 
@@ -58,7 +61,7 @@ _NAME_PATTERNS = [
 def extract_contact_name_llm(html: str) -> str:
     """Extract the owner/dentist name from page HTML using OpenAI, with regex fallback."""
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not api_key or openai is None:
         for pattern in _NAME_PATTERNS:
             match = pattern.search(html)
             if match:
@@ -100,6 +103,8 @@ def scrape_website(base_url: str) -> dict:
 
     try:
         # Scrape homepage.
+        from scrapling import StealthyFetcher
+
         fetcher = StealthyFetcher()
         page = fetcher.fetch(base_url)
         html = page.body.decode("utf-8", errors="ignore")
