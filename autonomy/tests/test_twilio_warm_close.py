@@ -28,8 +28,7 @@ class _FakeHTTPResponse:
 
 
 def _seed_warm_lead(*, sqlite_path: Path, audit_log: Path, lead_id: str, phone: str, status: str) -> None:
-    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
-    try:
+    with ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log)) as store:
         store.upsert_lead(
             Lead(
                 id=lead_id,
@@ -46,8 +45,6 @@ def _seed_warm_lead(*, sqlite_path: Path, audit_log: Path, lead_id: str, phone: 
                 email_method="direct",
             )
         )
-    finally:
-        store.close()
 
 
 def test_warm_close_sends_and_respects_cooldown(monkeypatch) -> None:
@@ -124,8 +121,7 @@ def test_warm_close_skips_leads_with_recent_conversion() -> None:
         status="interested",
     )
 
-    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
-    try:
+    with ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log)) as store:
         ts = (datetime.now(UTC) + timedelta(seconds=1)).isoformat()
         store.conn.execute(
             "INSERT INTO actions (ts, agent_id, action_type, trace_id, payload_json) VALUES (?, ?, ?, ?, ?)",
@@ -138,8 +134,6 @@ def test_warm_close_skips_leads_with_recent_conversion() -> None:
             ),
         )
         store.conn.commit()
-    finally:
-        store.close()
 
     env = {
         "AUTO_WARM_CLOSE_ENABLED": "1",
@@ -179,4 +173,3 @@ def test_warm_close_disabled_and_missing_env() -> None:
         env={"AUTO_WARM_CLOSE_ENABLED": "1"},
     )
     assert missing.reason == "missing_twilio_env"
-
