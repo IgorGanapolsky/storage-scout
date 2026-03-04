@@ -87,6 +87,13 @@ Optional tuning:
 - `AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES=120`
 - `AUTO_INTEREST_NUDGE_COOLDOWN_HOURS=24`
 - `AUTO_INTEREST_NUDGE_LOOKBACK_DAYS=14`
+- `AUTO_WARM_CLOSE_ENABLED=1` (default on; sends close-loop SMS to warm `replied|interested` leads)
+- `AUTO_WARM_CLOSE_MAX_PER_RUN=3`
+- `AUTO_WARM_CLOSE_STATUSES=replied,interested`
+- `AUTO_WARM_CLOSE_MIN_SCORE=70`
+- `AUTO_WARM_CLOSE_COOLDOWN_HOURS=24`
+- `AUTO_WARM_CLOSE_LOOKBACK_DAYS=30`
+- `PAID_DAILY_SMS_WARM_CLOSE_RESERVE=2` (reserve SMS quota/day for warm close loop before follow-up traffic)
 - `PAID_DAILY_SMS_INTEREST_RESERVE=3` (reserve SMS quota/day for inbound "interested" nudges)
 - `TWILIO_TOLLFREE_WATCHDOG_ENABLED=1` (default on in live job)
 - `TWILIO_TOLLFREE_AUTOFIX_ENABLED=1` (default on; fix known editable rejection patterns such as `30485`)
@@ -202,8 +209,8 @@ Use approval gates to require explicit grants for risky action categories while 
 
 Set in local `.env`:
 - `APPROVAL_GATE_ENABLED=1`
-- `APPROVAL_REQUIRED_ACTIONS=calls.twilio,sms.twilio,sms.interest_nudge,report.email,report.ntfy`
-- `APPROVAL_GRANTS=calls.twilio,sms.twilio` (per-run allow list; use `*` to allow all)
+- `APPROVAL_REQUIRED_ACTIONS=calls.twilio,sms.twilio,sms.interest_nudge,sms.warm_close,report.email,report.ntfy`
+- `APPROVAL_GRANTS=calls.twilio,sms.twilio,sms.warm_close` (per-run allow list; use `*` to allow all)
 
 When gate is enabled and an action is required but not granted, live job blocks that action and records a guardrail block event.
 

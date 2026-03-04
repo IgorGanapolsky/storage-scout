@@ -36,6 +36,7 @@ from autonomy.tools.live_job import (
 from autonomy.tools.call_list import CallListRow
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
 from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
+from autonomy.tools.twilio_warm_close import WarmCloseResult
 
 
 def _tmp_state_paths(tmp_name: str) -> tuple[str, str]:
@@ -412,6 +413,63 @@ def test_live_job_report_includes_twilio_tollfree_section() -> None:
     assert "- auto_fix_applied: True" in report
 
 
+def test_live_job_report_includes_warm_close_section() -> None:
+    inbox = InboxSyncResult(
+        processed_messages=0,
+        new_bounces=0,
+        new_replies=0,
+        new_opt_outs=0,
+        intake_submissions=0,
+        calendly_bookings=0,
+        stripe_payments=0,
+        last_uid=0,
+    )
+    board = Scoreboard(
+        leads_total=0,
+        leads_new=0,
+        leads_contacted=0,
+        leads_replied=0,
+        leads_bounced=0,
+        leads_other=0,
+        email_sent_total=0,
+        email_sent_recent=0,
+        emailed_leads_recent=0,
+        bounced_leads_recent=0,
+        bounce_rate_recent=0.0,
+        opt_out_total=0,
+        last_email_ts="",
+        call_attempts_total=0,
+        call_attempts_recent=0,
+        call_booked_total=0,
+        call_booked_recent=0,
+        calendly_bookings_total=0,
+        calendly_bookings_recent=0,
+        stripe_payments_total=0,
+        stripe_payments_recent=0,
+        bookings_total=0,
+        bookings_recent=0,
+        last_call_ts="",
+    )
+    report = _format_report(
+        leadgen_new=0,
+        engine_result={"sent_initial": 0, "sent_followup": 0},
+        inbox_result=inbox,
+        scoreboard=board,
+        scoreboard_days=30,
+        warm_close=WarmCloseResult(
+            reason="ok",
+            candidates=2,
+            attempted=2,
+            sent=1,
+            failed=1,
+            skipped=0,
+            converted_skipped=0,
+        ),
+    )
+    assert "Warm lead close loop (Twilio)" in report
+    assert "- sent: 1" in report
+
+
 def test_stop_loss_blocks_and_resets(tmp_path: Path) -> None:
     repo_root = tmp_path
     (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
@@ -572,11 +630,19 @@ def test_count_actions_today_paid_scope_filters_non_billable() -> None:
         trace_id="twilio-sms-nudge",
         payload={"lead_id": "d@example.com", "twilio": {"sid": "SM124"}},
     )
+    # Twilio warm-close SMS with SID should count as billable too.
+    store.log_action(
+        agent_id="agent.sms.twilio.warm_close.v1",
+        action_type="sms.warm_close",
+        trace_id="twilio-sms-warm-close",
+        payload={"lead_id": "e@example.com", "twilio": {"sid": "SM125"}},
+    )
 
     assert _count_actions_today(store, action_type="call.attempt") == 2
     assert _count_actions_today(store, action_type="call.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.attempt", paid_only=True) == 1
     assert _count_actions_today(store, action_type="sms.interest_nudge", paid_only=True) == 1
+    assert _count_actions_today(store, action_type="sms.warm_close", paid_only=True) == 1
     store.close()
 
 
@@ -613,6 +679,23 @@ def test_compute_sms_channel_budgets_releases_reserve_after_nudges() -> None:
     assert budgets2["total_remaining"] == 1
     assert budgets2["interest_reserve_remaining"] == 0
     assert budgets2["followup_remaining"] == 1
+
+
+def test_compute_sms_channel_budgets_holds_warm_close_reserve() -> None:
+    budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=10,
+        sms_today_followup=6,
+        sms_today_nudge=1,
+        sms_today_warm_close=0,
+        interest_reserve=2,
+        warm_close_reserve=2,
+    )
+    assert budgets["total_remaining"] == 3
+    assert budgets["warm_close_reserve_remaining"] == 2
+    assert budgets["interest_reserve_remaining"] == 1
+    assert budgets["warm_close_remaining"] == 2
+    assert budgets["nudge_remaining"] == 1
+    assert budgets["followup_remaining"] == 0
 
 
 def test_should_block_deliverability_trips_at_threshold() -> None:
