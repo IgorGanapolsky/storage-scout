@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -384,3 +385,190 @@ def test_engine_pauses_outreach_when_filtered_bounce_rate_spikes_even_if_overall
     assert payload["deliverability_overall"]["bounced"] == 10
     assert payload["deliverability_filtered"]["emailed"] == 20
     assert payload["deliverability_filtered"]["bounced"] == 10
+
+
+def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    store = ContextStore(sqlite_path=sqlite_path, audit_log=audit_log)
+
+    eligible_newer = "newer@example.com"
+    eligible_older = "older@example.com"
+    blocked_recent = "recent@example.com"
+    blocked_optout = "optout@example.com"
+    blocked_converted = "converted@example.com"
+    blocked_method = "method@example.com"
+
+    def _put(email: str, status: str, method: str = "direct") -> None:
+        store.upsert_lead(
+            Lead(
+                id=email,
+                name=email.split("@", 1)[0],
+                company=email,
+                email=email,
+                phone="",
+                service="med spa",
+                city="Miami",
+                state="FL",
+                source="t",
+                score=90,
+                status=status,
+                email_method=method,
+            )
+        )
+
+    _put(eligible_newer, "interested")
+    _put(eligible_older, "replied")
+    _put(blocked_recent, "interested")
+    _put(blocked_optout, "interested")
+    _put(blocked_converted, "interested")
+    _put(blocked_method, "interested", method="scrape")
+
+    store.log_action("agent", "lead.reply", "t1", {"lead_id": eligible_newer})
+    store.log_action("agent", "sms.inbound", "t2", {"lead_id": eligible_older, "classification": "interested"})
+    store.log_action("agent", "lead.reply", "t3", {"lead_id": blocked_recent})
+    store.log_action("agent", "lead.reply", "t4", {"lead_id": blocked_optout})
+    store.log_action("agent", "lead.reply", "t5", {"lead_id": blocked_converted})
+    store.log_action("agent", "lead.reply", "t6", {"lead_id": blocked_method})
+    store.log_action("agent", "conversion.booking", "t7", {"lead_id": blocked_converted})
+
+    # Force deterministic ordering: older signal should sort after newer signal.
+    older_ts = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    store.conn.execute(
+        """
+        UPDATE actions
+        SET ts = ?
+        WHERE action_type = 'sms.inbound'
+          AND COALESCE(json_extract(payload_json, '$.lead_id'), '') = ?
+        """,
+        (older_ts, eligible_older),
+    )
+    store.conn.commit()
+
+    store.add_opt_out(blocked_optout)
+    store.add_message(
+        lead_id=blocked_recent,
+        channel="email",
+        subject="warm",
+        body="warm",
+        status="sent",
+        step=90,
+    )
+
+    rows = list(
+        store.get_warm_close_leads(
+            min_score=70,
+            limit=10,
+            cooldown_cutoff_ts=(datetime.now(timezone.utc) - timedelta(hours=12)).isoformat(),
+            warm_close_step=90,
+            email_methods=["direct"],
+        )
+    )
+    assert [str(r["id"]) for r in rows] == [eligible_newer, eligible_older]
+    store.close()
+
+
+def test_engine_run_warm_close_emails_sends_and_logs() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    engine = _make_engine(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        outreach_cfg={
+            "agent_id": "agent.outreach.v1",
+            "permissions": ["lead.read", "lead.write", "email.send"],
+            "daily_send_limit": 10,
+            "min_score": 0,
+            "followup": {"enabled": False},
+            "warm_close_email": {"enabled": True, "daily_send_limit": 1, "cooldown_hours": 24, "min_score": 0},
+            "allowed_email_methods": ["direct"],
+            "bounce_pause": {"enabled": False},
+        },
+    )
+    lead_id = "reply@example.com"
+    engine.store.upsert_lead(
+        Lead(
+            id=lead_id,
+            name="Reply Lead",
+            company="Reply Co",
+            email=lead_id,
+            phone="",
+            service="med spa",
+            city="Miami",
+            state="FL",
+            source="t",
+            score=95,
+            status="replied",
+            email_method="direct",
+        )
+    )
+    engine.store.log_action("agent", "lead.reply", "trace-reply", {"lead_id": lead_id})
+
+    sent = engine.run_warm_close_emails()
+    assert sent == 1
+    assert engine.sender.send.call_count == 1
+    assert engine.store.get_lead_status(lead_id) == "replied"
+
+    args = engine.sender.send.call_args.kwargs
+    assert args["to_email"] == lead_id
+    assert "quick next step" in str(args["subject"]).lower()
+
+    msg = engine.store.conn.execute(
+        "SELECT step, status FROM messages WHERE lead_id=? ORDER BY id DESC LIMIT 1",
+        (lead_id,),
+    ).fetchone()
+    assert msg is not None
+    assert int(msg["step"] or 0) == 90
+    assert str(msg["status"]) == "sent"
+
+    row = engine.store.conn.execute(
+        "SELECT payload_json FROM actions WHERE action_type='email.send' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert row is not None
+    payload = json.loads(str(row["payload_json"]))
+    assert payload["kind"] == "warm_close_email"
+    assert payload["lead_id"] == lead_id
+    assert int(payload["step"]) == 90
+    assert payload["trigger"] == "status_replied_or_interested"
+
+
+def test_engine_run_returns_sent_warm_close_metric() -> None:
+    tmp = f"test_{uuid.uuid4().hex}"
+    sqlite_path, audit_log = _tmp_state_paths(tmp)
+    engine = _make_engine(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        outreach_cfg={
+            "agent_id": "agent.outreach.v1",
+            "permissions": ["lead.read", "lead.write", "email.send"],
+            "daily_send_limit": 0,
+            "min_score": 0,
+            "followup": {"enabled": False},
+            "warm_close_email": {"enabled": True, "daily_send_limit": 1, "cooldown_hours": 24, "min_score": 0},
+            "allowed_email_methods": ["direct"],
+            "bounce_pause": {"enabled": False},
+        },
+    )
+    lead_id = "interested@example.com"
+    engine.store.upsert_lead(
+        Lead(
+            id=lead_id,
+            name="Interested Lead",
+            company="Interested Co",
+            email=lead_id,
+            phone="",
+            service="med spa",
+            city="Miami",
+            state="FL",
+            source="t",
+            score=90,
+            status="interested",
+            email_method="direct",
+        )
+    )
+    engine.store.log_action("agent", "lead.reply", "trace-int", {"lead_id": lead_id})
+
+    result = engine.run()
+    assert int(result["sent_initial"]) == 0
+    assert int(result["sent_warm_close"]) == 1
+    assert int(result["sent_followup"]) == 0

@@ -259,7 +259,7 @@ def test_live_job_report_formatting() -> None:
             "daily_report_path": "autonomy/state/lead_hygiene_removal_2026-02-24.json",
             "latest_report_path": "autonomy/state/lead_hygiene_removal_latest.json",
         },
-        engine_result={"sent_initial": 0, "sent_followup": 0},
+        engine_result={"sent_initial": 0, "sent_warm_close": 0, "sent_followup": 0},
         inbox_result=inbox,
         scoreboard=board,
         scoreboard_days=30,
@@ -269,6 +269,7 @@ def test_live_job_report_formatting() -> None:
     assert "Lead hygiene" in report
     assert "- invalid_marked: 2" in report
     assert "Revenue KPI" in report
+    assert "- sent_warm_close: 0" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
 
@@ -382,7 +383,7 @@ def test_live_job_report_includes_guardrails_section() -> None:
     )
     report = _format_report(
         leadgen_new=0,
-        engine_result={"sent_initial": 0, "sent_followup": 0},
+        engine_result={"sent_initial": 0, "sent_warm_close": 0, "sent_followup": 0},
         inbox_result=inbox,
         scoreboard=board,
         scoreboard_days=30,
@@ -432,7 +433,7 @@ def test_live_job_report_includes_twilio_tollfree_section() -> None:
     )
     report = _format_report(
         leadgen_new=0,
-        engine_result={"sent_initial": 0, "sent_followup": 0},
+        engine_result={"sent_initial": 0, "sent_warm_close": 0, "sent_followup": 0},
         inbox_result=inbox,
         scoreboard=board,
         scoreboard_days=30,

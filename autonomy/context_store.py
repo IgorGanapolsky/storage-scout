@@ -279,6 +279,68 @@ class ContextStore:
         cur.execute(sql, tuple(params))
         return cur.fetchall()
 
+    def get_warm_close_leads(
+        self,
+        min_score: int,
+        limit: int,
+        cooldown_cutoff_ts: str,
+        *,
+        warm_close_step: int = 90,
+        email_methods: list[str] | None = None,
+    ) -> Iterable[sqlite3.Row]:
+        """Return replied/interested leads eligible for a warm-close email."""
+        cur = self.conn.cursor()
+        sql = """
+            SELECT
+              l.id, l.name, l.company, l.email, l.phone, l.service, l.city, l.state, l.source, l.score, l.status, l.email_method,
+              COALESCE((
+                SELECT MAX(a.ts)
+                FROM actions a
+                WHERE COALESCE(json_extract(a.payload_json, '$.lead_id'), '') = l.id
+                  AND (
+                    a.action_type = 'lead.reply'
+                    OR (
+                      a.action_type = 'sms.inbound'
+                      AND COALESCE(json_extract(a.payload_json, '$.classification'), '') = 'interested'
+                    )
+                  )
+              ), '') AS last_signal_ts
+            FROM leads l
+            WHERE LOWER(COALESCE(l.status, '')) IN ('interested', 'replied')
+              AND l.score >= ?
+              AND COALESCE(l.email, '') <> ''
+              AND NOT EXISTS (
+                SELECT 1 FROM opt_outs o WHERE o.email = l.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM messages m
+                WHERE m.lead_id = l.id
+                  AND m.channel = 'email'
+                  AND m.status = 'sent'
+                  AND m.step = ?
+                  AND m.ts >= ?
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM actions c
+                WHERE c.action_type IN ('conversion.booking', 'conversion.payment')
+                  AND COALESCE(json_extract(c.payload_json, '$.lead_id'), '') = l.id
+              )
+        """
+        params: list[object] = [int(min_score), int(warm_close_step), str(cooldown_cutoff_ts)]
+        if email_methods:
+            placeholders = ",".join(["?"] * len(email_methods))
+            sql += f" AND COALESCE(l.email_method,'unknown') IN ({placeholders})"
+            params.extend([(m or "unknown") for m in email_methods])
+        sql += """
+            ORDER BY last_signal_ts DESC, l.score DESC
+            LIMIT ?
+        """
+        params.append(int(limit))
+        cur.execute(sql, tuple(params))
+        return cur.fetchall()
+
     def mark_contacted(self, lead_id: str) -> None:
         cur = self.conn.cursor()
         cur.execute(

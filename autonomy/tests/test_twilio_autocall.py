@@ -497,7 +497,7 @@ def test_live_job_report_includes_auto_calls_section() -> None:
             skipped=0,
             reason="ok",
         ),
-        engine_result={"sent_initial": 0, "sent_followup": 0},
+        engine_result={"sent_initial": 0, "sent_warm_close": 0, "sent_followup": 0},
         inbox_result=InboxSyncResult(
             processed_messages=0,
             new_bounces=0,
