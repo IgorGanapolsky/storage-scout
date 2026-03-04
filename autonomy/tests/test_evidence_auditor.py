@@ -34,7 +34,7 @@ def test_evidence_auditor_with_payments(tmp_path: Path) -> None:
 
     conn = sqlite3.connect(db_path)
     conn.execute("CREATE TABLE actions (action_type TEXT)")
-    conn.execute("INSERT INTO actions VALUES ('payment.received')")
+    conn.execute("INSERT INTO actions VALUES ('conversion.payment')")
     conn.commit()
     conn.close()
 

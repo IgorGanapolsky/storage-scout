@@ -160,12 +160,10 @@ Record an opt-out email (when someone requests unsubscribe):
 python3 autonomy/tools/opt_out.py --email someone@example.com
 ```
 
-Optional analytics/revenue snapshots (requires credentials + deps):
+Revenue snapshot (local SQLite, no external API required):
 
 ```bash
-pip install -r autonomy/tools/requirements.txt
-GA4_PROPERTY_ID=... python3 autonomy/tools/ga4_report.py --days 7
-STRIPE_SECRET_KEY=... python3 autonomy/tools/stripe_report.py --days 30 --amount-usd 249
+python3 autonomy/tools/revenue_status.py --days 30 --payment-amount-usd 249 --booking-amount-usd 249
 ```
 
 ## Report Delivery (Email vs ntfy)

@@ -38,19 +38,19 @@ class EvidenceAuditor:
         defaults = [
             (
                 "price_point_249",
-                "A $249 setup fee is an acceptable entry point for dentists.",
+                "A $249 AI-SEO setup fee is an acceptable entry point for local service businesses.",
                 "pricing",
                 "pending",
             ),
             (
                 "sms_recovery_priority",
-                "SMS-back is the #1 pain point owners will pay to solve.",
+                "Fast response + booking automation is the #1 pain point owners will pay to solve.",
                 "product",
                 "pending",
             ),
             (
                 "connect_rate_threshold",
-                "A 25% human connect rate is sufficient to scale the business.",
+                "A 20% human connect rate is sufficient for call-driven outreach economics.",
                 "outreach",
                 "pending",
             ),
@@ -75,7 +75,13 @@ class EvidenceAuditor:
 
         # 1. Audit Price Point Evidence
         try:
-            cursor.execute("SELECT COUNT(*) FROM actions WHERE action_type='payment.received'")
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM actions
+                WHERE action_type IN ('conversion.payment', 'payment.received')
+                """
+            )
             payments = cursor.fetchone()[0]
         except sqlite3.OperationalError:
             payments = 0
