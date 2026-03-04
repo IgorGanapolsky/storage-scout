@@ -24,6 +24,14 @@ from autonomy.tools.agent_commerce import request_json
 from autonomy.utils import normalize_us_phone, truthy
 
 _OPT_OUT_RE = re.compile(r"\b(stop|unsubscribe|cancel|quit|end|remove)\b", re.IGNORECASE)
+_NEGATIVE_INTEREST_RE = re.compile(
+    r"\b(not interested|no thanks|no thank you|not now|maybe later)\b",
+    re.IGNORECASE,
+)
+_ALREADY_CONVERTED_RE = re.compile(
+    r"\b(already booked|already scheduled|already paid|already signed up)\b",
+    re.IGNORECASE,
+)
 _INTEREST_RE = re.compile(
     r"\b(yes|interested|book|booking|baseline|audit|call|pricing|price)\b",
     re.IGNORECASE,
@@ -158,6 +166,10 @@ def _classify_reply(body: str) -> str:
         return "other"
     if _OPT_OUT_RE.search(text):
         return "opt_out"
+    if _NEGATIVE_INTEREST_RE.search(text):
+        return "other"
+    if _ALREADY_CONVERTED_RE.search(text):
+        return "other"
     if _INTEREST_RE.search(text):
         return "interested"
     return "other"

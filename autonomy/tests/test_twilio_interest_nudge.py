@@ -27,20 +27,24 @@ class _FakeHTTPResponse:
         return False
 
 
-def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
-
+def _seed_interested_inbound(
+    *,
+    sqlite_path: Path,
+    audit_log: Path,
+    lead_id: str,
+    phone_e164: str,
+    age_hours: int = 3,
+    inbound_sid: str = "MM_IN_1",
+) -> None:
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     try:
         store.upsert_lead(
             Lead(
-                id="interested@example.com",
+                id=lead_id,
                 name="",
                 company="Interested Co",
-                email="interested@example.com",
-                phone="(954) 555-0111",
+                email=lead_id,
+                phone=phone_e164,
                 service="Dentist",
                 city="Coral Springs",
                 state="FL",
@@ -50,22 +54,34 @@ def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
                 email_method="direct",
             )
         )
-        ts = (datetime.now(UTC) - timedelta(hours=3)).isoformat()
+        ts = (datetime.now(UTC) - timedelta(hours=age_hours)).isoformat()
         payload = {
-            "lead_id": "interested@example.com",
-            "from_phone_e164": "+19545550111",
-            "from_phone": "+19545550111",
-            "inbound_sid": "MM_IN_1",
+            "lead_id": lead_id,
+            "from_phone_e164": phone_e164,
+            "from_phone": phone_e164,
+            "inbound_sid": inbound_sid,
             "classification": "interested",
             "body": "yes interested",
         }
         store.conn.execute(
             "INSERT INTO actions (ts, agent_id, action_type, trace_id, payload_json) VALUES (?, ?, ?, ?, ?)",
-            (ts, "agent.sms.twilio.inbox.v1", "sms.inbound", "twilio_inbound:MM_IN_1", json.dumps(payload)),
+            (ts, "agent.sms.twilio.inbox.v1", "sms.inbound", f"twilio_inbound:{inbound_sid}", json.dumps(payload)),
         )
         store.conn.commit()
     finally:
         store.conn.close()
+
+
+def test_interest_nudge_sends_and_respects_cooldown(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    _seed_interested_inbound(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        lead_id="interested@example.com",
+        phone_e164="+19545550111",
+    )
 
     posted: list[dict[str, str]] = []
 
@@ -142,3 +158,92 @@ def test_interest_nudge_missing_twilio_env_when_enabled() -> None:
     )
     assert result.reason == "missing_twilio_env"
 
+
+def test_interest_nudge_skips_after_conversion_booking(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    lead_id = "booked@example.com"
+    _seed_interested_inbound(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        lead_id=lead_id,
+        phone_e164="+19545550113",
+        inbound_sid="MM_IN_BOOKED",
+    )
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        store.log_action(
+            agent_id="agent.inbox_sync.v1",
+            action_type="conversion.booking",
+            trace_id="booking-1",
+            payload={"lead_id": lead_id},
+        )
+    finally:
+        store.conn.close()
+
+    def fail_if_called(req, timeout=20):  # noqa: ANN001
+        raise AssertionError("should not send SMS when booking conversion exists")
+
+    monkeypatch.setattr("autonomy.tools.twilio_interest_nudge.urllib.request.urlopen", fail_if_called)
+
+    env = {
+        "AUTO_INTEREST_NUDGE_ENABLED": "1",
+        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
+        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
+        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19540000000",
+    }
+    result = run_interest_nudges(sqlite_path=sqlite_path, audit_log=audit_log, env=env)
+    assert result.reason == "ok"
+    assert result.candidates == 1
+    assert result.nudged == 0
+    assert result.skipped >= 1
+
+
+def test_interest_nudge_skips_after_conversion_payment(monkeypatch) -> None:
+    run_id = uuid4().hex
+    sqlite_path = Path(f"autonomy/state/test_interest_nudge_{run_id}.sqlite3")
+    audit_log = Path(f"autonomy/state/test_interest_nudge_{run_id}.jsonl")
+    lead_id = "paid@example.com"
+    _seed_interested_inbound(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        lead_id=lead_id,
+        phone_e164="+19545550114",
+        inbound_sid="MM_IN_PAID",
+    )
+
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        store.log_action(
+            agent_id="agent.inbox_sync.v1",
+            action_type="conversion.payment",
+            trace_id="payment-1",
+            payload={"lead_id": lead_id},
+        )
+    finally:
+        store.conn.close()
+
+    def fail_if_called(req, timeout=20):  # noqa: ANN001
+        raise AssertionError("should not send SMS when payment conversion exists")
+
+    monkeypatch.setattr("autonomy.tools.twilio_interest_nudge.urllib.request.urlopen", fail_if_called)
+
+    env = {
+        "AUTO_INTEREST_NUDGE_ENABLED": "1",
+        "AUTO_INTEREST_NUDGE_MAX_PER_RUN": "3",
+        "AUTO_INTEREST_NUDGE_MIN_AGE_MINUTES": "0",
+        "AUTO_INTEREST_NUDGE_COOLDOWN_HOURS": "24",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19540000000",
+    }
+    result = run_interest_nudges(sqlite_path=sqlite_path, audit_log=audit_log, env=env)
+    assert result.reason == "ok"
+    assert result.candidates == 1
+    assert result.nudged == 0
+    assert result.skipped >= 1

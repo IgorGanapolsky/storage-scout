@@ -163,20 +163,25 @@ def _has_phone_opt_out(store: ContextStore, *, phone_e164: str) -> bool:
     return row is not None
 
 
-def _has_booked_call_after(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
+def _has_conversion_after(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
     if not lead_id:
         return False
     row = store.conn.execute(
         """
         SELECT 1
         FROM actions
-        WHERE action_type='call.attempt'
-          AND ts >= ?
-          AND json_extract(payload_json, '$.lead_id') = ?
-          AND json_extract(payload_json, '$.outcome') = 'booked'
+        WHERE ts >= ?
+          AND (
+            (action_type='call.attempt'
+             AND COALESCE(json_extract(payload_json, '$.lead_id'), '') = ?
+             AND COALESCE(json_extract(payload_json, '$.outcome'), '') = 'booked')
+            OR
+            (action_type IN ('conversion.booking', 'conversion.payment')
+             AND COALESCE(json_extract(payload_json, '$.lead_id'), '') = ?)
+          )
         LIMIT 1
         """,
-        (since_iso, lead_id),
+        (since_iso, lead_id, lead_id),
     ).fetchone()
     return row is not None
 
@@ -288,7 +293,7 @@ def run_interest_nudges(
                 result.skipped += 1
                 continue
 
-            if _has_booked_call_after(store, lead_id=lead_id, since_iso=ts):
+            if _has_conversion_after(store, lead_id=lead_id, since_iso=ts):
                 result.skipped += 1
                 continue
 
