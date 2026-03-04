@@ -138,9 +138,10 @@ def _compact_many(
 ) -> list[CompactionResult]:
     results: list[CompactionResult] = []
     for rel in files:
-        candidate = Path(rel.strip())
-        if not str(candidate):
+        rel_clean = str(rel).strip()
+        if not rel_clean:
             continue
+        candidate = Path(rel_clean)
         path = candidate if candidate.is_absolute() else (repo_root / candidate).resolve()
         try:
             results.append(
