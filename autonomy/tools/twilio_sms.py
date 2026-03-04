@@ -147,6 +147,29 @@ def _parse_http_error(exc: urllib.error.HTTPError) -> tuple[int, dict[str, Any],
     return status_code, error_data, error_message
 
 
+def _record_twilio_http_failure(
+    payload: dict[str, Any],
+    *,
+    status_code: int,
+    error_data: dict[str, Any],
+    error_message: str,
+) -> None:
+    payload["outcome"] = "failed"
+    payload["twilio"] = {
+        "sid": "",
+        "status": "exception",
+        "error_code": error_data.get("code"),
+        "http_status": status_code,
+        "error_type": "HTTPError",
+        "error_message": error_message,
+    }
+    payload["notes"] = (
+        f"exception=HTTPError status={status_code} "
+        f"code={error_data.get('code', '')} "
+        f"message={error_message}"
+    )
+
+
 def send_sms(
     cfg: TwilioSmsConfig,
     *,
@@ -377,19 +400,11 @@ def run_sms_followup(
             result.delivered += 1
         except urllib.error.HTTPError as exc:
             status_code, error_data, error_message = _parse_http_error(exc)
-            payload["outcome"] = "failed"
-            payload["twilio"] = {
-                "sid": "",
-                "status": "exception",
-                "error_code": error_data.get("code"),
-                "http_status": status_code,
-                "error_type": "HTTPError",
-                "error_message": error_message,
-            }
-            payload["notes"] = (
-                f"exception=HTTPError status={status_code} "
-                f"code={error_data.get('code', '')} "
-                f"message={error_message}"
+            _record_twilio_http_failure(
+                payload,
+                status_code=status_code,
+                error_data=error_data,
+                error_message=error_message,
             )
             result.failed += 1
         except Exception as exc:
@@ -481,19 +496,11 @@ def run_sms_followup(
                 result.delivered += 1
             except urllib.error.HTTPError as exc:
                 status_code, error_data, error_message = _parse_http_error(exc)
-                payload["outcome"] = "failed"
-                payload["twilio"] = {
-                    "sid": "",
-                    "status": "exception",
-                    "error_code": error_data.get("code"),
-                    "http_status": status_code,
-                    "error_type": "HTTPError",
-                    "error_message": error_message,
-                }
-                payload["notes"] = (
-                    f"exception=HTTPError status={status_code} "
-                    f"code={error_data.get('code', '')} "
-                    f"message={error_message}"
+                _record_twilio_http_failure(
+                    payload,
+                    status_code=status_code,
+                    error_data=error_data,
+                    error_message=error_message,
                 )
                 result.failed += 1
             except Exception as exc:

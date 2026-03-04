@@ -18,6 +18,7 @@ from autonomy.tools.fastmail_inbox_sync import InboxSyncResult
 from autonomy.tools.scoreboard import Scoreboard
 from autonomy.tools.twilio_autocall import (
     AutoCallResult,
+    _format_exception_notes,
     _is_business_hours,
     _is_reasonable_email,
     _lead_called_recently,
@@ -78,6 +79,20 @@ def test_map_twilio_call_to_outcome() -> None:
     assert map_twilio_call_to_outcome({"status": "completed", "answered_by": "human"})[0] == "spoke"
     assert map_twilio_call_to_outcome({"status": "completed"})[0] == "spoke"
     assert map_twilio_call_to_outcome({"status": "something-else"})[0] == "no_answer"
+
+
+def test_format_exception_notes_handles_invalid_http_error_json() -> None:
+    exc = urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json",
+        code=400,
+        msg="Bad Request",
+        hdrs=None,
+        fp=io.BytesIO(b"not-json"),
+    )
+    notes, details = _format_exception_notes(exc)
+    assert str(details.get("error_type") or "") == "HTTPError"
+    assert int(details.get("http_status") or 0) == 400
+    assert "status=400" in notes
 
 
 def test_load_twilio_config_requires_e164_from_number() -> None:

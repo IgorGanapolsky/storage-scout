@@ -24,13 +24,13 @@ from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 try:
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover - optional dependency in CI/test environments
-    def load_dotenv(*_args, **_kwargs):  # type: ignore[no-redef]
+    def load_dotenv(*_args, **_kwargs):  # pragma: no cover  # type: ignore[no-redef]
         return False
 
 try:
     import openai
 except Exception:  # pragma: no cover - optional dependency in local envs
-    openai = None
+    openai = None  # pragma: no cover
 
 load_dotenv()
 
