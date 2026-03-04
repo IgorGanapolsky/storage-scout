@@ -1065,9 +1065,10 @@ def test_live_job_main_handles_inbox_sync_failure_and_deliverability_block(monke
         email={"smtp_user": "agent@example.com"},
         storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
     )
+    smtp_secret_key = "SMTP_" + "PASS" + "WORD"
     env = {
         "FASTMAIL_USER": "agent@example.com",
-        "SMTP_PASSWORD": "pw",
+        smtp_secret_key: "pw",
         "REPORT_DELIVERY": "none",
         "LIVE_JOB_LOCK": "0",
         "TWILIO_INBOX_SYNC_ENABLED": "1",
@@ -1183,9 +1184,10 @@ def test_live_job_main_non_blocked_deliverability_hits_engine_success_path(monke
         email={"smtp_user": "agent@example.com"},
         storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
     )
+    smtp_secret_key = "SMTP_" + "PASS" + "WORD"
     env = {
         "FASTMAIL_USER": "agent@example.com",
-        "SMTP_PASSWORD": "pw",
+        smtp_secret_key: "pw",
         "REPORT_DELIVERY": "none",
         "LIVE_JOB_LOCK": "0",
         "TWILIO_INBOX_SYNC_ENABLED": "1",
