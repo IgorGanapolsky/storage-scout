@@ -47,6 +47,7 @@ from autonomy.tools.twilio_tollfree_watchdog import (
     TwilioTollfreeWatchdogResult,
     run_twilio_tollfree_watchdog,
 )
+from autonomy.tools.twilio_warm_close import WarmCloseResult, run_warm_close_loop
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
@@ -346,6 +347,10 @@ def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bo
         where.append("agent_id IN (?, ?)")
         params.extend(["agent.sms.twilio.v1", "agent.sms.twilio.nudge.v1"])
         where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
+    elif paid_only and action_type == "sms.warm_close":
+        where.append("agent_id = ?")
+        params.append("agent.sms.twilio.warm_close.v1")
+        where.append("COALESCE(json_extract(payload_json, '$.twilio.sid'), '') <> ''")
 
     sql = f"SELECT COUNT(1) FROM actions WHERE {' AND '.join(where)}"
     row = store.conn.execute(sql, tuple(params)).fetchone()
@@ -452,33 +457,217 @@ def _compute_sms_channel_budgets(
     sms_today_followup: int,
     sms_today_nudge: int,
     interest_reserve: int,
+    sms_today_warm_close: int = 0,
+    warm_close_reserve: int = 0,
 ) -> dict[str, int]:
     """Compute total and per-channel SMS budgets for this UTC day.
 
-    Reserve is a protected quota for high-intent inbound nudges. Follow-up SMS
-    can only consume capacity beyond the remaining reserve.
+    Reserves are protected quotas for high-ROI channels:
+    - warm close loop (replied/interested leads)
+    - inbound interested nudges
+    Follow-up SMS can only consume capacity beyond remaining protected reserves.
     """
     cap = max(0, int(daily_sms_cap))
-    reserve = max(0, min(int(interest_reserve), cap))
+    close_reserve = max(0, min(int(warm_close_reserve), cap))
+    reserve = max(0, min(int(interest_reserve), max(0, cap - close_reserve)))
+    used_warm_close = max(0, int(sms_today_warm_close))
     used_followup = max(0, int(sms_today_followup))
     used_nudge = max(0, int(sms_today_nudge))
 
-    used_total = max(0, used_followup + used_nudge)
+    used_total = max(0, used_followup + used_nudge + used_warm_close)
     total_remaining = max(0, cap - used_total)
 
-    # Reserve is consumed by nudge traffic first; remaining reserve is held.
+    # Reserves are consumed by their channel first; remaining reserves are held.
+    close_reserve_remaining = max(0, close_reserve - used_warm_close)
     reserve_remaining = max(0, reserve - used_nudge)
-    followup_remaining = max(0, total_remaining - reserve_remaining)
+    followup_remaining = max(0, total_remaining - close_reserve_remaining - reserve_remaining)
+    warm_close_remaining = max(0, total_remaining - reserve_remaining)
+    nudge_remaining = max(0, total_remaining - close_reserve_remaining)
 
     return {
         "cap": cap,
+        "warm_close_reserve": close_reserve,
+        "warm_close_reserve_remaining": close_reserve_remaining,
         "interest_reserve": reserve,
         "interest_reserve_remaining": reserve_remaining,
+        "used_warm_close": used_warm_close,
         "used_followup": used_followup,
         "used_nudge": used_nudge,
         "used_total": used_total,
         "total_remaining": total_remaining,
+        "warm_close_remaining": warm_close_remaining,
+        "nudge_remaining": nudge_remaining,
         "followup_remaining": followup_remaining,
+    }
+
+
+def _collect_sms_channel_state(
+    *,
+    store: ContextStore,
+    env: dict[str, str],
+    guardrails: dict[str, object],
+) -> dict[str, int]:
+    daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
+    daily_sms_interest_reserve = max(0, _int_env(env.get("PAID_DAILY_SMS_INTEREST_RESERVE"), 3))
+    daily_sms_warm_close_reserve = max(0, _int_env(env.get("PAID_DAILY_SMS_WARM_CLOSE_RESERVE"), 2))
+
+    sms_today_followup_all = _count_actions_today(store, action_type="sms.attempt")
+    sms_today_nudge_all = _count_actions_today(store, action_type="sms.interest_nudge")
+    sms_today_warm_close_all = _count_actions_today(store, action_type="sms.warm_close")
+    sms_today_all = int(sms_today_followup_all) + int(sms_today_nudge_all) + int(sms_today_warm_close_all)
+
+    sms_today_followup = _count_actions_today(store, action_type="sms.attempt", paid_only=True)
+    sms_today_nudge = _count_actions_today(store, action_type="sms.interest_nudge", paid_only=True)
+    sms_today_warm_close = _count_actions_today(store, action_type="sms.warm_close", paid_only=True)
+    sms_budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=daily_sms_cap,
+        sms_today_followup=sms_today_followup,
+        sms_today_nudge=sms_today_nudge,
+        interest_reserve=daily_sms_interest_reserve,
+        sms_today_warm_close=sms_today_warm_close,
+        warm_close_reserve=daily_sms_warm_close_reserve,
+    )
+    sms_today = int(sms_budgets["used_total"])
+    sms_budget_remaining = int(sms_budgets["total_remaining"])
+    sms_warm_close_budget_remaining = int(sms_budgets["warm_close_remaining"])
+    sms_nudge_budget_remaining = int(sms_budgets["nudge_remaining"])
+    sms_followup_budget_remaining = int(sms_budgets["followup_remaining"])
+
+    guardrails["sms_daily_cap"] = int(daily_sms_cap)
+    guardrails["sms_warm_close_reserve"] = int(sms_budgets["warm_close_reserve"])
+    guardrails["sms_warm_close_reserve_remaining"] = int(sms_budgets["warm_close_reserve_remaining"])
+    guardrails["sms_interest_reserve"] = int(sms_budgets["interest_reserve"])
+    guardrails["sms_interest_reserve_remaining"] = int(sms_budgets["interest_reserve_remaining"])
+    guardrails["sms_today_scope"] = "billable_twilio"
+    guardrails["sms_today_all_actions"] = int(sms_today_all)
+    guardrails["sms_today_warm_close_actions"] = int(sms_today_warm_close_all)
+    guardrails["sms_today_followup_actions"] = int(sms_today_followup_all)
+    guardrails["sms_today_interest_nudges"] = int(sms_today_nudge_all)
+    guardrails["sms_today"] = int(sms_today)
+    guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
+    guardrails["sms_warm_close_budget_remaining"] = int(sms_warm_close_budget_remaining)
+    guardrails["sms_nudge_budget_remaining"] = int(sms_nudge_budget_remaining)
+    guardrails["sms_followup_budget_remaining"] = int(sms_followup_budget_remaining)
+
+    return {
+        "daily_sms_cap": int(daily_sms_cap),
+        "daily_sms_interest_reserve": int(daily_sms_interest_reserve),
+        "daily_sms_warm_close_reserve": int(daily_sms_warm_close_reserve),
+        "sms_today": int(sms_today),
+        "sms_today_all": int(sms_today_all),
+        "sms_today_followup": int(sms_today_followup),
+        "sms_today_nudge": int(sms_today_nudge),
+        "sms_today_warm_close": int(sms_today_warm_close),
+        "sms_budget_remaining": int(sms_budget_remaining),
+        "sms_warm_close_budget_remaining": int(sms_warm_close_budget_remaining),
+        "sms_nudge_budget_remaining": int(sms_nudge_budget_remaining),
+        "sms_followup_budget_remaining": int(sms_followup_budget_remaining),
+    }
+
+
+def _resolve_paid_sms_block_reason(
+    *,
+    env: dict[str, str],
+    enabled_env_key: str,
+    disabled_reason: str,
+    approval_action: str,
+    paid_kill_switch: bool,
+    stop_loss_state: dict[str, object],
+    budget_remaining: int,
+    exhausted_reason: str,
+) -> str:
+    if not truthy(env.get(enabled_env_key), default=True):
+        return disabled_reason
+    if not _check_approval_gate(action=approval_action, env=env)[0]:
+        return "approval_required"
+    if paid_kill_switch:
+        return "paid_kill_switch"
+    if bool(stop_loss_state.get("blocked", False)):
+        return str(stop_loss_state.get("block_reason") or "stop_loss")
+    if int(budget_remaining) <= 0:
+        return exhausted_reason
+    return ""
+
+
+def _run_warm_close_with_budget(
+    *,
+    env: dict[str, str],
+    sqlite_path: Path,
+    audit_log: Path,
+    booking_url: str,
+    kickoff_url: str,
+    daily_sms_cap: int,
+    sms_today_followup: int,
+    sms_today_nudge: int,
+    sms_today_warm_close: int,
+    daily_sms_interest_reserve: int,
+    daily_sms_warm_close_reserve: int,
+    sms_warm_close_budget_remaining: int,
+) -> tuple[WarmCloseResult, dict[str, int]]:
+    warm_env = dict(env)
+    configured_max_warm_close = max(1, _int_env(warm_env.get("AUTO_WARM_CLOSE_MAX_PER_RUN"), 3))
+    warm_env["AUTO_WARM_CLOSE_MAX_PER_RUN"] = str(min(configured_max_warm_close, int(sms_warm_close_budget_remaining)))
+    warm_close_result = run_warm_close_loop(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=warm_env,
+        booking_url=booking_url,
+        kickoff_url=kickoff_url,
+    )
+    sms_budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=daily_sms_cap,
+        sms_today_followup=sms_today_followup,
+        sms_today_nudge=sms_today_nudge,
+        interest_reserve=daily_sms_interest_reserve,
+        sms_today_warm_close=(int(sms_today_warm_close) + int(warm_close_result.sent)),
+        warm_close_reserve=daily_sms_warm_close_reserve,
+    )
+    return warm_close_result, {
+        "sms_budget_remaining": int(sms_budgets["total_remaining"]),
+        "sms_warm_close_budget_remaining": int(sms_budgets["warm_close_remaining"]),
+        "sms_nudge_budget_remaining": int(sms_budgets["nudge_remaining"]),
+        "sms_followup_budget_remaining": int(sms_budgets["followup_remaining"]),
+    }
+
+
+def _run_interest_nudges_with_budget(
+    *,
+    env: dict[str, str],
+    sqlite_path: Path,
+    audit_log: Path,
+    booking_url: str,
+    kickoff_url: str,
+    daily_sms_cap: int,
+    sms_today_followup: int,
+    sms_today_nudge: int,
+    sms_today_warm_close: int,
+    warm_close_sent: int,
+    daily_sms_interest_reserve: int,
+    daily_sms_warm_close_reserve: int,
+    sms_nudge_budget_remaining: int,
+) -> tuple[InterestNudgeResult, dict[str, int]]:
+    nudge_env = dict(env)
+    configured_max_nudges = max(1, _int_env(nudge_env.get("AUTO_INTEREST_NUDGE_MAX_PER_RUN"), 6))
+    nudge_env["AUTO_INTEREST_NUDGE_MAX_PER_RUN"] = str(min(configured_max_nudges, int(sms_nudge_budget_remaining)))
+    interest_nudge_result = run_interest_nudges(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=nudge_env,
+        booking_url=booking_url,
+        kickoff_url=kickoff_url,
+    )
+    sms_budgets = _compute_sms_channel_budgets(
+        daily_sms_cap=daily_sms_cap,
+        sms_today_followup=sms_today_followup,
+        sms_today_nudge=(int(sms_today_nudge) + int(interest_nudge_result.nudged)),
+        interest_reserve=daily_sms_interest_reserve,
+        sms_today_warm_close=(int(sms_today_warm_close) + int(warm_close_sent)),
+        warm_close_reserve=daily_sms_warm_close_reserve,
+    )
+    return interest_nudge_result, {
+        "sms_budget_remaining": int(sms_budgets["total_remaining"]),
+        "sms_nudge_budget_remaining": int(sms_budgets["nudge_remaining"]),
+        "sms_followup_budget_remaining": int(sms_budgets["followup_remaining"]),
     }
 
 
@@ -718,6 +907,7 @@ def _check_approval_gate(*, action: str, env: dict[str, str]) -> tuple[bool, str
             "calls.twilio",
             "sms.twilio",
             "sms.interest_nudge",
+            "sms.warm_close",
             "report.email",
             "report.ntfy",
             "publish.content",
@@ -790,6 +980,7 @@ def _format_report(
     auto_calls: AutoCallResult | None = None,
     sms_followup: SmsResult | None = None,
     interest_nudge: InterestNudgeResult | None = None,
+    warm_close: WarmCloseResult | None = None,
     twilio_inbox: TwilioInboxResult | None = None,
     twilio_tollfree: TwilioTollfreeWatchdogResult | None = None,
     revenue_learning: dict | None = None,
@@ -860,6 +1051,16 @@ def _format_report(
         lines.append(f"- nudged: {interest_nudge.nudged}")
         lines.append(f"- failed: {interest_nudge.failed}")
         lines.append(f"- skipped: {interest_nudge.skipped}")
+    if warm_close is not None:
+        lines.append("")
+        lines.append("Warm lead close loop (Twilio)")
+        lines.append(f"- status: {warm_close.reason}")
+        lines.append(f"- candidates: {warm_close.candidates}")
+        lines.append(f"- attempted: {warm_close.attempted}")
+        lines.append(f"- sent: {warm_close.sent}")
+        lines.append(f"- failed: {warm_close.failed}")
+        lines.append(f"- converted_skipped: {warm_close.converted_skipped}")
+        lines.append(f"- skipped: {warm_close.skipped}")
     lines.append("")
     if kpi:
         lines.append("Revenue KPI")
@@ -1206,6 +1407,7 @@ def main() -> None:
             "calls.twilio",
             "sms.twilio",
             "sms.interest_nudge",
+            "sms.warm_close",
             "report.email",
             "report.ntfy",
             "publish.content",
@@ -1397,32 +1599,23 @@ def main() -> None:
     guardrails["calls_today"] = int(calls_today)
     guardrails["calls_budget_remaining"] = int(call_budget_remaining)
 
-    daily_sms_cap = max(0, _int_env(env.get("PAID_DAILY_SMS_CAP"), 10))
-    daily_sms_interest_reserve = max(0, _int_env(env.get("PAID_DAILY_SMS_INTEREST_RESERVE"), 3))
-    sms_today_followup_all = _count_actions_today(guard_store, action_type="sms.attempt")
-    sms_today_nudge_all = _count_actions_today(guard_store, action_type="sms.interest_nudge")
-    sms_today_all = int(sms_today_followup_all) + int(sms_today_nudge_all)
-    sms_today_followup = _count_actions_today(guard_store, action_type="sms.attempt", paid_only=True)
-    sms_today_nudge = _count_actions_today(guard_store, action_type="sms.interest_nudge", paid_only=True)
-    sms_budgets = _compute_sms_channel_budgets(
-        daily_sms_cap=daily_sms_cap,
-        sms_today_followup=sms_today_followup,
-        sms_today_nudge=sms_today_nudge,
-        interest_reserve=daily_sms_interest_reserve,
+    sms_state = _collect_sms_channel_state(
+        store=guard_store,
+        env=env,
+        guardrails=guardrails,
     )
-    sms_today = int(sms_budgets["used_total"])
-    sms_budget_remaining = int(sms_budgets["total_remaining"])
-    sms_followup_budget_remaining = int(sms_budgets["followup_remaining"])
-    guardrails["sms_daily_cap"] = int(daily_sms_cap)
-    guardrails["sms_interest_reserve"] = int(sms_budgets["interest_reserve"])
-    guardrails["sms_interest_reserve_remaining"] = int(sms_budgets["interest_reserve_remaining"])
-    guardrails["sms_today_scope"] = "billable_twilio"
-    guardrails["sms_today_all_actions"] = int(sms_today_all)
-    guardrails["sms_today_followup_actions"] = int(sms_today_followup_all)
-    guardrails["sms_today_interest_nudges"] = int(sms_today_nudge_all)
-    guardrails["sms_today"] = int(sms_today)
-    guardrails["sms_budget_remaining"] = int(sms_budget_remaining)
-    guardrails["sms_followup_budget_remaining"] = int(sms_followup_budget_remaining)
+    daily_sms_cap = int(sms_state["daily_sms_cap"])
+    daily_sms_interest_reserve = int(sms_state["daily_sms_interest_reserve"])
+    daily_sms_warm_close_reserve = int(sms_state["daily_sms_warm_close_reserve"])
+    sms_today_all = int(sms_state["sms_today_all"])
+    sms_today = int(sms_state["sms_today"])
+    sms_today_followup = int(sms_state["sms_today_followup"])
+    sms_today_nudge = int(sms_state["sms_today_nudge"])
+    sms_today_warm_close = int(sms_state["sms_today_warm_close"])
+    sms_budget_remaining = int(sms_state["sms_budget_remaining"])
+    sms_warm_close_budget_remaining = int(sms_state["sms_warm_close_budget_remaining"])
+    sms_nudge_budget_remaining = int(sms_state["sms_nudge_budget_remaining"])
+    sms_followup_budget_remaining = int(sms_state["sms_followup_budget_remaining"])
 
     funnel_enabled = (env.get("FUNNEL_WATCHDOG") or "1").strip().lower() not in {"0", "false", "no", "off"}
     funnel_result: FunnelWatchdogResult | None = None
@@ -1438,19 +1631,68 @@ def main() -> None:
             funnel_result.add_issue(name="watchdog_error", url=cfg.company.get("intake_url", ""), detail=str(exc))
     print(f"live_job: funnel_watchdog done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
-    # 2b) High-intent SMS nudges for inbound "interested" replies.
+    # 2b) Warm-lead close loop (highest ROI): replied/interested leads.
+    warm_close_result: WarmCloseResult | None = None
+    warm_close_block_reason = _resolve_paid_sms_block_reason(
+        env=env,
+        enabled_env_key="AUTO_WARM_CLOSE_ENABLED",
+        disabled_reason="auto_warm_close_disabled",
+        approval_action="sms.warm_close",
+        paid_kill_switch=bool(paid_kill_switch),
+        stop_loss_state=stop_loss_state,
+        budget_remaining=int(sms_warm_close_budget_remaining),
+        exhausted_reason="sms_warm_close_budget_exhausted",
+    )
+
+    if warm_close_block_reason:
+        _log_guard_block(
+            store=guard_store,
+            channel="sms.warm_close",
+            reason=warm_close_block_reason,
+            details={
+                "sms_today": int(sms_today),
+                "sms_today_all_actions": int(sms_today_all),
+                "sms_daily_cap": int(daily_sms_cap),
+                "sms_warm_close_budget_remaining": int(sms_warm_close_budget_remaining),
+            },
+        )
+        warm_close_result = WarmCloseResult(reason=f"blocked:{warm_close_block_reason}")
+    else:
+        warm_close_result, warm_budget_updates = _run_warm_close_with_budget(
+            env=env,
+            sqlite_path=sqlite_path,
+            audit_log=audit_log,
+            booking_url=cfg.company.get("booking_url", ""),
+            kickoff_url=cfg.company.get("kickoff_url", ""),
+            daily_sms_cap=daily_sms_cap,
+            sms_today_followup=sms_today_followup,
+            sms_today_nudge=sms_today_nudge,
+            sms_today_warm_close=sms_today_warm_close,
+            daily_sms_interest_reserve=daily_sms_interest_reserve,
+            daily_sms_warm_close_reserve=daily_sms_warm_close_reserve,
+            sms_warm_close_budget_remaining=sms_warm_close_budget_remaining,
+        )
+        sms_budget_remaining = int(warm_budget_updates["sms_budget_remaining"])
+        sms_warm_close_budget_remaining = int(warm_budget_updates["sms_warm_close_budget_remaining"])
+        sms_nudge_budget_remaining = int(warm_budget_updates["sms_nudge_budget_remaining"])
+        sms_followup_budget_remaining = int(warm_budget_updates["sms_followup_budget_remaining"])
+        guardrails["sms_budget_remaining_after_warm_close"] = int(sms_budget_remaining)
+        guardrails["sms_warm_close_budget_remaining_after_warm_close"] = int(sms_warm_close_budget_remaining)
+        guardrails["sms_nudge_budget_remaining_after_warm_close"] = int(sms_nudge_budget_remaining)
+        guardrails["sms_followup_budget_remaining_after_warm_close"] = int(sms_followup_budget_remaining)
+
+    # 2c) High-intent SMS nudges for inbound "interested" replies.
     interest_nudge_result: InterestNudgeResult | None = None
-    nudge_block_reason = ""
-    if not truthy(env.get("AUTO_INTEREST_NUDGE_ENABLED"), default=True):
-        nudge_block_reason = "auto_interest_nudge_disabled"
-    elif not _check_approval_gate(action="sms.interest_nudge", env=env)[0]:
-        nudge_block_reason = "approval_required"
-    elif paid_kill_switch:
-        nudge_block_reason = "paid_kill_switch"
-    elif bool(stop_loss_state.get("blocked", False)):
-        nudge_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
-    elif sms_budget_remaining <= 0:
-        nudge_block_reason = "sms_daily_cap_reached"
+    nudge_block_reason = _resolve_paid_sms_block_reason(
+        env=env,
+        enabled_env_key="AUTO_INTEREST_NUDGE_ENABLED",
+        disabled_reason="auto_interest_nudge_disabled",
+        approval_action="sms.interest_nudge",
+        paid_kill_switch=bool(paid_kill_switch),
+        stop_loss_state=stop_loss_state,
+        budget_remaining=int(sms_nudge_budget_remaining),
+        exhausted_reason="sms_nudge_budget_exhausted",
+    )
 
     if nudge_block_reason:
         _log_guard_block(
@@ -1461,29 +1703,31 @@ def main() -> None:
                 "sms_today": int(sms_today),
                 "sms_today_all_actions": int(sms_today_all),
                 "sms_daily_cap": int(daily_sms_cap),
+                "sms_nudge_budget_remaining": int(sms_nudge_budget_remaining),
             },
         )
         interest_nudge_result = InterestNudgeResult(reason=f"blocked:{nudge_block_reason}")
     else:
-        nudge_env = dict(env)
-        configured_max_nudges = max(1, _int_env(nudge_env.get("AUTO_INTEREST_NUDGE_MAX_PER_RUN"), 6))
-        nudge_env["AUTO_INTEREST_NUDGE_MAX_PER_RUN"] = str(min(configured_max_nudges, sms_budget_remaining))
-        interest_nudge_result = run_interest_nudges(
+        interest_nudge_result, nudge_budget_updates = _run_interest_nudges_with_budget(
+            env=env,
             sqlite_path=sqlite_path,
             audit_log=audit_log,
-            env=nudge_env,
             booking_url=cfg.company.get("booking_url", ""),
             kickoff_url=cfg.company.get("kickoff_url", ""),
-        )
-        sms_budgets = _compute_sms_channel_budgets(
             daily_sms_cap=daily_sms_cap,
             sms_today_followup=sms_today_followup,
-            sms_today_nudge=(sms_today_nudge + int(interest_nudge_result.nudged)),
-            interest_reserve=daily_sms_interest_reserve,
+            sms_today_nudge=sms_today_nudge,
+            sms_today_warm_close=sms_today_warm_close,
+            warm_close_sent=int((warm_close_result.sent if warm_close_result else 0)),
+            daily_sms_interest_reserve=daily_sms_interest_reserve,
+            daily_sms_warm_close_reserve=daily_sms_warm_close_reserve,
+            sms_nudge_budget_remaining=sms_nudge_budget_remaining,
         )
-        sms_budget_remaining = int(sms_budgets["total_remaining"])
-        sms_followup_budget_remaining = int(sms_budgets["followup_remaining"])
+        sms_budget_remaining = int(nudge_budget_updates["sms_budget_remaining"])
+        sms_nudge_budget_remaining = int(nudge_budget_updates["sms_nudge_budget_remaining"])
+        sms_followup_budget_remaining = int(nudge_budget_updates["sms_followup_budget_remaining"])
         guardrails["sms_budget_remaining_after_nudges"] = int(sms_budget_remaining)
+        guardrails["sms_nudge_budget_remaining_after_nudges"] = int(sms_nudge_budget_remaining)
         guardrails["sms_followup_budget_remaining_after_nudges"] = int(sms_followup_budget_remaining)
 
     # 3) Optional: write a call list and place outbound calls (Twilio) before computing scoreboard.
@@ -1586,8 +1830,10 @@ def main() -> None:
                     "sms_today": int(sms_today),
                     "sms_today_all_actions": int(sms_today_all),
                     "sms_daily_cap": int(daily_sms_cap),
-                    "sms_interest_reserve": int(sms_budgets["interest_reserve"]),
-                    "sms_interest_reserve_remaining": int(sms_budgets["interest_reserve_remaining"]),
+                    "sms_warm_close_reserve": int(guardrails.get("sms_warm_close_reserve") or 0),
+                    "sms_warm_close_reserve_remaining": int(guardrails.get("sms_warm_close_reserve_remaining") or 0),
+                    "sms_interest_reserve": int(guardrails.get("sms_interest_reserve") or 0),
+                    "sms_interest_reserve_remaining": int(guardrails.get("sms_interest_reserve_remaining") or 0),
                     "sms_followup_budget_remaining": int(sms_followup_budget_remaining),
                 },
             )
@@ -1649,6 +1895,7 @@ def main() -> None:
         auto_calls=auto_calls,
         sms_followup=sms_result,
         interest_nudge=interest_nudge_result,
+        warm_close=warm_close_result,
         twilio_inbox=twilio_inbox_result,
         twilio_tollfree=twilio_tollfree_result,
         revenue_learning=revenue_learning,
@@ -1678,6 +1925,7 @@ def main() -> None:
         "twilio_inbox_result": asdict(twilio_inbox_result),
         "twilio_tollfree_result": asdict(twilio_tollfree_result) if twilio_tollfree_result is not None else None,
         "interest_nudge_result": asdict(interest_nudge_result) if interest_nudge_result is not None else None,
+        "warm_close_result": asdict(warm_close_result) if warm_close_result is not None else None,
         "lead_hygiene": lead_hygiene_result,
         "revenue_learning": revenue_learning,
         "funnel_watchdog": asdict(funnel_result) if funnel_result is not None else None,
