@@ -16,16 +16,8 @@ from urllib.request import Request, urlopen
 from autonomy.utils import EMAIL_RE, EMAIL_SEARCH_RE
 try:
     from dotenv import load_dotenv
-except Exception:  # pragma: no cover - optional dependency in local/CI environments
+except ImportError:  # pragma: no cover - optional dependency in local/CI environments
     def load_dotenv(*_args, **_kwargs) -> bool:
-        return False
-
-load_dotenv()
-
-try:
-    from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - optional in minimal CI images
-    def load_dotenv() -> bool:
         return False
 
 load_dotenv()
@@ -188,8 +180,11 @@ def save_city_index(index: int, index_key: str) -> None:
                 payload["cursors"].update(
                     {str(k): int(v) for k, v in existing["cursors"].items()}
                 )
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            logging.getLogger(__name__).debug(
+                "Ignoring invalid city index cache (%s).",
+                exc.__class__.__name__,
+            )
     payload["cursors"][key] = int(index)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with CITY_INDEX_FILE.open("w", encoding="utf-8") as f:

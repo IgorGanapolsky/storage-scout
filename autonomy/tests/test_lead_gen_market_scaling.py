@@ -44,6 +44,17 @@ def test_market_cursor_is_isolated_by_key(tmp_path: Path, monkeypatch) -> None:
     assert leadgen.load_city_index("market:tx") == 0
 
 
+def test_save_city_index_tolerates_invalid_existing_cache(tmp_path: Path, monkeypatch) -> None:
+    index_file = tmp_path / "market_index.json"
+    index_file.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr(leadgen, "CITY_INDEX_FILE", index_file)
+
+    leadgen.save_city_index(3, "market:us")
+
+    payload = json.loads(index_file.read_text(encoding="utf-8"))
+    assert payload == {"cursors": {"market:us": 3}}
+
+
 def test_build_leads_rotates_markets_and_persists_index(monkeypatch) -> None:
     # No external calls; patch search/details with deterministic fake data.
     markets = [
