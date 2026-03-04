@@ -1,22 +1,22 @@
 ---
-name: callcatcher-outreach
+name: ai-seo-outreach
 description: >
-  Missed-call recovery outreach automation for local service businesses —
+  AI-SEO outreach automation for local service businesses —
   lead scoring, multi-step email sequences, compliance, and booking conversion.
 triggers:
   - outreach
-  - missed call recovery
+  - ai seo outreach
   - lead outreach
   - email campaign
-  - callcatcher outreach
+  - aeo outreach
 version: 1.0.0
 ---
 
-# CallCatcher Outreach
+# AI-SEO Outreach
 
 ## Overview
 
-Automates missed-call recovery outreach for local service businesses. The skill ingests leads from CSV files, scores them by data completeness, runs initial and follow-up email sequences, and tracks every interaction in SQLite. All outbound email is CAN-SPAM compliant with physical address, unsubscribe links, and opt-out enforcement.
+Automates AI-SEO service outreach for local service businesses. The skill ingests leads from CSV files, scores them by data completeness, runs initial and follow-up email sequences, and tracks every interaction in SQLite. All outbound email is CAN-SPAM compliant with physical address, unsubscribe links, and opt-out enforcement.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ Automates missed-call recovery outreach for local service businesses. The skill 
 
 ## Configuration
 
-All settings live in `autonomy/config.callcatcherops.json`. Key schema sections:
+All settings live in `autonomy/config.ai-seo.json`. Key schema sections:
 
 | Section | Fields | Purpose |
 |---|---|---|
@@ -62,7 +62,7 @@ All settings live in `autonomy/config.callcatcherops.json`. Key schema sections:
 ## Execution
 
 ```bash
-python3 autonomy/run.py --config autonomy/config.callcatcherops.json
+python3 autonomy/run.py --config autonomy/config.ai-seo.json
 ```
 
 Add `--dry-run` to override the config mode and preview without sending.
@@ -71,7 +71,7 @@ Add `--dry-run` to override the config mode and preview without sending.
 
 To onboard a new client:
 
-1. **Copy config** — Duplicate `config.callcatcherops.json` and rename for the client.
+1. **Copy config** — Duplicate `config.ai-seo.json` and rename for the client.
 2. **Set company info** — Fill in `company.name`, `company.physical_address`, `company.website`.
 3. **Add lead CSV** — Place the client's lead export in `autonomy/state/` and add the path to `lead_sources`.
 4. **Set SMTP credentials** — Export `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` for the client's sending domain.

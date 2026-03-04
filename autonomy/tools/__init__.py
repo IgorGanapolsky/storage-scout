@@ -1,2 +1,2 @@
-"""Operational tools for CallCatcher Ops (scripts + importable helpers)."""
+"""Operational tools for AEO Autopilot (scripts + importable helpers)."""
 

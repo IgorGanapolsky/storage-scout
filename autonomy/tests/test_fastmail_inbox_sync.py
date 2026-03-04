@@ -37,7 +37,7 @@ def test_sync_fastmail_intake_scoring(mock_imap_cls, test_state_dir):
         ("OK", [b"101"]),  # search UIDs
         ("OK", [
             (b"101 (RFC822 {1234}", b"From: \"FormSubmit\" <noreply@formsubmit.co>\r\n"
-             b"Subject: New Baseline Intake from CallCatcher\r\n\r\n"
+             b"Subject: New Baseline Intake from AEO Autopilot\r\n\r\n"
              b"Name: Alice Test\r\n"
              b"Email: alice@example.com\r\n"
              b"Phone: 555-0101\r\n"

@@ -46,6 +46,7 @@ STRIPE_BAD_MARKERS = (
     "link is no longer available",
     "page not found",
 )
+EXPECTED_PAGE_MARKERS = ("aeo autopilot", "ai-seo", "answer engine optimization")
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,7 @@ def _http_get(url: str, *, timeout: int = 14, max_bytes: int = 320_000) -> tuple
         req = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "callcatcherops-funnel-watchdog/1.0",
+                "User-Agent": "ai-seo-autopilot-funnel-watchdog/1.0",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             },
         )
@@ -226,8 +227,9 @@ def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_tem
         if status < 200 or status >= 400:
             res.add_issue(name=name, url=url, detail=f"http_status={status or 'error'}")
             continue
-        if "callcatcher" not in (body or "").lower():
-            res.add_issue(name=name, url=url, detail="missing expected marker 'callcatcher' in HTML")
+        lower = (body or "").lower()
+        if not any(marker in lower for marker in EXPECTED_PAGE_MARKERS):
+            res.add_issue(name=name, url=url, detail="missing expected AEO marker in HTML")
             continue
         res.add_ok()
 
@@ -236,7 +238,7 @@ def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_tem
     status, intake_body = _http_get(urls["intake"])
     ctas = _extract_ctas_from_html(intake_body or "")
     if not ctas:
-        local_intake = repo_root / "docs" / "callcatcherops" / "intake.html"
+        local_intake = repo_root / "docs" / "ai-seo" / "intake.html"
         if local_intake.exists():
             ctas = _extract_ctas_from_html(local_intake.read_text(encoding="utf-8", errors="ignore"))
 
@@ -272,7 +274,7 @@ def run_funnel_watchdog(*, repo_root: Path, intake_url: str, unsubscribe_url_tem
 def main() -> int:
     import argparse  # noqa: PLC0415
 
-    parser = argparse.ArgumentParser(description="Check CallCatcher Ops funnel health (no submissions).")
+    parser = argparse.ArgumentParser(description="Check AEO Autopilot funnel health (no submissions).")
     parser.add_argument("--intake-url", default="", help="Public intake URL")
     parser.add_argument("--unsubscribe-url-template", default="", help="Unsubscribe URL template (may include ?email={{email}})")
     args = parser.parse_args()

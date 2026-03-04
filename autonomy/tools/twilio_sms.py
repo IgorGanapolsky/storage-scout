@@ -47,16 +47,16 @@ def _is_business_hours(state: str, start_hour: int, end_hour: int, *, allow_week
 
 def _default_sms_body(booking_url: str) -> str:
     return (
-        "Hi, this is CallCatcher Ops. We help dental practices recover "
-        "missed calls with instant text-back + callback automation. "
-        f"Book a free 5-min baseline: {booking_url} "
+        "Hi, this is AEO Autopilot. We help local businesses grow qualified leads "
+        "from AI search with schema + conversion-focused page optimization. "
+        f"Book a free 5-min AI visibility baseline: {booking_url} "
         "Reply STOP to opt out."
     )
 
 
 def _default_sms_second_nudge_body(booking_url: str) -> str:
     return (
-        "Quick follow-up from CallCatcher Ops. If missed-call recovery is still a priority, "
+        "Quick follow-up from AEO Autopilot. If AI-SEO growth is still a priority, "
         f"grab a 5-min baseline slot here: {booking_url} "
         "Reply STOP to opt out."
     )

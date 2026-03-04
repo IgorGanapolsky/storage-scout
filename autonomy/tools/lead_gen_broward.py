@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+from hashlib import sha1
 from html import unescape
 from pathlib import Path
 from random import SystemRandom
@@ -17,6 +18,14 @@ try:
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover - optional dependency in local/CI environments
     def load_dotenv(*_args, **_kwargs) -> bool:
+        return False
+
+load_dotenv()
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional in minimal CI images
+    def load_dotenv() -> bool:
         return False
 
 load_dotenv()
@@ -35,8 +44,9 @@ DEFAULT_CATEGORIES = [
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DEFAULT_CITY_FILE = DATA_DIR / "broward_cities.json"
+DEFAULT_MARKET_FILE = DATA_DIR / "us_growth_markets.json"
 STATE_DIR = Path(__file__).resolve().parents[1] / "state"
-CITY_INDEX_FILE = STATE_DIR / "broward_city_index.json"
+CITY_INDEX_FILE = STATE_DIR / "lead_gen_market_index.json"
 RNG = SystemRandom()
 
 HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
@@ -118,6 +128,80 @@ def get_api_key() -> str:
     raise SystemExit("Missing Google Places API key. Set GOOGLE_PLACES_API_KEY.")
 
 
+def load_markets(path: Path | None, default_state: str) -> list[dict[str, str]]:
+    state = (default_state or "FL").strip().upper()
+    source_path = path
+    if source_path is None and DEFAULT_MARKET_FILE.exists():
+        source_path = DEFAULT_MARKET_FILE
+    if source_path is None:
+        source_path = DEFAULT_CITY_FILE
+    if source_path and source_path.exists():
+        markets: list[dict[str, str]] = []
+        with source_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        for item in data:
+            if isinstance(item, str):
+                city = item.strip()
+                if city:
+                    markets.append({"city": city, "state": state})
+                continue
+            if isinstance(item, dict):
+                city = (item.get("city") or "").strip()
+                item_state = (item.get("state") or state).strip().upper()
+                if city:
+                    markets.append({"city": city, "state": item_state or state})
+        return markets
+    raise SystemExit("No market list found.")
+
+
+def _cursor_key(raw_key: str) -> str:
+    norm = (raw_key or "default").strip().lower()
+    if len(norm) <= 72:
+        return norm
+    return sha1(norm.encode("utf-8")).hexdigest()
+
+
+def load_city_index(index_key: str) -> int:
+    key = _cursor_key(index_key)
+    if not CITY_INDEX_FILE.exists():
+        return 0
+    try:
+        with CITY_INDEX_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        cursors = data.get("cursors")
+        if isinstance(cursors, dict):
+            return int(cursors.get(key, 0))
+        # Backward compatibility with old format {"index": N}
+        return int(data.get("index", 0))
+    except Exception:
+        return 0
+
+
+def save_city_index(index: int, index_key: str) -> None:
+    key = _cursor_key(index_key)
+    payload: dict[str, dict[str, int]] = {"cursors": {}}
+    if CITY_INDEX_FILE.exists():
+        try:
+            with CITY_INDEX_FILE.open("r", encoding="utf-8") as f:
+                existing = json.load(f)
+            if isinstance(existing.get("cursors"), dict):
+                payload["cursors"].update(
+                    {str(k): int(v) for k, v in existing["cursors"].items()}
+                )
+        except Exception:
+            pass
+    payload["cursors"][key] = int(index)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with CITY_INDEX_FILE.open("w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
+def build_query(category: str, market: dict[str, str]) -> str:
+    city = (market.get("city") or "").strip()
+    state = (market.get("state") or "FL").strip().upper()
+    return f"{category} in {city}, {state}"
+
+
 def load_cities(path: Path | None) -> list[str]:
     if path and path.exists():
         with path.open("r", encoding="utf-8") as f:
@@ -189,7 +273,7 @@ def fetch_html(url: str) -> str:
     if not url:
         return ""
     try:
-        req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.1"})
+        req = Request(url, headers={"User-Agent": "ai-seo-autopilot-leadgen/1.1"})
         with urlopen(req, timeout=WEB_TIMEOUT_SECS) as resp:
             content_type = (resp.headers.get("Content-Type") or "").lower()
             if "text/html" not in content_type:
@@ -321,7 +405,7 @@ def discover_best_email(website: str, domain: str) -> tuple[str, str]:
 
 
 def request_json(url: str) -> dict:
-    req = Request(url, headers={"User-Agent": "callcatcherops-leadgen/1.0"})
+    req = Request(url, headers={"User-Agent": "ai-seo-autopilot-leadgen/1.0"})
     with urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -349,23 +433,6 @@ def place_details(place_id: str, api_key: str) -> dict:
     return data.get("result", {})
 
 
-def load_city_index() -> int:
-    if not CITY_INDEX_FILE.exists():
-        return 0
-    try:
-        with CITY_INDEX_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        return int(data.get("index", 0))
-    except Exception:
-        return 0
-
-
-def save_city_index(index: int) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with CITY_INDEX_FILE.open("w", encoding="utf-8") as f:
-        json.dump({"index": index}, f)
-
-
 def iter_city_cycle(cities: list[str], start_index: int):
     if not cities:
         raise SystemExit("No cities provided.")
@@ -381,10 +448,25 @@ def iter_city_category_pairs(cities: list[str], categories: list[str], start_ind
             yield city, category
 
 
+def iter_market_cycle(markets: list[dict[str, str]], start_index: int):
+    if not markets:
+        raise SystemExit("No markets provided.")
+    for i in range(len(markets)):
+        yield markets[(start_index + i) % len(markets)]
+
+
+def iter_market_category_pairs(markets: list[dict[str, str]], categories: list[str], start_index: int):
+    for market in iter_market_cycle(markets, start_index):
+        shuffled_categories = categories[:]
+        RNG.shuffle(shuffled_categories)
+        for category in shuffled_categories:
+            yield market, category
+
+
 def build_lead_from_place(
     place: dict,
     category: str,
-    city: str,
+    market: dict[str, str],
     api_key: str,
     existing_emails: set[str],
     existing_domains: set[str],
@@ -433,8 +515,8 @@ def build_lead_from_place(
         "email": email,
         "phone": phone,
         "service": category.title(),
-        "city": city,
-        "state": "FL",
+        "city": market.get("city", ""),
+        "state": (market.get("state") or "FL").upper(),
         "website": website,
         "notes": f"source=google_places; category={category}; place_id={place_id}; email={email_method}",
     }
@@ -449,27 +531,28 @@ def build_lead_from_place(
 
 
 def build_leads(
-    cities: list[str],
+    markets: list[dict[str, str]],
     categories: list[str],
     limit: int,
+    start_index: int,
     api_key: str,
     existing_emails: set[str],
     existing_domains: set[str],
     existing_phones: set[str],
 ) -> tuple[list[dict], int]:
     leads: list[dict] = []
-    start_index = load_city_index()
 
-    cities_used = 0
-    last_city = None
-    for city, category in iter_city_category_pairs(cities, categories, start_index):
+    markets_used = 0
+    last_market = None
+    for market, category in iter_market_category_pairs(markets, categories, start_index):
         if len(leads) >= limit:
             break
-        if city != last_city:
-            cities_used += 1
-            last_city = city
+        market_key = f"{market.get('city','')}|{market.get('state','')}"
+        if market_key != last_market:
+            markets_used += 1
+            last_market = market_key
 
-        query = f"{category} in {city}, FL"
+        query = build_query(category, market)
         results = text_search(query, api_key)
         for place in results:
             if len(leads) >= limit:
@@ -477,7 +560,7 @@ def build_leads(
             lead = build_lead_from_place(
                 place=place,
                 category=category,
-                city=city,
+                market=market,
                 api_key=api_key,
                 existing_emails=existing_emails,
                 existing_domains=existing_domains,
@@ -488,7 +571,7 @@ def build_leads(
             leads.append(lead)
             time.sleep(0.1)
 
-    new_index = (start_index + cities_used) % len(cities) if cities else 0
+    new_index = (start_index + markets_used) % len(markets) if markets else 0
     return leads, new_index
 
 
@@ -517,10 +600,10 @@ def write_leads(path: Path, leads: list[dict], replace: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate Broward County leads via Google Places.")
+    parser = argparse.ArgumentParser(description="Generate local business leads via Google Places.")
     parser.add_argument("--limit", type=int, default=30, help="Number of leads to generate.")
     # Default to autonomy/state to avoid accidentally committing real lead data.
-    parser.add_argument("--output", type=Path, default=STATE_DIR / "leads_callcatcherops_real.csv")
+    parser.add_argument("--output", type=Path, default=STATE_DIR / "leads_ai_seo_real.csv")
     parser.add_argument("--replace", action="store_true", help="Replace output file instead of appending.")
     parser.add_argument(
         "--categories",
@@ -528,7 +611,10 @@ def parse_args() -> argparse.Namespace:
         default=",".join(DEFAULT_CATEGORIES),
         help="Comma-separated list of categories.",
     )
-    parser.add_argument("--cities", type=Path, default=None, help="Path to cities JSON file.")
+    parser.add_argument("--markets", type=Path, default=None, help="Path to market JSON file.")
+    parser.add_argument("--cities", type=Path, default=None, help="Deprecated alias for --markets.")
+    parser.add_argument("--state", type=str, default="FL", help="Fallback state for plain city lists.")
+    parser.add_argument("--cursor-key", type=str, default="", help="Stable key for rotation cursor persistence.")
     return parser.parse_args()
 
 
@@ -540,16 +626,22 @@ def main() -> None:
     if not categories:
         categories = DEFAULT_CATEGORIES
 
-    cities = load_cities(args.cities)
-    if not cities:
-        raise SystemExit("City list is empty.")
+    market_file = args.markets or args.cities
+    markets = load_markets(market_file, default_state=args.state)
+    if not markets:
+        raise SystemExit("Market list is empty.")
+
+    cursor_source = str(market_file) if market_file else f"default:{args.state.upper()}"
+    cursor_key = args.cursor_key.strip() if args.cursor_key.strip() else cursor_source
+    start_index = load_city_index(cursor_key)
 
     existing_emails, existing_domains, existing_phones = load_existing(args.output)
 
     leads, new_index = build_leads(
-        cities=cities,
+        markets=markets,
         categories=categories,
         limit=args.limit,
+        start_index=start_index,
         api_key=api_key,
         existing_emails=existing_emails,
         existing_domains=existing_domains,
@@ -579,7 +671,7 @@ def main() -> None:
         pass
 
     write_leads(args.output, leads, replace=args.replace)
-    save_city_index(new_index)
+    save_city_index(new_index, cursor_key)
 
     print(f"Generated {len(leads)} leads -> {args.output}")
 

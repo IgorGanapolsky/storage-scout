@@ -11,7 +11,7 @@ from autonomy.engine import Engine, load_config  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Autonomous Outreach Engine")
-    parser.add_argument("--config", default="autonomy/config.callcatcherops.json")
+    parser.add_argument("--config", default="autonomy/config.ai-seo.json")
     args = parser.parse_args()
 
     config = load_config(args.config)

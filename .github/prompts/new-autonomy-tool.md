@@ -1,6 +1,6 @@
 # Prompt: New Autonomy Tool
 
-Design and implement a new tool under `autonomy/tools/` with CallCatcher Ops governance.
+Design and implement a new tool under `autonomy/tools/` with AEO Autopilot governance.
 
 ## Must Follow
 - `.github/copilot-instructions.md`

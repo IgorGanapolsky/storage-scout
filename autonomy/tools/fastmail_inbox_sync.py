@@ -265,6 +265,7 @@ def sync_fastmail_inbox(
 
             from_name, from_email = parseaddr(msg.get("From", ""))
             subject = str(msg.get("Subject", "") or "")
+            subject_l = subject.lower()
             body_text = _message_text(msg)
 
             processed += 1
@@ -296,7 +297,7 @@ def sync_fastmail_inbox(
                 continue
 
             # Intake submissions (formsubmit -> hello inbox)
-            if "baseline intake" in subject.lower() and "callcatcher" in subject.lower():
+            if "baseline intake" in subject_l and any(token in subject_l for token in ("aeo autopilot", "ai-seo")):
                 intake_submissions += 1
                 data = _parse_intake_body(body_text)
                 if data.get("email"):

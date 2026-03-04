@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-LABEL = "com.callcatcherops.autonomy.tollfree_watchdog"
+LABEL = "com.ai-seo-autopilot.autonomy.tollfree_watchdog"
 
 
 def _plist_content(*, python_exe: str, repo_root: Path) -> str:
@@ -36,7 +36,7 @@ def _plist_content(*, python_exe: str, repo_root: Path) -> str:
     <string>--state-path</string>
     <string>autonomy/state/twilio_tollfree_watchdog_state.json</string>
     <string>--company-name</string>
-    <string>CallCatcher Ops</string>
+    <string>AEO Autopilot</string>
   </array>
 
   <key>StartInterval</key>

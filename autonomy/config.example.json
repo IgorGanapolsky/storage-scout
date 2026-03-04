@@ -1,12 +1,12 @@
 {
   "mode": "dry-run",
   "company": {
-    "name": "CallCatcher HQ",
-    "website": "https://callcatcherhq.com",
-    "intake_url": "https://callcatcherhq.com/intake",
-    "reply_to": "hello@callcatcherhq.com",
+    "name": "AEO Autopilot",
+    "website": "https://aiseoautopilot.com",
+    "intake_url": "https://aiseoautopilot.com/ai-seo/intake.html",
+    "reply_to": "hello@aiseoautopilot.com",
     "mailing_address": "123 Main St, City, ST 00000",
-    "signature": "— CallCatcher HQ",
+    "signature": "— AEO Autopilot",
     "booking_url": "https://calendly.com/example/audit-call",
     "kickoff_url": "https://buy.stripe.com/example"
   },
@@ -38,12 +38,12 @@
     "provider": "smtp",
     "smtp_host": "smtp.example.com",
     "smtp_port": 587,
-    "smtp_user": "hello@callcatcherhq.com",
+    "smtp_user": "hello@aiseoautopilot.com",
     "smtp_password_env": "SMTP_PASSWORD"
   },
   "compliance": {
     "include_unsubscribe": true,
-    "unsubscribe_url": "https://callcatcherhq.com/unsubscribe?email={{email}}",
+    "unsubscribe_url": "https://aiseoautopilot.com/unsubscribe.html?email={{email}}",
     "can_spam_required": true
   },
   "storage": {

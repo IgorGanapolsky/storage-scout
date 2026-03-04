@@ -1,27 +1,27 @@
 {
-  "name": "callcatcherops",
+  "name": "ai-seo-autopilot",
   "version": "1.0.0",
-  "description": "CallCatcher Ops missed-call recovery platform for local service businesses: marketing site, intake flow, and outreach automation.",
+  "description": "Autonomous AI-SEO (AEO) operations platform: managed answer engine optimization, schema deployment, and growth automation.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "e2e:test": "./.claude/scripts/e2e/e2e-test.sh",
+    "e2e:prereq": "./.claude/scripts/e2e/prereq.sh"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/IgorGanapolsky/storage-scout.git"
   },
   "keywords": [
-    "callcatcherops",
-    "missed-call-recovery",
-    "appointment-booking",
-    "local-service-business",
-    "call-tracking",
-    "lead-conversion",
-    "sms-automation",
-    "voice-ai"
+    "ai-seo",
+    "aeo",
+    "answer-engine-optimization",
+    "llm-visibility",
+    "schema-markup",
+    "growth-automation"
   ],
   "author": "",
   "license": "ISC",
@@ -32,7 +32,7 @@
   "homepage": "https://github.com/IgorGanapolsky/storage-scout#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "agent-browser": "^0.15.0"
+    "agent-browser": "^0.16.3"
   },
   "overrides": {
     "@appium/logger": {

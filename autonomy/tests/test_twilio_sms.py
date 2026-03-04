@@ -93,7 +93,7 @@ def test_load_sms_config_valid() -> None:
     assert cfg is not None
     assert cfg.account_sid == "AC123"
     assert cfg.from_number == "+19546211439"
-    assert "CallCatcher Ops" in cfg.body
+    assert "AEO Autopilot" in cfg.body
     assert "calendly" in cfg.body.lower()
 
 
@@ -138,7 +138,7 @@ def test_load_sms_config_second_nudge_override() -> None:
     assert cfg.second_nudge_enabled is True
     assert cfg.second_nudge_min_hours == 8
     assert cfg.second_nudge_max_per_run == 2
-    assert "Quick follow-up from CallCatcher Ops" in cfg.second_nudge_body
+    assert "Quick follow-up from AEO Autopilot" in cfg.second_nudge_body
 
 
 # --- _is_business_hours ---
