@@ -181,6 +181,41 @@ def _record_twilio_exception_failure(payload: dict[str, Any], exc: Exception) ->
     payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
 
 
+def _dispatch_sms_attempt(
+    *,
+    cfg: TwilioSmsConfig,
+    payload: dict[str, Any],
+    result: SmsResult,
+    to_number: str,
+    env: dict[str, str],
+    body_override: str | None = None,
+) -> None:
+    try:
+        resp = send_sms(cfg, to_number=to_number, body_override=body_override, env=env)
+        sid = resp.get("sid", "")
+        status = resp.get("status", "")
+        payload["outcome"] = "delivered"
+        payload["twilio"] = {
+            "sid": sid,
+            "status": status,
+            "error_code": resp.get("error_code"),
+            "error_message": resp.get("error_message"),
+        }
+        result.delivered += 1
+    except urllib.error.HTTPError as exc:
+        status_code, error_data, error_message = _parse_http_error(exc)
+        _record_twilio_http_failure(
+            payload,
+            status_code=status_code,
+            error_data=error_data,
+            error_message=error_message,
+        )
+        result.failed += 1
+    except Exception as exc:
+        _record_twilio_exception_failure(payload, exc)
+        result.failed += 1
+
+
 def send_sms(
     cfg: TwilioSmsConfig,
     *,
@@ -397,30 +432,13 @@ def run_sms_followup(
             "twilio": {},
         }
 
-        try:
-            resp = send_sms(cfg, to_number=phone, env=env)
-            sid = resp.get("sid", "")
-            status = resp.get("status", "")
-            payload["outcome"] = "delivered"
-            payload["twilio"] = {
-                "sid": sid,
-                "status": status,
-                "error_code": resp.get("error_code"),
-                "error_message": resp.get("error_message"),
-            }
-            result.delivered += 1
-        except urllib.error.HTTPError as exc:
-            status_code, error_data, error_message = _parse_http_error(exc)
-            _record_twilio_http_failure(
-                payload,
-                status_code=status_code,
-                error_data=error_data,
-                error_message=error_message,
-            )
-            result.failed += 1
-        except Exception as exc:
-            _record_twilio_exception_failure(payload, exc)
-            result.failed += 1
+        _dispatch_sms_attempt(
+            cfg=cfg,
+            payload=payload,
+            result=result,
+            to_number=phone,
+            env=env,
+        )
 
         result.attempted += 1
         sent_count += 1
@@ -486,30 +504,14 @@ def run_sms_followup(
                 "twilio": {},
             }
 
-            try:
-                resp = send_sms(cfg, to_number=phone, body_override=cfg.second_nudge_body, env=env)
-                sid = resp.get("sid", "")
-                status = resp.get("status", "")
-                payload["outcome"] = "delivered"
-                payload["twilio"] = {
-                    "sid": sid,
-                    "status": status,
-                    "error_code": resp.get("error_code"),
-                    "error_message": resp.get("error_message"),
-                }
-                result.delivered += 1
-            except urllib.error.HTTPError as exc:
-                status_code, error_data, error_message = _parse_http_error(exc)
-                _record_twilio_http_failure(
-                    payload,
-                    status_code=status_code,
-                    error_data=error_data,
-                    error_message=error_message,
-                )
-                result.failed += 1
-            except Exception as exc:
-                _record_twilio_exception_failure(payload, exc)
-                result.failed += 1
+            _dispatch_sms_attempt(
+                cfg=cfg,
+                payload=payload,
+                result=result,
+                to_number=phone,
+                env=env,
+                body_override=cfg.second_nudge_body,
+            )
 
             result.attempted += 1
             store.log_action(

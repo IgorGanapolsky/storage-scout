@@ -47,6 +47,67 @@ def _build_http_error(*, status: int, payload: dict) -> urllib.error.HTTPError:
     )
 
 
+def _new_sms_paths() -> tuple[Path, Path]:
+    run_id = uuid4().hex
+    return (
+        Path(f"autonomy/state/test_sms_{run_id}.sqlite3"),
+        Path(f"autonomy/state/test_sms_{run_id}.jsonl"),
+    )
+
+
+def _sms_env(**overrides: str) -> dict[str, str]:
+    env = {
+        "AUTO_SMS_ENABLED": "1",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "token",
+        "TWILIO_FROM_NUMBER": "+19546211439",
+    }
+    env.update(overrides)
+    return env
+
+
+def _seed_second_nudge_candidate(*, sqlite_path: Path, audit_log: Path, lead_id: str) -> None:
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        store.upsert_lead(
+            Lead(
+                id=lead_id,
+                name="Test",
+                company="Nudge Dental",
+                email=lead_id,
+                phone="9546211439",
+                service="Dentist",
+                city="Margate",
+                state="FL",
+                source="test",
+                score=100,
+                status="contacted",
+                email_method="direct",
+            )
+        )
+        store.log_action(
+            agent_id="agent.sms.twilio.v1",
+            action_type="sms.attempt",
+            trace_id=f"sms-init-{lead_id}",
+            payload={
+                "lead_id": lead_id,
+                "phone": "(954) 621-1439",
+                "company": "Nudge Dental",
+                "service": "Dentist",
+                "city": "Margate",
+                "state": "FL",
+                "outcome": "delivered",
+                "phase": "initial",
+                "twilio": {"sid": "SM_INIT", "status": "delivered"},
+            },
+        )
+        old_ts = (real_datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
+        store.conn.execute("UPDATE actions SET ts=? WHERE trace_id=?", (old_ts, f"sms-init-{lead_id}"))
+        store.conn.commit()
+    finally:
+        store.conn.close()
+
+
 # --- normalize_phone ---
 
 
@@ -270,9 +331,7 @@ def test_parse_http_error_handles_invalid_json_payload() -> None:
 
 
 def test_run_sms_followup_disabled() -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_sms_paths()
 
     result = run_sms_followup(
         sqlite_path=sqlite_path,
@@ -283,10 +342,19 @@ def test_run_sms_followup_disabled() -> None:
     assert result.attempted == 0
 
 
+def test_run_sms_followup_enabled_but_missing_twilio_env() -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    result = run_sms_followup(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env={"AUTO_SMS_ENABLED": "1"},
+    )
+    assert result.reason == "missing_twilio_env"
+    assert result.attempted == 0
+
+
 def test_run_sms_followup_end_to_end(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_sms_paths()
 
     # Seed store with leads and call.attempt actions
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
@@ -360,14 +428,7 @@ def test_run_sms_followup_end_to_end(monkeypatch) -> None:
     finally:
         store.conn.close()
 
-    env = {
-        "AUTO_SMS_ENABLED": "1",
-        "AUTO_SMS_MAX_PER_RUN": "10",
-        "AUTO_SMS_COOLDOWN_DAYS": "7",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19546211439",
-    }
+    env = _sms_env(AUTO_SMS_MAX_PER_RUN="10", AUTO_SMS_COOLDOWN_DAYS="7")
 
     # Mock business hours to always be True
     monkeypatch.setattr(
@@ -406,9 +467,7 @@ def test_run_sms_followup_end_to_end(monkeypatch) -> None:
 
 
 def test_run_sms_followup_handles_http_error(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_sms_paths()
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     try:
@@ -445,12 +504,7 @@ def test_run_sms_followup_handles_http_error(monkeypatch) -> None:
     finally:
         store.conn.close()
 
-    env = {
-        "AUTO_SMS_ENABLED": "1",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19546211439",
-    }
+    env = _sms_env()
 
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
@@ -497,9 +551,7 @@ def test_run_sms_followup_handles_http_error(monkeypatch) -> None:
 
 
 def test_run_sms_followup_respects_cooldown(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
+    sqlite_path, audit_log = _new_sms_paths()
 
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     try:
@@ -544,12 +596,7 @@ def test_run_sms_followup_respects_cooldown(monkeypatch) -> None:
     finally:
         store.conn.close()
 
-    env = {
-        "AUTO_SMS_ENABLED": "1",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19546211439",
-    }
+    env = _sms_env()
 
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
@@ -565,19 +612,16 @@ def test_run_sms_followup_respects_cooldown(monkeypatch) -> None:
     assert result.skipped == 1  # cooldown triggered
 
 
-def test_run_sms_followup_sends_second_nudge(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
-
+def test_run_sms_followup_respects_max_per_run_zero() -> None:
+    sqlite_path, audit_log = _new_sms_paths()
     store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     try:
-        lead_id = "nudge@clinic.com"
+        lead_id = "max-zero@clinic.com"
         store.upsert_lead(
             Lead(
                 id=lead_id,
                 name="Test",
-                company="Nudge Dental",
+                company="Cap Dental",
                 email=lead_id,
                 phone="9546211439",
                 service="Dentist",
@@ -590,36 +634,144 @@ def test_run_sms_followup_sends_second_nudge(monkeypatch) -> None:
             )
         )
         store.log_action(
-            agent_id="agent.sms.twilio.v1",
-            action_type="sms.attempt",
-            trace_id="sms-init",
+            agent_id="test",
+            action_type="call.attempt",
+            trace_id="call-max-zero",
             payload={
                 "lead_id": lead_id,
                 "phone": "(954) 621-1439",
-                "company": "Nudge Dental",
+                "company": "Cap Dental",
                 "service": "Dentist",
                 "city": "Margate",
                 "state": "FL",
-                "outcome": "delivered",
-                "phase": "initial",
-                "twilio": {"sid": "SM_INIT", "status": "delivered"},
+                "outcome": "spoke",
             },
         )
-        old_ts = (real_datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
-        store.conn.execute("UPDATE actions SET ts=? WHERE trace_id='sms-init'", (old_ts,))
-        store.conn.commit()
     finally:
         store.conn.close()
 
-    env = {
-        "AUTO_SMS_ENABLED": "1",
-        "AUTO_SMS_SECOND_NUDGE_ENABLED": "1",
-        "AUTO_SMS_SECOND_NUDGE_MIN_HOURS": "6",
-        "AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN": "1",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19546211439",
-    }
+    result = run_sms_followup(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=_sms_env(AUTO_SMS_MAX_PER_RUN="0"),
+    )
+    assert result.attempted == 0
+    assert result.delivered == 0
+
+
+def test_run_sms_followup_skips_invalid_phone_reply_and_afterhours(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        rows = [
+            ("badphone@clinic.com", "011 954 621 1439", "FL"),
+            ("reply@clinic.com", "(954) 621-1439", "FL"),
+            ("afterhours@clinic.com", "(954) 621-1439", "TX"),
+        ]
+        for lead_id, phone, state in rows:
+            store.upsert_lead(
+                Lead(
+                    id=lead_id,
+                    name="Test",
+                    company="Skip Dental",
+                    email=lead_id,
+                    phone="9546211439",
+                    service="Dentist",
+                    city="Margate",
+                    state=state,
+                    source="test",
+                    score=100,
+                    status="contacted",
+                    email_method="direct",
+                )
+            )
+            store.log_action(
+                agent_id="test",
+                action_type="call.attempt",
+                trace_id=f"call-{lead_id}",
+                payload={
+                    "lead_id": lead_id,
+                    "phone": phone,
+                    "company": "Skip Dental",
+                    "service": "Dentist",
+                    "city": "Margate",
+                    "state": state,
+                    "outcome": "spoke",
+                },
+            )
+    finally:
+        store.conn.close()
+
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._has_inbound_reply_since",
+        lambda _store, *, lead_id, since_iso: lead_id == "reply@clinic.com",
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._is_business_hours",
+        lambda state, start_hour, end_hour, allow_weekends=False: state != "TX",
+    )
+
+    result = run_sms_followup(sqlite_path=sqlite_path, audit_log=audit_log, env=_sms_env())
+    assert result.attempted == 0
+    assert result.skipped == 3
+
+
+def test_run_sms_followup_second_nudge_skip_matrix(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._load_second_nudge_candidates",
+        lambda _store, *, min_hours, max_rows: [
+            {"lead_id": "", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "badphone@clinic.com", "phone": "011 954 621 1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "opted@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "nolast@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "", "state": "FL"},
+            {"lead_id": "replied@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "converted@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "already@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "FL"},
+            {"lead_id": "afterhours@clinic.com", "phone": "(954) 621-1439", "last_sms_ts": "t", "state": "TX"},
+        ],
+    )
+    monkeypatch.setattr("autonomy.tools.twilio_sms._is_opted_out", lambda _store, lead_id: lead_id == "opted@clinic.com")
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._has_inbound_reply_since",
+        lambda _store, *, lead_id, since_iso: lead_id == "replied@clinic.com",
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._has_conversion_since",
+        lambda _store, *, lead_id, since_iso: lead_id == "converted@clinic.com",
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._second_nudge_already_sent_since",
+        lambda _store, *, lead_id, since_iso: lead_id == "already@clinic.com",
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._is_business_hours",
+        lambda state, start_hour, end_hour, allow_weekends=False: state != "TX",
+    )
+
+    result = run_sms_followup(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=_sms_env(
+            AUTO_SMS_SECOND_NUDGE_ENABLED="1",
+            AUTO_SMS_SECOND_NUDGE_MIN_HOURS="6",
+            AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN="10",
+        ),
+    )
+    assert result.reason == "ok"
+    assert result.attempted == 0
+    assert result.skipped == 8
+
+
+def test_run_sms_followup_sends_second_nudge(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    lead_id = "nudge@clinic.com"
+    _seed_second_nudge_candidate(sqlite_path=sqlite_path, audit_log=audit_log, lead_id=lead_id)
+    env = _sms_env(
+        AUTO_SMS_SECOND_NUDGE_ENABLED="1",
+        AUTO_SMS_SECOND_NUDGE_MIN_HOURS="6",
+        AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN="1",
+    )
 
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
@@ -653,60 +805,14 @@ def test_run_sms_followup_sends_second_nudge(monkeypatch) -> None:
 
 
 def test_run_sms_followup_second_nudge_handles_http_error(monkeypatch) -> None:
-    run_id = uuid4().hex
-    sqlite_path = Path(f"autonomy/state/test_sms_{run_id}.sqlite3")
-    audit_log = Path(f"autonomy/state/test_sms_{run_id}.jsonl")
-
-    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
-    try:
-        lead_id = "nudge-fail@clinic.com"
-        store.upsert_lead(
-            Lead(
-                id=lead_id,
-                name="Test",
-                company="Nudge Dental",
-                email=lead_id,
-                phone="9546211439",
-                service="Dentist",
-                city="Margate",
-                state="FL",
-                source="test",
-                score=100,
-                status="contacted",
-                email_method="direct",
-            )
-        )
-        store.log_action(
-            agent_id="agent.sms.twilio.v1",
-            action_type="sms.attempt",
-            trace_id="sms-init-fail",
-            payload={
-                "lead_id": lead_id,
-                "phone": "(954) 621-1439",
-                "company": "Nudge Dental",
-                "service": "Dentist",
-                "city": "Margate",
-                "state": "FL",
-                "outcome": "delivered",
-                "phase": "initial",
-                "twilio": {"sid": "SM_INIT_FAIL", "status": "delivered"},
-            },
-        )
-        old_ts = (real_datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
-        store.conn.execute("UPDATE actions SET ts=? WHERE trace_id='sms-init-fail'", (old_ts,))
-        store.conn.commit()
-    finally:
-        store.conn.close()
-
-    env = {
-        "AUTO_SMS_ENABLED": "1",
-        "AUTO_SMS_SECOND_NUDGE_ENABLED": "1",
-        "AUTO_SMS_SECOND_NUDGE_MIN_HOURS": "6",
-        "AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN": "1",
-        "TWILIO_ACCOUNT_SID": "AC123",
-        "TWILIO_AUTH_TOKEN": "token",
-        "TWILIO_FROM_NUMBER": "+19546211439",
-    }
+    sqlite_path, audit_log = _new_sms_paths()
+    lead_id = "nudge-fail@clinic.com"
+    _seed_second_nudge_candidate(sqlite_path=sqlite_path, audit_log=audit_log, lead_id=lead_id)
+    env = _sms_env(
+        AUTO_SMS_SECOND_NUDGE_ENABLED="1",
+        AUTO_SMS_SECOND_NUDGE_MIN_HOURS="6",
+        AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN="1",
+    )
     monkeypatch.setattr(
         "autonomy.tools.twilio_sms._is_business_hours",
         lambda state, start_hour, end_hour, allow_weekends=False: True,
@@ -742,5 +848,126 @@ def test_run_sms_followup_second_nudge_handles_http_error(monkeypatch) -> None:
         assert str(row["phase"] or "") == "second_nudge"
         assert int(row["error_code"] or 0) == 21610
         assert int(row["http_status"] or 0) == 400
+    finally:
+        store_check.conn.close()
+
+
+def test_run_sms_followup_records_non_http_exception(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        lead_id = "boom@clinic.com"
+        store.upsert_lead(
+            Lead(
+                id=lead_id,
+                name="Test",
+                company="Boom Dental",
+                email=lead_id,
+                phone="9546211439",
+                service="Dentist",
+                city="Margate",
+                state="FL",
+                source="test",
+                score=100,
+                status="contacted",
+                email_method="direct",
+            )
+        )
+        store.log_action(
+            agent_id="test",
+            action_type="call.attempt",
+            trace_id="call-boom",
+            payload={
+                "lead_id": lead_id,
+                "phone": "(954) 621-1439",
+                "company": "Boom Dental",
+                "service": "Dentist",
+                "city": "Margate",
+                "state": "FL",
+                "outcome": "spoke",
+            },
+        )
+    finally:
+        store.conn.close()
+
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._is_business_hours",
+        lambda state, start_hour, end_hour, allow_weekends=False: True,
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms.urllib.request.urlopen",
+        lambda req, timeout=20: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    result = run_sms_followup(sqlite_path=sqlite_path, audit_log=audit_log, env=_sms_env())
+    assert result.attempted == 1
+    assert result.failed == 1
+
+    store_check = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = store_check.conn.execute(
+            """
+            SELECT
+              json_extract(payload_json, '$.twilio.error_type') AS error_type,
+              json_extract(payload_json, '$.notes') AS notes
+            FROM actions
+            WHERE action_type='sms.attempt'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        assert row is not None
+        assert str(row["error_type"] or "") == "RuntimeError"
+        assert "exception=RuntimeError" in str(row["notes"] or "")
+    finally:
+        store_check.conn.close()
+
+
+def test_run_sms_followup_second_nudge_records_non_http_exception(monkeypatch) -> None:
+    sqlite_path, audit_log = _new_sms_paths()
+    _seed_second_nudge_candidate(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        lead_id="nudge-boom@clinic.com",
+    )
+
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms._is_business_hours",
+        lambda state, start_hour, end_hour, allow_weekends=False: True,
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.twilio_sms.urllib.request.urlopen",
+        lambda req, timeout=20: (_ for _ in ()).throw(RuntimeError("nudge boom")),
+    )
+
+    result = run_sms_followup(
+        sqlite_path=sqlite_path,
+        audit_log=audit_log,
+        env=_sms_env(
+            AUTO_SMS_SECOND_NUDGE_ENABLED="1",
+            AUTO_SMS_SECOND_NUDGE_MIN_HOURS="6",
+            AUTO_SMS_SECOND_NUDGE_MAX_PER_RUN="1",
+        ),
+    )
+    assert result.reason == "ok"
+    assert result.attempted == 1
+    assert result.failed == 1
+    assert result.delivered == 0
+
+    store_check = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
+    try:
+        row = store_check.conn.execute(
+            """
+            SELECT
+              json_extract(payload_json, '$.phase') AS phase,
+              json_extract(payload_json, '$.twilio.error_type') AS error_type
+            FROM actions
+            WHERE action_type='sms.attempt'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        assert row is not None
+        assert str(row["phase"] or "") == "second_nudge"
+        assert str(row["error_type"] or "") == "RuntimeError"
     finally:
         store_check.conn.close()
