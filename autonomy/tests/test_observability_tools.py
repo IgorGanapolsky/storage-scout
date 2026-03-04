@@ -32,6 +32,7 @@ from autonomy.tools.live_job import (
     _count_actions_today,
     _evaluate_paid_stop_loss,
     _format_report,
+    _has_revenue_signal,
     _parse_categories,
     _resolve_config_path,
     _resolve_paid_sms_block_reason,
@@ -1553,3 +1554,165 @@ def test_live_job_main_non_blocked_deliverability_hits_engine_success_path(monke
     live_job_main()
     assert report_path.exists()
     report_path.unlink(missing_ok=True)
+
+
+def test_live_job_main_twilio_hard_disabled_blocks_paid_channels(monkeypatch) -> None:
+    run_id = uuid.uuid4().hex
+    sqlite_path, audit_log = _tmp_state_paths(f"live_job_main_twilio_hard_disabled_{run_id}")
+    report_rel = f"autonomy/state/live_job_twilio_hard_disabled_{run_id}.txt"
+    report_path = Path(report_rel)
+
+    cfg = SimpleNamespace(
+        company={
+            "name": "AEO Autopilot",
+            "booking_url": "https://cal.example.com/audit",
+            "kickoff_url": "https://pay.example.com/kickoff",
+            "intake_url": "https://example.com/intake",
+        },
+        compliance={"unsubscribe_url": "https://example.com/unsubscribe?email={{email}}"},
+        agents={"outreach": {"daily_send_limit": 1, "followup": {"enabled": True, "daily_send_limit": 1}}},
+        lead_sources=[],
+        email={"smtp_user": "agent@example.com"},
+        storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
+    )
+    env = {
+        "REPORT_DELIVERY": "none",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+        "TWILIO_INBOX_SYNC_ENABLED": "1",
+        "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "1",
+        "FUNNEL_WATCHDOG": "0",
+        "AUTO_WARM_CLOSE_ENABLED": "1",
+        "AUTO_INTEREST_NUDGE_ENABLED": "1",
+        "AUTO_CALLS_ENABLED": "1",
+        "AUTO_SMS_ENABLED": "1",
+    }
+    captured: dict[str, object] = {}
+
+    class _FakeEngine:
+        def __init__(self, _cfg) -> None:  # noqa: ANN001
+            pass
+
+        def run(self) -> dict[str, int]:
+            return {"sent_initial": 0, "sent_followup": 0}
+
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr("autonomy.tools.live_job.load_config", lambda _path: cfg)
+    monkeypatch.setattr("autonomy.tools.live_job.sync_fastmail_inbox", lambda **_kwargs: InboxSyncResult(last_uid=0))
+    monkeypatch.setattr("autonomy.tools.live_job.run_warm_close_loop", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must be blocked")))
+    monkeypatch.setattr("autonomy.tools.live_job.run_interest_nudges", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must be blocked")))
+    monkeypatch.setattr("autonomy.tools.live_job.run_auto_calls", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must be blocked")))
+    monkeypatch.setattr("autonomy.tools.live_job.run_sms_followup", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must be blocked")))
+    monkeypatch.setattr("autonomy.tools.live_job.Engine", _FakeEngine)
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._run_autonomous_lead_hygiene",
+        lambda **_kwargs: {"enabled": True, "reason": "ok", "total": 0, "invalid": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._deliverability_snapshot",
+        lambda *_args, **_kwargs: {"window_days": 7, "emailed": 0, "bounced": 0, "bounce_rate": 0.0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._evaluate_paid_stop_loss",
+        lambda **_kwargs: {"blocked": False, "block_reason": "", "zero_revenue_runs": 0, "zero_revenue_days": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._collect_sms_channel_state",
+        lambda **_kwargs: {
+            "daily_sms_cap": 10,
+            "daily_sms_interest_reserve": 2,
+            "daily_sms_warm_close_reserve": 2,
+            "sms_today_all": 0,
+            "sms_today": 0,
+            "sms_today_followup": 0,
+            "sms_today_nudge": 0,
+            "sms_today_warm_close": 0,
+            "sms_budget_remaining": 10,
+            "sms_warm_close_budget_remaining": 2,
+            "sms_nudge_budget_remaining": 2,
+            "sms_followup_budget_remaining": 6,
+        },
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._maybe_write_call_list",
+        lambda **_kwargs: {
+            "path": "autonomy/state/call_list_test.csv",
+            "data": [{"email": "lead@example.com", "phone": "+19545550111", "company": "LeadCo", "service": "dentist", "city": "Coral Springs", "state": "FL"}],
+            "statuses": ["new"],
+            "min_score": 70,
+            "exclude_role_inbox": True,
+            "enrichment_enabled": False,
+            "call_signal_days": 14,
+            "sms_signal_days": 30,
+            "hygiene_filter": {"enabled": True, "removed_count": 0, "kept_count": 1, "reason_counts": {}},
+        },
+    )
+    monkeypatch.setattr("autonomy.tools.live_job._run_missed_call_audits", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._write_lead_hygiene_daily_report",
+        lambda **_kwargs: {"daily_report_path": "", "latest_report_path": ""},
+    )
+    monkeypatch.setattr("autonomy.tools.live_job.load_scoreboard", lambda *_args, **_kwargs: _zero_board())
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.build_revenue_lesson",
+        lambda **_kwargs: SimpleNamespace(
+            bottleneck="none",
+            leading_signal="none",
+            confidence_pct=100,
+            next_actions=["keep running"],
+        ),
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.record_revenue_lesson",
+        lambda **_kwargs: {"saved": True, "path": "autonomy/state/revenue_learning.jsonl"},
+    )
+    monkeypatch.setattr("autonomy.tools.generate_dashboard.generate", lambda: None)
+
+    def _capture_report(**kwargs):  # noqa: ANN003
+        captured.update(kwargs)
+        return "daily report"
+
+    monkeypatch.setattr("autonomy.tools.live_job._format_report", _capture_report)
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json", "--report-path", report_rel])
+    live_job_main()
+
+    guardrails = dict(captured["guardrails"])
+    assert guardrails["twilio_runtime_enabled"] is False
+    assert guardrails["twilio_runtime_reason"] == "hard_disabled_twilio"
+    assert guardrails["block_reason.calls.twilio"] == "hard_disabled_twilio"
+    assert guardrails["block_reason.sms.twilio"] == "hard_disabled_twilio"
+    assert guardrails["block_reason.sms.interest_nudge"] == "hard_disabled_twilio"
+    assert guardrails["block_reason.sms.warm_close"] == "hard_disabled_twilio"
+    assert captured["twilio_inbox"].reason == "blocked:hard_disabled_twilio"
+    assert captured["twilio_tollfree"].reason == "blocked:hard_disabled_twilio"
+    assert captured["auto_calls"].reason == "blocked:hard_disabled_twilio"
+    assert captured["sms_followup"] is None
+    assert report_path.exists()
+    report_path.unlink(missing_ok=True)
+
+
+def test_has_revenue_signal_is_twilio_independent() -> None:
+    board = SimpleNamespace(bookings_total=0, stripe_payments_total=0, twilio_interested=999)
+    inbox = InboxSyncResult(
+        processed_messages=0,
+        new_bounces=0,
+        new_replies=0,
+        new_opt_outs=0,
+        intake_submissions=0,
+        calendly_bookings=0,
+        stripe_payments=0,
+        last_uid=0,
+    )
+    assert _has_revenue_signal(board=board, inbox_result=inbox) is False
+
+    inbox_with_booking = InboxSyncResult(
+        processed_messages=0,
+        new_bounces=0,
+        new_replies=0,
+        new_opt_outs=0,
+        intake_submissions=0,
+        calendly_bookings=1,
+        stripe_payments=0,
+        last_uid=0,
+    )
+    assert _has_revenue_signal(board=board, inbox_result=inbox_with_booking) is True

@@ -42,15 +42,17 @@ from autonomy.tools.revenue_rag import build_revenue_lesson, record_revenue_less
 from autonomy.tools.scoreboard import load_scoreboard
 from autonomy.tools.twilio_autocall import AutoCallResult, run_auto_calls
 from autonomy.tools.twilio_interest_nudge import InterestNudgeResult, run_interest_nudges
-from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync
+from autonomy.tools.twilio_inbox_sync import TwilioInboxResult, run_twilio_inbox_sync  # noqa: F401
 from autonomy.tools.twilio_tollfree_watchdog import (
     TwilioTollfreeWatchdogResult,
-    run_twilio_tollfree_watchdog,
+    run_twilio_tollfree_watchdog,  # noqa: F401
 )
 from autonomy.tools.twilio_warm_close import WarmCloseResult, run_warm_close_loop
 from autonomy.tools.twilio_sms import SmsResult, run_sms_followup
 from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
+
+TWILIO_HARD_DISABLED_REASON = "hard_disabled_twilio"
 
 
 def _run_missed_call_audits(*, call_list: list[CallListRow], env: dict[str, str]) -> list[dict]:
@@ -695,6 +697,16 @@ def _parse_iso_date(raw: str | None) -> date | None:
         return None
 
 
+def _has_revenue_signal(*, board: Any, inbox_result: InboxSyncResult) -> bool:
+    """Critical success signal is booking/payment only (Twilio-independent)."""
+    return bool(
+        int(getattr(board, "bookings_total", 0) or 0) > 0
+        or int(getattr(board, "stripe_payments_total", 0) or 0) > 0
+        or int(getattr(inbox_result, "calendly_bookings", 0) or 0) > 0
+        or int(getattr(inbox_result, "stripe_payments", 0) or 0) > 0
+    )
+
+
 def _evaluate_paid_stop_loss(
     *,
     repo_root: Path,
@@ -965,6 +977,53 @@ def _send_ntfy(
             continue
 
     return ok
+
+
+def _normalize_email_identity(value: str | None) -> str:
+    email = (value or "").strip().lower()
+    if "@" not in email:
+        return ""
+    local, _, domain = email.partition("@")
+    if not local or "." not in domain:
+        return ""
+    return email
+
+
+def _apply_runtime_email_identity(*, cfg: Any, env: dict[str, str]) -> dict[str, object]:
+    """Align SMTP sender/reply-to with runtime mailbox credentials when needed."""
+    email_cfg = dict(getattr(cfg, "email", {}) or {})
+    company_cfg = dict(getattr(cfg, "company", {}) or {})
+
+    original_smtp_user = _normalize_email_identity(str(email_cfg.get("smtp_user") or ""))
+    original_reply_to = _normalize_email_identity(str(company_cfg.get("reply_to") or ""))
+
+    smtp_source = "config"
+    smtp_user_env = _normalize_email_identity(env.get("SMTP_USER") or "")
+    fastmail_user_env = _normalize_email_identity(env.get("FASTMAIL_USER") or "")
+    runtime_smtp_user = smtp_user_env or fastmail_user_env
+    if runtime_smtp_user:
+        email_cfg["smtp_user"] = runtime_smtp_user
+        smtp_source = "env.smtp_user" if smtp_user_env else "env.fastmail_user"
+
+    final_smtp_user = _normalize_email_identity(str(email_cfg.get("smtp_user") or ""))
+    reply_source = "config"
+    reply_to_override = _normalize_email_identity(env.get("REPLY_TO_EMAIL") or env.get("FASTMAIL_REPLY_TO") or "")
+    if reply_to_override:
+        company_cfg["reply_to"] = reply_to_override
+        reply_source = "env.reply_to"
+    elif final_smtp_user and original_reply_to != final_smtp_user:
+        company_cfg["reply_to"] = final_smtp_user
+        reply_source = "auto.smtp_user"
+
+    final_reply_to = _normalize_email_identity(str(company_cfg.get("reply_to") or ""))
+    cfg.email = email_cfg
+    cfg.company = company_cfg
+    return {
+        "smtp_source": smtp_source,
+        "smtp_user_aligned": bool(final_smtp_user and final_smtp_user != original_smtp_user),
+        "reply_to_source": reply_source,
+        "reply_to_aligned": bool(final_reply_to and final_reply_to != original_reply_to),
+    }
 
 
 def _format_report(
@@ -1392,10 +1451,13 @@ def main() -> None:
     # Propagate ALLOW_FASTMAIL_OUTREACH so providers.py can read it via os.getenv().
     if truthy(env.get("ALLOW_FASTMAIL_OUTREACH")):
         os.environ.setdefault("ALLOW_FASTMAIL_OUTREACH", "1")
+    smtp_preflight_auth_check = truthy(env.get("SMTP_PREFLIGHT_AUTH_CHECK"), default=True)
+    os.environ["SMTP_PREFLIGHT_AUTH_CHECK"] = "1" if smtp_preflight_auth_check else "0"
 
     cfg_path = _resolve_config_path(repo_root=repo_root, config_arg=args.config)
     cfg = load_config(str(cfg_path))
     edit_mode_config_overrides = _apply_edit_mode_config_overrides(cfg=cfg, payload=edit_mode_payload)
+    email_identity_meta = _apply_runtime_email_identity(cfg=cfg, env=env)
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     guardrails: dict[str, object] = {}
@@ -1424,9 +1486,21 @@ def main() -> None:
     guardrails["approval_grants"] = sorted(_parse_action_set(env.get("APPROVAL_GRANTS")))
     guardrails["fastmail_sync_enabled"] = bool(fastmail_sync_enabled)
     guardrails["fastmail_creds_required"] = bool(require_fastmail_creds)
+    guardrails["smtp_preflight_auth_check"] = bool(smtp_preflight_auth_check)
+    guardrails["runtime_smtp_user_source"] = str(email_identity_meta.get("smtp_source") or "config")
+    guardrails["runtime_smtp_user_aligned"] = bool(email_identity_meta.get("smtp_user_aligned", False))
+    guardrails["runtime_reply_to_source"] = str(email_identity_meta.get("reply_to_source") or "config")
+    guardrails["runtime_reply_to_aligned"] = bool(email_identity_meta.get("reply_to_aligned", False))
+    guardrails["twilio_runtime_enabled"] = False
+    guardrails["twilio_runtime_reason"] = TWILIO_HARD_DISABLED_REASON
+    guardrails["block_reason.calls.twilio"] = TWILIO_HARD_DISABLED_REASON
+    guardrails["block_reason.sms.twilio"] = TWILIO_HARD_DISABLED_REASON
+    guardrails["block_reason.sms.interest_nudge"] = TWILIO_HARD_DISABLED_REASON
+    guardrails["block_reason.sms.warm_close"] = TWILIO_HARD_DISABLED_REASON
     twilio_inbox_result = TwilioInboxResult(reason="not_run")
     twilio_tollfree_result: TwilioTollfreeWatchdogResult | None = None
     lead_hygiene_result: dict[str, object] = {}
+    twilio_auth_block_reason = TWILIO_HARD_DISABLED_REASON
 
     # 0) Optional: generate new leads before outreach (to keep pipeline full).
     leadgen_new = _maybe_run_leadgen(cfg=cfg, env=env, repo_root=repo_root)
@@ -1473,23 +1547,22 @@ def main() -> None:
     print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     if truthy(env.get("TWILIO_INBOX_SYNC_ENABLED"), default=True):
-        twilio_inbox_result = run_twilio_inbox_sync(
-            sqlite_path=sqlite_path,
-            audit_log=audit_log,
-            env=env,
-            booking_url=cfg.company.get("booking_url", ""),
-            kickoff_url=cfg.company.get("kickoff_url", ""),
+        _log_guard_block(
+            store=guard_store,
+            channel="sms.twilio.inbox",
+            reason=twilio_auth_block_reason,
+            details={"runtime": "hard_disabled"},
         )
+        twilio_inbox_result = TwilioInboxResult(reason=f"blocked:{twilio_auth_block_reason}")
     else:
         twilio_inbox_result = TwilioInboxResult(reason="disabled")
     print(f"live_job: twilio_inbox done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     if truthy(env.get("TWILIO_TOLLFREE_WATCHDOG_ENABLED"), default=True):
-        twilio_tollfree_result = run_twilio_tollfree_watchdog(
-            sqlite_path=sqlite_path,
-            audit_log=audit_log,
-            env=env,
-            company_name=cfg.company.get("name", ""),
+        twilio_tollfree_result = TwilioTollfreeWatchdogResult(
+            reason=f"blocked:{twilio_auth_block_reason}",
+            should_alert=False,
+            alert_reason="",
         )
     else:
         twilio_tollfree_result = TwilioTollfreeWatchdogResult(reason="disabled")
@@ -1583,13 +1656,7 @@ def main() -> None:
     else:
         print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
-    has_revenue_signal = bool(
-        int(board_pre.bookings_total or 0) > 0
-        or int(board_pre.stripe_payments_total or 0) > 0
-        or int(inbox_result.calendly_bookings or 0) > 0
-        or int(inbox_result.stripe_payments or 0) > 0
-        or int(twilio_inbox_result.interested or 0) > 0
-    )
+    has_revenue_signal = _has_revenue_signal(board=board_pre, inbox_result=inbox_result)
     stop_loss_state = _evaluate_paid_stop_loss(
         repo_root=repo_root,
         env=env,
@@ -1657,6 +1724,9 @@ def main() -> None:
         budget_remaining=int(sms_warm_close_budget_remaining),
         exhausted_reason="sms_warm_close_budget_exhausted",
     )
+    if not warm_close_block_reason and twilio_auth_block_reason:
+        warm_close_block_reason = twilio_auth_block_reason
+    guardrails["block_reason.sms.warm_close"] = str(warm_close_block_reason or "")
 
     if warm_close_block_reason:
         _log_guard_block(
@@ -1707,6 +1777,9 @@ def main() -> None:
         budget_remaining=int(sms_nudge_budget_remaining),
         exhausted_reason="sms_nudge_budget_exhausted",
     )
+    if not nudge_block_reason and twilio_auth_block_reason:
+        nudge_block_reason = twilio_auth_block_reason
+    guardrails["block_reason.sms.interest_nudge"] = str(nudge_block_reason or "")
 
     if nudge_block_reason:
         _log_guard_block(
@@ -1780,6 +1853,8 @@ def main() -> None:
         calls_block_reason = ""
         if not truthy(env.get("AUTO_CALLS_ENABLED"), default=False):
             calls_block_reason = "auto_calls_disabled"
+        elif twilio_auth_block_reason:
+            calls_block_reason = twilio_auth_block_reason
         elif not _check_approval_gate(action="calls.twilio", env=env)[0]:
             calls_block_reason = "approval_required"
         elif paid_kill_switch:
@@ -1788,6 +1863,7 @@ def main() -> None:
             calls_block_reason = str(stop_loss_state.get("block_reason") or "stop_loss")
         elif call_budget_remaining <= 0:
             calls_block_reason = "call_daily_cap_reached"
+        guardrails["block_reason.calls.twilio"] = str(calls_block_reason or "")
 
         if calls_block_reason:
             _log_guard_block(
@@ -1823,6 +1899,8 @@ def main() -> None:
         sms_block_reason = ""
         if not truthy(env.get("AUTO_SMS_ENABLED"), default=False):
             sms_block_reason = "auto_sms_disabled"
+        elif twilio_auth_block_reason:
+            sms_block_reason = twilio_auth_block_reason
         elif not _check_approval_gate(action="sms.twilio", env=env)[0]:
             sms_block_reason = "approval_required"
         elif paid_kill_switch:
@@ -1834,6 +1912,7 @@ def main() -> None:
                 sms_block_reason = "sms_reserved_for_interest"
             else:
                 sms_block_reason = "sms_daily_cap_reached"
+        guardrails["block_reason.sms.twilio"] = str(sms_block_reason or "")
 
         if sms_block_reason:
             _log_guard_block(

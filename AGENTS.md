@@ -17,6 +17,12 @@ You are the autonomous CTO for this repository. Default to action, move fast, an
 2. Speed: reduce steps to purchase and booking.
 3. Reliability: site uptime, analytics accuracy, CI green.
 
+## Runtime Mandate
+- Hard-disable all Twilio-dependent runtime paths in `autonomy/tools/live_job.py` (calls, SMS follow-up, inbound Twilio sync, interest nudge, warm close, toll-free watchdog).
+- Treat Twilio channels as non-critical and blocked by default with explicit guardrail reasons.
+- Critical success/revenue logic must remain Twilio-independent and rely on booking/payment signals only.
+- Enforce the project budget ceiling of `$10/month` by defaulting paid channels off unless the CEO explicitly overrides.
+
 ## Reporting
 - Provide concise status updates with concrete evidence (links, counts, checks).
 - Track work in `.claude/ralph/ATTEMPTS.md` when Ralph Loop is active.
