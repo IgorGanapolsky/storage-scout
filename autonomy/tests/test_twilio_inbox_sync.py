@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from autonomy.context_store import ContextStore, Lead
-from autonomy.tools.twilio_inbox_sync import load_twilio_inbox_config, run_twilio_inbox_sync
+from autonomy.tools.twilio_inbox_sync import _classify_reply, load_twilio_inbox_config, run_twilio_inbox_sync
 
 
 class _FakeHTTPResponse:
@@ -151,3 +151,11 @@ def test_load_twilio_inbox_config_kickoff_precedence() -> None:
     assert cfg is not None
     assert cfg.booking_url == "https://calendly.com/example/audit"
     assert cfg.kickoff_url == "https://pay.example/arg"
+
+
+def test_classify_reply_avoids_false_interest_matches() -> None:
+    assert _classify_reply("not interested right now") == "other"
+    assert _classify_reply("no thank you") == "other"
+    assert _classify_reply("already booked") == "other"
+    assert _classify_reply("already paid") == "other"
+    assert _classify_reply("yes interested") == "interested"

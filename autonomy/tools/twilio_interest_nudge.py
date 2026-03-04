@@ -23,6 +23,7 @@ from typing import Any
 from autonomy.context_store import ContextStore
 from autonomy.tools.agent_commerce import request_json
 from autonomy.tools.twilio_inbox_sync import load_twilio_inbox_config
+from autonomy.tools.twilio_warm_close import has_conversion_after
 from autonomy.utils import UTC, normalize_us_phone, truthy
 
 
@@ -163,24 +164,6 @@ def _has_phone_opt_out(store: ContextStore, *, phone_e164: str) -> bool:
     return row is not None
 
 
-def _has_booked_call_after(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
-    if not lead_id:
-        return False
-    row = store.conn.execute(
-        """
-        SELECT 1
-        FROM actions
-        WHERE action_type='call.attempt'
-          AND ts >= ?
-          AND json_extract(payload_json, '$.lead_id') = ?
-          AND json_extract(payload_json, '$.outcome') = 'booked'
-        LIMIT 1
-        """,
-        (since_iso, lead_id),
-    ).fetchone()
-    return row is not None
-
-
 def _load_config(env: dict[str, str], *, booking_url: str, kickoff_url: str) -> InterestNudgeConfig | None:
     if not truthy(env.get("AUTO_INTEREST_NUDGE_ENABLED"), default=True):
         return None
@@ -288,7 +271,7 @@ def run_interest_nudges(
                 result.skipped += 1
                 continue
 
-            if _has_booked_call_after(store, lead_id=lead_id, since_iso=ts):
+            if has_conversion_after(store, lead_id=lead_id, since_iso=ts):
                 result.skipped += 1
                 continue
 

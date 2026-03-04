@@ -159,7 +159,7 @@ def _has_phone_opt_out(store: ContextStore, *, phone_e164: str) -> bool:
     return row is not None
 
 
-def _has_conversion_after(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
+def has_conversion_after(store: ContextStore, *, lead_id: str, since_iso: str) -> bool:
     if not lead_id:
         return False
     row = store.conn.execute(
@@ -296,7 +296,7 @@ def run_warm_close_loop(
                 continue
 
             conversion_since_iso = lead_ts if _parse_iso(lead_ts) is not None else lookback_start_iso
-            if _has_conversion_after(store, lead_id=lead_id, since_iso=conversion_since_iso):
+            if has_conversion_after(store, lead_id=lead_id, since_iso=conversion_since_iso):
                 result.converted_skipped += 1
                 result.skipped += 1
                 continue
@@ -344,4 +344,3 @@ def run_warm_close_loop(
             store.conn.close()
 
     return result
-
