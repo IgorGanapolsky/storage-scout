@@ -3,8 +3,13 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import json
+import os
+import sys
+import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from autonomy.ai_writer import AIOutreachWriter
@@ -265,3 +270,94 @@ class TestAIWriterWithObservations:
             result = writer.render(lead)
         assert "subject" in result
         assert "body" in result
+
+    def test_call_openai_uses_prompt_cache(self) -> None:
+        writer = self._make_writer(store=None)
+        writer.prompt_cache_enabled = True
+        writer.prompt_cache_path = ""
+        writer._prompt_cache = {}
+
+        calls = {"count": 0}
+
+        class _FakeCompletions:
+            @staticmethod
+            def create(**_kwargs):  # noqa: ANN003
+                calls["count"] += 1
+                msg = SimpleNamespace(content="Subject: Test\nBody")
+                choice = SimpleNamespace(message=msg)
+                return SimpleNamespace(choices=[choice])
+
+        class _FakeOpenAI:
+            def __init__(self, api_key: str):  # noqa: ARG002
+                self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+        fake_openai_mod = SimpleNamespace(OpenAI=_FakeOpenAI)
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            with patch.dict(sys.modules, {"openai": fake_openai_mod}):
+                first = writer._call_openai("system", "user")
+                second = writer._call_openai("system", "user")
+        assert first is not None
+        assert first == second
+        assert calls["count"] == 1
+
+    def test_prompt_cache_env_disable_short_circuits_init(self) -> None:
+        with patch.dict(os.environ, {"AI_WRITER_PROMPT_CACHE_ENABLED": "false"}, clear=True):
+            writer = self._make_writer(store=None)
+        assert writer.prompt_cache_enabled is False
+        assert writer._prompt_cache_abs_path is None
+
+    def test_prompt_cache_load_prunes_expired_and_invalid_entries(self, tmp_path: Path) -> None:
+        cache_path = tmp_path / "cache.json"
+        now = time.time()
+        payload = {
+            "entries": [
+                {"key": "valid", "value": "hello", "ts": now},
+                {"key": "expired", "value": "old", "ts": now - 100_000},
+                {"key": "", "value": "bad", "ts": now},
+                "not-a-dict",
+            ]
+        }
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        with patch.dict(
+            os.environ,
+            {
+                "AI_WRITER_PROMPT_CACHE_ENABLED": "true",
+                "AI_WRITER_PROMPT_CACHE_PATH": str(cache_path),
+            },
+            clear=True,
+        ):
+            writer = self._make_writer(store=None)
+            writer.prompt_cache_ttl_seconds = 3600
+            writer._load_prompt_cache()
+        assert "valid" in writer._prompt_cache
+        assert "expired" not in writer._prompt_cache
+
+    def test_prompt_cache_put_prunes_to_max_entries(self, tmp_path: Path) -> None:
+        cache_path = tmp_path / "cache.json"
+        with patch.dict(os.environ, {"AI_WRITER_PROMPT_CACHE_PATH": str(cache_path)}, clear=True):
+            writer = self._make_writer(store=None)
+        writer.prompt_cache_enabled = True
+        writer.prompt_cache_ttl_seconds = 3600
+        writer.prompt_cache_max_entries = 2
+        writer._put_cached_prompt_response("k1", "v1")
+        writer._put_cached_prompt_response("k2", "v2")
+        writer._put_cached_prompt_response("k3", "v3")
+        assert len(writer._prompt_cache) == 2
+        persisted = json.loads(cache_path.read_text(encoding="utf-8"))
+        assert isinstance(persisted.get("entries"), list)
+
+    def test_parse_response_without_subject_uses_default(self) -> None:
+        writer = self._make_writer(store=None)
+        lead = _sample_lead()
+        parsed = writer._parse_response("hello body", lead)
+        assert parsed["subject"] == "AEO execution plan for Doe Dental"
+        assert "Unsubscribe:" in parsed["body"]
+
+    def test_render_followup_falls_back_without_api_key(self) -> None:
+        writer = self._make_writer(store=None)
+        lead = _sample_lead()
+        with patch.dict("os.environ", {}, clear=True):
+            parsed = writer.render_followup(lead, 2)
+        assert "subject" in parsed
+        assert "body" in parsed

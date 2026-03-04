@@ -27,6 +27,7 @@ from autonomy.tools.fastmail_inbox_sync import (
     load_dotenv,
     sync_fastmail_inbox,
 )
+from autonomy.tools.funnel_eval import WarmCloseFunnelEval, load_warm_close_funnel_eval
 from autonomy.tools.funnel_watchdog import FunnelWatchdogResult, run_funnel_watchdog
 from autonomy.tools.lead_hygiene import clean_leads_db, validate_email
 from autonomy.tools.lead_gen_broward import (
@@ -1087,6 +1088,7 @@ def _format_report(
     scoreboard,
     scoreboard_days: int,
     kpi: dict[str, int] | None = None,
+    funnel_eval: WarmCloseFunnelEval | None = None,
     funnel_result: FunnelWatchdogResult | None = None,
     goal_tasks: dict | None = None,
 ) -> str:
@@ -1165,6 +1167,21 @@ def _format_report(
         lines.append(f"- payments_today: {int(kpi.get('payments_today') or 0)}")
         lines.append(f"- bookings_last_{int(scoreboard_days)}d: {int(kpi.get('bookings_window') or 0)}")
         lines.append(f"- payments_last_{int(scoreboard_days)}d: {int(kpi.get('payments_window') or 0)}")
+        lines.append("")
+    if funnel_eval is not None:
+        lines.append("Funnel eval (warm-close email)")
+        lines.append(f"- cohort_leads: {int(funnel_eval.cohort_leads)}")
+        lines.append(
+            "- warm_close_sent: "
+            f"{int(funnel_eval.warm_close_sent_leads)} ({float(funnel_eval.warm_close_send_rate):.0%})"
+        )
+        lines.append(f"- warm_close_missing: {int(funnel_eval.warm_close_missing_leads)}")
+        lines.append(
+            "- post_send_conversion: "
+            f"booked={int(funnel_eval.booked_after_warm_close_leads)} ({float(funnel_eval.booking_rate_from_warm_close):.0%}), "
+            f"paid={int(funnel_eval.paid_after_warm_close_leads)} ({float(funnel_eval.payment_rate_from_warm_close):.0%}), "
+            f"either={int(funnel_eval.converted_after_warm_close_leads)} ({float(funnel_eval.conversion_rate_from_warm_close):.0%})"
+        )
         lines.append("")
     lines.append("Outreach run")
     lines.append(f"- sent_initial: {int(engine_result.get('sent_initial') or 0)}")
@@ -2010,10 +2027,18 @@ def main() -> None:
         "bookings_window": int(board.bookings_recent),
         "payments_window": int(board.stripe_payments_recent),
     }
+    funnel_eval = load_warm_close_funnel_eval(
+        sqlite_path=sqlite_path,
+        days=int(args.scoreboard_days),
+    )
     guardrails["kpi_bookings_today"] = int(bookings_today)
     guardrails["kpi_payments_today"] = int(payments_today)
     guardrails[f"kpi_bookings_last_{int(args.scoreboard_days)}d"] = int(board.bookings_recent)
     guardrails[f"kpi_payments_last_{int(args.scoreboard_days)}d"] = int(board.stripe_payments_recent)
+    guardrails["funnel_warm_close_send_rate"] = round(float(funnel_eval.warm_close_send_rate or 0.0), 4)
+    guardrails["funnel_booking_rate_from_warm_close"] = round(float(funnel_eval.booking_rate_from_warm_close or 0.0), 4)
+    guardrails["funnel_payment_rate_from_warm_close"] = round(float(funnel_eval.payment_rate_from_warm_close or 0.0), 4)
+    guardrails["funnel_warm_close_missing_leads"] = int(funnel_eval.warm_close_missing_leads)
     revenue_sources = [s.strip() for s in (env.get("REVENUE_RESEARCH_SOURCES") or "").split(",") if s.strip()]
     lesson = build_revenue_lesson(
         scoreboard=board,
@@ -2055,6 +2080,7 @@ def main() -> None:
         scoreboard=board,
         scoreboard_days=int(args.scoreboard_days),
         kpi=kpi,
+        funnel_eval=funnel_eval,
         funnel_result=funnel_result,
         goal_tasks=goal_task_data,
     )
@@ -2083,6 +2109,7 @@ def main() -> None:
         "scoreboard_days": int(args.scoreboard_days),
         "scoreboard": asdict(board),
         "kpi": kpi,
+        "funnel_eval": asdict(funnel_eval),
     }
     summary_sha1 = hashlib.sha1(json.dumps(summary_payload, sort_keys=True).encode("utf-8")).hexdigest()
 
