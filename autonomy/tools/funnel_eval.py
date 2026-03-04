@@ -36,6 +36,16 @@ class WarmCloseFunnelEval:
     conversion_rate_from_warm_close: float
 
 
+@dataclass(frozen=True)
+class _WarmCloseTally:
+    warm_sent_leads: set[str]
+    step_sent_count: int
+    kind_sent_count: int
+    booked_after: int
+    paid_after: int
+    converted_after: int
+
+
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     row = conn.execute(
         "SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name=?",
@@ -110,6 +120,80 @@ def _load_first_conversion_ts(conn: sqlite3.Connection, action_type: str) -> dic
     return {str(row[0] or ""): str(row[1] or "") for row in rows if str(row[0] or "") and str(row[1] or "")}
 
 
+def _normalize_statuses(statuses: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(sorted({str(s or "").strip().lower() for s in statuses if str(s or "").strip()}))
+    return normalized or DEFAULT_STATUSES
+
+
+def _resolve_warm_send_ts(lead_id: str, step_ts: dict[str, str], kind_ts: dict[str, str]) -> tuple[str, bool, bool]:
+    step_val = step_ts.get(lead_id, "")
+    kind_val = kind_ts.get(lead_id, "")
+    if step_val and kind_val:
+        return max(str(step_val), str(kind_val)), True, True
+    if step_val:
+        return str(step_val), True, False
+    if kind_val:
+        return str(kind_val), False, True
+    return "", False, False
+
+
+def _was_converted_after(
+    *,
+    lead_id: str,
+    warm_ts: str,
+    booking_first_ts: dict[str, str],
+    payment_first_ts: dict[str, str],
+) -> tuple[bool, bool, bool]:
+    booked = bool(lead_id in booking_first_ts and str(booking_first_ts[lead_id]) >= warm_ts)
+    paid = bool(lead_id in payment_first_ts and str(payment_first_ts[lead_id]) >= warm_ts)
+    return booked, paid, bool(booked or paid)
+
+
+def _tally_warm_close_conversions(
+    *,
+    cohort: set[str],
+    step_ts: dict[str, str],
+    kind_ts: dict[str, str],
+    booking_first_ts: dict[str, str],
+    payment_first_ts: dict[str, str],
+) -> _WarmCloseTally:
+    warm_sent_leads: set[str] = set()
+    step_sent_count = 0
+    kind_sent_count = 0
+    booked_after = 0
+    paid_after = 0
+    converted_after = 0
+
+    for lead_id in cohort:
+        warm_ts, via_step, via_kind = _resolve_warm_send_ts(lead_id, step_ts, kind_ts)
+        step_sent_count += int(via_step)
+        kind_sent_count += int(via_kind)
+        if not warm_ts:
+            continue
+        warm_sent_leads.add(lead_id)
+        booked, paid, converted = _was_converted_after(
+            lead_id=lead_id,
+            warm_ts=warm_ts,
+            booking_first_ts=booking_first_ts,
+            payment_first_ts=payment_first_ts,
+        )
+        booked_after += int(booked)
+        paid_after += int(paid)
+        converted_after += int(converted)
+    return _WarmCloseTally(
+        warm_sent_leads=warm_sent_leads,
+        step_sent_count=step_sent_count,
+        kind_sent_count=kind_sent_count,
+        booked_after=booked_after,
+        paid_after=paid_after,
+        converted_after=converted_after,
+    )
+
+
+def _safe_rate(*, numerator: int, denominator: int) -> float:
+    return float(numerator) / float(denominator) if denominator else 0.0
+
+
 def load_warm_close_funnel_eval(
     *,
     sqlite_path: Path,
@@ -123,9 +207,7 @@ def load_warm_close_funnel_eval(
 
     window_days = max(1, int(days))
     as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
-    status_set = tuple(sorted({str(s or "").strip().lower() for s in statuses if str(s or "").strip()}))
-    if not status_set:
-        status_set = DEFAULT_STATUSES
+    status_set = _normalize_statuses(statuses)
 
     with contextlib.closing(sqlite3.connect(sqlite_path)) as conn:
         cohort = _load_cohort_leads(conn, status_set)
@@ -134,49 +216,21 @@ def load_warm_close_funnel_eval(
         booking_first_ts = _load_first_conversion_ts(conn, BOOKING_ACTION)
         payment_first_ts = _load_first_conversion_ts(conn, PAYMENT_ACTION)
 
-    warm_sent_leads: set[str] = set()
-    booked_after = 0
-    paid_after = 0
-    converted_after = 0
-    step_sent_count = 0
-    kind_sent_count = 0
-
-    for lead_id in cohort:
-        has_step = lead_id in step_ts
-        has_kind = lead_id in kind_ts
-        if has_step:
-            step_sent_count += 1
-        if has_kind:
-            kind_sent_count += 1
-
-        warm_ts = ""
-        if has_step and has_kind:
-            warm_ts = max(str(step_ts[lead_id]), str(kind_ts[lead_id]))
-        elif has_step:
-            warm_ts = str(step_ts[lead_id])
-        elif has_kind:
-            warm_ts = str(kind_ts[lead_id])
-
-        if not warm_ts:
-            continue
-
-        warm_sent_leads.add(lead_id)
-        booked = bool(lead_id in booking_first_ts and str(booking_first_ts[lead_id]) >= warm_ts)
-        paid = bool(lead_id in payment_first_ts and str(payment_first_ts[lead_id]) >= warm_ts)
-        if booked:
-            booked_after += 1
-        if paid:
-            paid_after += 1
-        if booked or paid:
-            converted_after += 1
+    tally = _tally_warm_close_conversions(
+        cohort=cohort,
+        step_ts=step_ts,
+        kind_ts=kind_ts,
+        booking_first_ts=booking_first_ts,
+        payment_first_ts=payment_first_ts,
+    )
 
     cohort_count = int(len(cohort))
-    sent_count = int(len(warm_sent_leads))
+    sent_count = int(len(tally.warm_sent_leads))
     missing_count = max(0, cohort_count - sent_count)
-    send_rate = float(sent_count) / float(cohort_count) if cohort_count else 0.0
-    booking_rate = float(booked_after) / float(sent_count) if sent_count else 0.0
-    payment_rate = float(paid_after) / float(sent_count) if sent_count else 0.0
-    conversion_rate = float(converted_after) / float(sent_count) if sent_count else 0.0
+    send_rate = _safe_rate(numerator=sent_count, denominator=cohort_count)
+    booking_rate = _safe_rate(numerator=tally.booked_after, denominator=sent_count)
+    payment_rate = _safe_rate(numerator=tally.paid_after, denominator=sent_count)
+    conversion_rate = _safe_rate(numerator=tally.converted_after, denominator=sent_count)
 
     return WarmCloseFunnelEval(
         as_of_utc=as_of,
@@ -185,11 +239,11 @@ def load_warm_close_funnel_eval(
         cohort_leads=cohort_count,
         warm_close_sent_leads=sent_count,
         warm_close_missing_leads=missing_count,
-        warm_close_sent_via_step90_leads=int(step_sent_count),
-        warm_close_sent_via_kind_leads=int(kind_sent_count),
-        booked_after_warm_close_leads=int(booked_after),
-        paid_after_warm_close_leads=int(paid_after),
-        converted_after_warm_close_leads=int(converted_after),
+        warm_close_sent_via_step90_leads=int(tally.step_sent_count),
+        warm_close_sent_via_kind_leads=int(tally.kind_sent_count),
+        booked_after_warm_close_leads=int(tally.booked_after),
+        paid_after_warm_close_leads=int(tally.paid_after),
+        converted_after_warm_close_leads=int(tally.converted_after),
         warm_close_send_rate=send_rate,
         booking_rate_from_warm_close=booking_rate,
         payment_rate_from_warm_close=payment_rate,
