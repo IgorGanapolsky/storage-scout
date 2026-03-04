@@ -57,6 +57,10 @@ Live-job deliverability gate controls (in `.env`):
 - `DELIVERABILITY_WINDOW_DAYS=7` (separate from scoreboard window)
 - `DELIVERABILITY_MIN_EMAILS=10` (minimum sample size before blocking)
 - `DELIVERABILITY_MAX_BOUNCE_RATE=0.05`
+- `DELIVERABILITY_RECOVERY_MODE_ENABLED=1` (default on; keeps a safe outbound trickle when blocked)
+- `DELIVERABILITY_RECOVERY_DAILY_SEND_LIMIT=3` (default trickle size while blocked)
+- `DELIVERABILITY_RECOVERY_FOLLOWUP_ENABLED=0` (default off during recovery)
+- `DELIVERABILITY_RECOVERY_FOLLOWUP_DAILY_SEND_LIMIT=0` (follow-up cap during recovery)
 
 In your lead CSV, you can optionally include `email_method` (e.g. `apollo`, `linkedin`, `direct`, `scrape`). If omitted, it's inferred from `notes` and the email local-part.
 

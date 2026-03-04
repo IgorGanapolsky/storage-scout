@@ -428,8 +428,17 @@ def _apply_outreach_runtime_policy(
 ) -> None:
     outreach_cfg = dict((cfg.agents.get("outreach") or {}))
     follow_cfg = dict((outreach_cfg.get("followup") or {}))
-
-    guardrails["deliverability_email_paused_only"] = bool(deliverability_block)
+    recovery_mode_enabled = truthy(env.get("DELIVERABILITY_RECOVERY_MODE_ENABLED"), default=True)
+    recovery_daily_send_limit = max(0, _int_env(env.get("DELIVERABILITY_RECOVERY_DAILY_SEND_LIMIT"), 3))
+    recovery_followup_enabled = truthy(env.get("DELIVERABILITY_RECOVERY_FOLLOWUP_ENABLED"), default=False)
+    recovery_followup_daily_send_limit = max(
+        0, _int_env(env.get("DELIVERABILITY_RECOVERY_FOLLOWUP_DAILY_SEND_LIMIT"), 0)
+    )
+    recovery_applied = False
+    guardrails["deliverability_recovery_mode_enabled"] = bool(recovery_mode_enabled)
+    guardrails["deliverability_recovery_daily_send_limit"] = int(recovery_daily_send_limit)
+    guardrails["deliverability_recovery_followup_enabled"] = bool(recovery_followup_enabled)
+    guardrails["deliverability_recovery_followup_daily_send_limit"] = int(recovery_followup_daily_send_limit)
 
     if high_intent_only:
         min_email_score = max(0, _int_env(env.get("HIGH_INTENT_EMAIL_MIN_SCORE"), 80))
@@ -438,17 +447,30 @@ def _apply_outreach_runtime_policy(
             outreach_cfg["daily_send_limit"] = 0
         follow_cfg["enabled"] = bool(follow_cfg.get("enabled", True))
         guardrails["high_intent_email_min_score"] = int(outreach_cfg["min_score"])
-        guardrails["high_intent_skip_cold_email"] = bool(outreach_cfg.get("daily_send_limit", 0) == 0)
 
     if deliverability_block:
-        # Pause email sends only; continue engine ingestion/goals/observer execution.
-        outreach_cfg["daily_send_limit"] = 0
-        follow_cfg["enabled"] = False
-        follow_cfg["daily_send_limit"] = 0
-        guardrails["deliverability_pause_reason"] = "deliverability_bounce_rate"
+        if recovery_mode_enabled and recovery_daily_send_limit > 0:
+            # Keep a small outbound trickle so revenue motion does not fully stall.
+            outreach_cfg["daily_send_limit"] = int(recovery_daily_send_limit)
+            follow_cfg["enabled"] = bool(recovery_followup_enabled and recovery_followup_daily_send_limit > 0)
+            follow_cfg["daily_send_limit"] = (
+                int(recovery_followup_daily_send_limit) if follow_cfg["enabled"] else 0
+            )
+            guardrails["deliverability_pause_reason"] = "deliverability_bounce_rate_recovery_mode"
+            recovery_applied = True
+        else:
+            # Hard pause mode for operators who want zero sends while fixing sender health.
+            outreach_cfg["daily_send_limit"] = 0
+            follow_cfg["enabled"] = False
+            follow_cfg["daily_send_limit"] = 0
+            guardrails["deliverability_pause_reason"] = "deliverability_bounce_rate"
 
     outreach_cfg["followup"] = follow_cfg
     cfg.agents["outreach"] = outreach_cfg
+    guardrails["deliverability_recovery_mode_applied"] = bool(recovery_applied)
+    guardrails["deliverability_email_paused_only"] = bool(deliverability_block and not recovery_applied)
+    if high_intent_only:
+        guardrails["high_intent_skip_cold_email"] = bool(outreach_cfg.get("daily_send_limit", 0) == 0)
 
 
 def _compute_sms_channel_budgets(
@@ -1677,10 +1699,16 @@ def main() -> None:
     if deliverability_block:
         engine_result = dict(engine_result)
         engine_result.setdefault("guard_blocked", "deliverability_bounce_rate_email_only")
-        print(
-            "live_job: deliverability gate paused email sends; engine run continued",
-            file=sys.stderr,
-        )
+        if bool(guardrails.get("deliverability_recovery_mode_applied", False)):
+            print(
+                "live_job: deliverability gate in recovery mode (limited sends); engine run continued",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "live_job: deliverability gate paused email sends; engine run continued",
+                file=sys.stderr,
+            )
     else:
         print(f"live_job: engine done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 

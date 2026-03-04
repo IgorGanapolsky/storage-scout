@@ -949,7 +949,7 @@ def test_should_block_deliverability_trips_at_threshold() -> None:
     )
 
 
-def test_apply_outreach_runtime_policy_pauses_email_only_on_deliverability_block() -> None:
+def test_apply_outreach_runtime_policy_enables_recovery_mode_on_deliverability_block() -> None:
     cfg = SimpleNamespace(
         agents={
             "outreach": {
@@ -971,10 +971,42 @@ def test_apply_outreach_runtime_policy_pauses_email_only_on_deliverability_block
 
     outreach_cfg = dict(cfg.agents["outreach"])
     follow_cfg = dict(outreach_cfg["followup"])
+    assert int(outreach_cfg["daily_send_limit"]) == 3
+    assert bool(follow_cfg["enabled"]) is False
+    assert int(follow_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["deliverability_recovery_mode_applied"]) is True
+    assert bool(guardrails["deliverability_email_paused_only"]) is False
+    assert guardrails["deliverability_pause_reason"] == "deliverability_bounce_rate_recovery_mode"
+
+
+def test_apply_outreach_runtime_policy_supports_hard_pause_override() -> None:
+    cfg = SimpleNamespace(
+        agents={
+            "outreach": {
+                "min_score": 60,
+                "daily_send_limit": 30,
+                "followup": {"enabled": True, "daily_send_limit": 15},
+            }
+        }
+    )
+    guardrails: dict[str, object] = {}
+
+    _apply_outreach_runtime_policy(
+        cfg=cfg,
+        env={"DELIVERABILITY_RECOVERY_MODE_ENABLED": "0"},
+        high_intent_only=False,
+        deliverability_block=True,
+        guardrails=guardrails,
+    )
+
+    outreach_cfg = dict(cfg.agents["outreach"])
+    follow_cfg = dict(outreach_cfg["followup"])
     assert int(outreach_cfg["daily_send_limit"]) == 0
     assert bool(follow_cfg["enabled"]) is False
     assert int(follow_cfg["daily_send_limit"]) == 0
+    assert bool(guardrails["deliverability_recovery_mode_applied"]) is False
     assert bool(guardrails["deliverability_email_paused_only"]) is True
+    assert guardrails["deliverability_pause_reason"] == "deliverability_bounce_rate"
 
 
 def test_apply_outreach_runtime_policy_respects_high_intent_controls() -> None:
