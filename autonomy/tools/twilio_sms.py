@@ -358,9 +358,14 @@ def run_sms_followup(
             }
             result.delivered += 1
         except urllib.error.HTTPError as exc:
+            status_code = int(getattr(exc, "code", 0) or 0)
             error_body = ""
-            with contextlib.suppress(Exception):
-                error_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                with contextlib.suppress(Exception):
+                    error_body = exc.read().decode("utf-8", errors="replace")
+            finally:
+                with contextlib.suppress(Exception):
+                    exc.close()
             error_data: dict[str, Any] = {}
             with contextlib.suppress(Exception):
                 error_data = json.loads(error_body)
@@ -369,12 +374,12 @@ def run_sms_followup(
                 "sid": "",
                 "status": "exception",
                 "error_code": error_data.get("code"),
-                "http_status": exc.code,
+                "http_status": status_code,
                 "error_type": "HTTPError",
                 "error_message": error_data.get("message", str(exc)),
             }
             payload["notes"] = (
-                f"exception=HTTPError status={exc.code} "
+                f"exception=HTTPError status={status_code} "
                 f"code={error_data.get('code', '')} "
                 f"message={error_data.get('message', str(exc))}"
             )
@@ -467,9 +472,14 @@ def run_sms_followup(
                 }
                 result.delivered += 1
             except urllib.error.HTTPError as exc:
+                status_code = int(getattr(exc, "code", 0) or 0)
                 error_body = ""
-                with contextlib.suppress(Exception):
-                    error_body = exc.read().decode("utf-8", errors="replace")
+                try:
+                    with contextlib.suppress(Exception):
+                        error_body = exc.read().decode("utf-8", errors="replace")
+                finally:
+                    with contextlib.suppress(Exception):
+                        exc.close()
                 error_data: dict[str, Any] = {}
                 with contextlib.suppress(Exception):
                     error_data = json.loads(error_body)
@@ -478,12 +488,12 @@ def run_sms_followup(
                     "sid": "",
                     "status": "exception",
                     "error_code": error_data.get("code"),
-                    "http_status": exc.code,
+                    "http_status": status_code,
                     "error_type": "HTTPError",
                     "error_message": error_data.get("message", str(exc)),
                 }
                 payload["notes"] = (
-                    f"exception=HTTPError status={exc.code} "
+                    f"exception=HTTPError status={status_code} "
                     f"code={error_data.get('code', '')} "
                     f"message={error_data.get('message', str(exc))}"
                 )

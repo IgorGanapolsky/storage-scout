@@ -14,6 +14,8 @@ AEO Autopilot is a done-for-you AI-SEO (AEO) service. This repo contains the pub
 - Use a dedicated git worktree for all implementation tasks.
 - Never commit secrets or PII.
 - Keep claims evidence-based; avoid guaranteed ranking/revenue language.
+- For SQLite, do not rely on `with sqlite3.connect(...)` to close connections; use `contextlib.closing(...)` or explicit `conn.close()` in `finally`.
+- Include `pytest -W error::ResourceWarning` in validation for code touching DB or HTTPError handling paths.
 
 ## Core Commands
 ```bash

@@ -198,10 +198,14 @@ def enrich_lead(lead: dict) -> dict:
 
 def enrich_leads_batch(leads: list[dict], max_per_session: int = 5) -> list[dict]:
     """Enrich a batch of leads using Scrapling."""
-    for i, lead in enumerate(leads):
-        enrich_lead(lead)
-        if i < len(leads) - 1:
-            time.sleep(1)  # Polite delay
+    batch_size = max(1, int(max_per_session or 1))
+    for start in range(0, len(leads), batch_size):
+        batch = leads[start : start + batch_size]
+        for offset, lead in enumerate(batch):
+            enrich_lead(lead)
+            is_last = (start + offset) >= (len(leads) - 1)
+            if not is_last:
+                time.sleep(1)  # Polite delay
     return leads
 
 if __name__ == "__main__":

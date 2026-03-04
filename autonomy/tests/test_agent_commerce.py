@@ -68,7 +68,7 @@ def test_request_json_writes_failure_meter_on_http_error(tmp_path: Path) -> None
             fp=io.BytesIO(b'{"code":429}'),
         )
 
-    with pytest.raises(urllib.error.HTTPError):
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
         request_json(
             method="POST",
             url="https://api.example.com/v1/pay",
@@ -79,6 +79,7 @@ def test_request_json_writes_failure_meter_on_http_error(tmp_path: Path) -> None
             env={"AGENT_API_METER_FILE": str(meter_path), "AGENT_COMMERCE_METERING_ENABLED": "1"},
             urlopen_func=fake_urlopen,
         )
+    exc_info.value.close()
 
     row = json.loads(meter_path.read_text(encoding="utf-8").strip().splitlines()[-1])
     assert row["ok"] is False

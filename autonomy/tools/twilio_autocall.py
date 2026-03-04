@@ -86,36 +86,41 @@ def _format_exception_notes(exc: Exception) -> tuple[str, dict[str, Any]]:
     details: dict[str, Any] = {"error_type": type(exc).__name__}
     notes = f"exception={type(exc).__name__}"
     if isinstance(exc, urllib.error.HTTPError):
-        details["http_status"] = int(exc.code)
+        status_code = int(getattr(exc, "code", 0) or 0)
+        details["http_status"] = status_code
         raw = ""
         try:
             raw = exc.read().decode("utf-8", errors="replace")
-        except Exception:
-            raw = ""
-        if raw:
-            try:
-                parsed = json.loads(raw)
-            except Exception:
-                parsed = {}
-            if isinstance(parsed, dict):
-                code = parsed.get("code")
-                message = str(parsed.get("message") or "").strip()
-                more_info = str(parsed.get("more_info") or "").strip()
-                if code not in (None, ""):
-                    details["error_code"] = code
-                if message:
-                    details["error_message"] = message[:200]
-                if more_info:
-                    details["error_more_info"] = more_info[:200]
-                notes = (
-                    f"exception=HTTPError status={int(exc.code)} "
-                    f"code={code if code not in (None, '') else ''} "
-                    f"message={message[:120]}".strip()
-                )
+        finally:
+            with contextlib.suppress(Exception):
+                exc.close()
+        try:
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                except Exception:
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    code = parsed.get("code")
+                    message = str(parsed.get("message") or "").strip()
+                    more_info = str(parsed.get("more_info") or "").strip()
+                    if code not in (None, ""):
+                        details["error_code"] = code
+                    if message:
+                        details["error_message"] = message[:200]
+                    if more_info:
+                        details["error_more_info"] = more_info[:200]
+                    notes = (
+                        f"exception=HTTPError status={status_code} "
+                        f"code={code if code not in (None, '') else ''} "
+                        f"message={message[:120]}".strip()
+                    )
+                else:
+                    notes = f"exception=HTTPError status={status_code}"
             else:
-                notes = f"exception=HTTPError status={int(exc.code)}"
-        else:
-            notes = f"exception=HTTPError status={int(exc.code)}"
+                notes = f"exception=HTTPError status={status_code}"
+        except Exception:
+            notes = f"exception=HTTPError status={status_code}"
     return notes, details
 
 

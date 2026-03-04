@@ -238,6 +238,7 @@ def test_send_sms_http_error(monkeypatch) -> None:
         raise AssertionError("Should have raised")
     except urllib.error.HTTPError as exc:
         assert exc.code == 400
+        exc.close()
 
 
 # --- run_sms_followup (end-to-end) ---
