@@ -571,7 +571,7 @@ def main() -> None:
                 enriched = sum(1 for row in needs_enrichment if (row.get("name") or "").strip())
                 print(f"Scrapling: {enriched}/{len(needs_enrichment)} leads enriched with names")
     except ImportError:
-        # Anchor Browser integration is optional; skip enrichment if missing
+        # Scrapling enrichment is optional; skip when dependency is unavailable.
         pass
 
     write_leads(args.output, leads, replace=args.replace)

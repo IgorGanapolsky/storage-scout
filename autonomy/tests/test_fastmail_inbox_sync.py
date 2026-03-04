@@ -76,6 +76,7 @@ def test_sync_fastmail_intake_scoring(mock_imap_cls, test_state_dir):
         # Score calculation:
         # company (+20) + phone (+15) + service (+10 + 15) + city/state (+10 + 5) + email (+20) = 95
         assert row["score"] == 95
+    store.close()
 
 @patch("imaplib.IMAP4_SSL")
 def test_sync_fastmail_bounce(mock_imap_cls, test_state_dir):
@@ -113,3 +114,4 @@ def test_sync_fastmail_bounce(mock_imap_cls, test_state_dir):
 
     assert res.new_bounces == 1
     assert store.get_lead_status("bounce@example.com") == "bounced"
+    store.close()

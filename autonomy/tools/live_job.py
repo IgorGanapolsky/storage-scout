@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
+from typing import Any
 
 # Support running as a script (launchd uses absolute paths).
 if __package__ is None:  # pragma: no cover
@@ -20,7 +21,7 @@ import contextlib
 
 from autonomy.context_store import ContextStore
 from autonomy.engine import Engine, load_config
-from autonomy.tools.call_list import generate_call_list, write_call_list
+from autonomy.tools.call_list import CallListRow, generate_call_list, write_call_list
 from autonomy.tools.fastmail_inbox_sync import (
     InboxSyncResult,
     load_dotenv,
@@ -51,7 +52,7 @@ from autonomy.tools.missed_call_audit import run_audit, save_audit
 from autonomy.utils import UTC, truthy
 
 
-def _run_missed_call_audits(*, call_list: list[dict], env: dict[str, str]) -> list[dict]:
+def _run_missed_call_audits(*, call_list: list[CallListRow], env: dict[str, str]) -> list[dict]:
     """Run a single-probe audit for each lead in the call list to generate a fresh report."""
     results = []
     if not call_list:
@@ -325,14 +326,6 @@ def _resolve_config_path(*, repo_root: Path, config_arg: str) -> Path:
             return alt
 
     return requested
-
-
-def _count_actions_since(store: ContextStore, *, action_type: str, since_iso: str) -> int:
-    row = store.conn.execute(
-        "SELECT COUNT(1) FROM actions WHERE action_type=? AND ts >= ?",
-        (str(action_type), str(since_iso)),
-    ).fetchone()
-    return int(row[0] or 0) if row else 0
 
 
 def _count_actions_today(store: ContextStore, *, action_type: str, paid_only: bool = False) -> int:
@@ -629,6 +622,118 @@ def _iter_ntfy_topics(raw: str) -> list[str]:
 def _parse_categories(raw: str) -> list[str]:
     parts = [p.strip().lower() for p in (raw or "").split(",")]
     return [p for p in parts if p]
+
+
+def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = dict(base)
+    for key, value in (override or {}).items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[str(key)] = _deep_merge_dict(existing, value)
+        else:
+            merged[str(key)] = value
+    return merged
+
+
+def _resolve_edit_mode_path(*, repo_root: Path, env: dict[str, str]) -> Path:
+    raw = (env.get("EDIT_MODE_OVERRIDE_PATH") or "").strip() or "autonomy/state/edit_mode.overrides.json"
+    candidate = Path(raw)
+    return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
+
+
+def _load_edit_mode_payload(*, repo_root: Path, env: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    enabled = truthy(env.get("EDIT_MODE_ENABLED"), default=True)
+    path = _resolve_edit_mode_path(repo_root=repo_root, env=env)
+    meta: dict[str, Any] = {
+        "enabled": bool(enabled),
+        "path": str(path),
+        "loaded": False,
+        "error": "",
+    }
+    if not enabled:
+        return {}, meta
+    if not path.exists():
+        return {}, meta
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        meta["error"] = f"{type(exc).__name__}:{exc}"
+        return {}, meta
+    if not isinstance(payload, dict):
+        meta["error"] = "ValueError:top_level_payload_must_be_object"
+        return {}, meta
+    meta["loaded"] = True
+    return payload, meta
+
+
+def _apply_edit_mode_env_overrides(*, env: dict[str, str], payload: dict[str, Any]) -> int:
+    overrides = payload.get("env")
+    if not isinstance(overrides, dict):
+        return 0
+    applied = 0
+    for key, value in overrides.items():
+        env[str(key)] = "" if value is None else str(value)
+        applied += 1
+    return applied
+
+
+def _apply_edit_mode_config_overrides(*, cfg: Any, payload: dict[str, Any]) -> int:
+    overrides = payload.get("config")
+    if not isinstance(overrides, dict):
+        return 0
+
+    existing_cfg: dict[str, Any] = {
+        "mode": getattr(cfg, "mode", ""),
+        "company": dict(getattr(cfg, "company", {}) or {}),
+        "agents": dict(getattr(cfg, "agents", {}) or {}),
+        "lead_sources": list(getattr(cfg, "lead_sources", []) or []),
+        "email": dict(getattr(cfg, "email", {}) or {}),
+        "compliance": dict(getattr(cfg, "compliance", {}) or {}),
+        "storage": dict(getattr(cfg, "storage", {}) or {}),
+    }
+    merged = _deep_merge_dict(existing_cfg, overrides)
+
+    cfg.mode = str(merged.get("mode", cfg.mode))
+    cfg.company = dict(merged.get("company") or {})
+    cfg.agents = dict(merged.get("agents") or {})
+    cfg.lead_sources = list(merged.get("lead_sources") or [])
+    cfg.email = dict(merged.get("email") or {})
+    cfg.compliance = dict(merged.get("compliance") or {})
+    cfg.storage = dict(merged.get("storage") or {})
+    return len(overrides)
+
+
+def _parse_action_set(raw: str | None) -> set[str]:
+    return {str(part).strip().lower() for part in str(raw or "").split(",") if str(part).strip()}
+
+
+def _check_approval_gate(*, action: str, env: dict[str, str]) -> tuple[bool, str]:
+    gate_enabled = truthy(env.get("APPROVAL_GATE_ENABLED"), default=False)
+    if not gate_enabled:
+        return True, ""
+
+    required_actions = _parse_action_set(env.get("APPROVAL_REQUIRED_ACTIONS"))
+    if not required_actions:
+        required_actions = {
+            "calls.twilio",
+            "sms.twilio",
+            "sms.interest_nudge",
+            "report.email",
+            "report.ntfy",
+            "publish.content",
+            "billing.link_send",
+            "data.delete",
+        }
+
+    action_id = str(action or "").strip().lower()
+    if action_id not in required_actions and "*" not in required_actions:
+        return True, ""
+
+    grants = _parse_action_set(env.get("APPROVAL_GRANTS"))
+    if action_id in grants or "*" in grants:
+        return True, ""
+
+    return False, "approval_required"
 
 
 def _send_ntfy(
@@ -1047,6 +1152,8 @@ def main() -> None:
         dotenv_paths = [".env"]
     for rel in dotenv_paths:
         env.update(load_dotenv((repo_root / rel).resolve()))
+    edit_mode_payload, edit_mode_meta = _load_edit_mode_payload(repo_root=repo_root, env=env)
+    edit_mode_env_overrides = _apply_edit_mode_env_overrides(env=env, payload=edit_mode_payload)
 
     lock_enabled = truthy(env.get("LIVE_JOB_LOCK"), default=True)
     lock_fh = None
@@ -1089,9 +1196,32 @@ def main() -> None:
 
     cfg_path = _resolve_config_path(repo_root=repo_root, config_arg=args.config)
     cfg = load_config(str(cfg_path))
+    edit_mode_config_overrides = _apply_edit_mode_config_overrides(cfg=cfg, payload=edit_mode_payload)
     sqlite_path, audit_log = _resolve_store_paths(cfg=cfg, repo_root=repo_root)
     guard_store = ContextStore(sqlite_path=str(sqlite_path), audit_log=str(audit_log))
     guardrails: dict[str, object] = {}
+    required_actions = _parse_action_set(env.get("APPROVAL_REQUIRED_ACTIONS"))
+    if truthy(env.get("APPROVAL_GATE_ENABLED"), default=False) and not required_actions:
+        required_actions = {
+            "calls.twilio",
+            "sms.twilio",
+            "sms.interest_nudge",
+            "report.email",
+            "report.ntfy",
+            "publish.content",
+            "billing.link_send",
+            "data.delete",
+        }
+    guardrails["edit_mode_enabled"] = bool(edit_mode_meta.get("enabled", False))
+    guardrails["edit_mode_path"] = str(edit_mode_meta.get("path") or "")
+    guardrails["edit_mode_loaded"] = bool(edit_mode_meta.get("loaded", False))
+    guardrails["edit_mode_env_overrides_applied"] = int(edit_mode_env_overrides)
+    guardrails["edit_mode_config_overrides_applied"] = int(edit_mode_config_overrides)
+    if edit_mode_meta.get("error"):
+        guardrails["edit_mode_error"] = str(edit_mode_meta.get("error"))
+    guardrails["approval_gate_enabled"] = bool(truthy(env.get("APPROVAL_GATE_ENABLED"), default=False))
+    guardrails["approval_required_actions"] = sorted(required_actions)
+    guardrails["approval_grants"] = sorted(_parse_action_set(env.get("APPROVAL_GRANTS")))
     twilio_inbox_result = TwilioInboxResult(reason="not_run")
     twilio_tollfree_result: TwilioTollfreeWatchdogResult | None = None
     lead_hygiene_result: dict[str, object] = {}
@@ -1313,6 +1443,8 @@ def main() -> None:
     nudge_block_reason = ""
     if not truthy(env.get("AUTO_INTEREST_NUDGE_ENABLED"), default=True):
         nudge_block_reason = "auto_interest_nudge_disabled"
+    elif not _check_approval_gate(action="sms.interest_nudge", env=env)[0]:
+        nudge_block_reason = "approval_required"
     elif paid_kill_switch:
         nudge_block_reason = "paid_kill_switch"
     elif bool(stop_loss_state.get("blocked", False)):
@@ -1390,6 +1522,8 @@ def main() -> None:
         calls_block_reason = ""
         if not truthy(env.get("AUTO_CALLS_ENABLED"), default=False):
             calls_block_reason = "auto_calls_disabled"
+        elif not _check_approval_gate(action="calls.twilio", env=env)[0]:
+            calls_block_reason = "approval_required"
         elif paid_kill_switch:
             calls_block_reason = "paid_kill_switch"
         elif bool(stop_loss_state.get("blocked", False)):
@@ -1431,6 +1565,8 @@ def main() -> None:
         sms_block_reason = ""
         if not truthy(env.get("AUTO_SMS_ENABLED"), default=False):
             sms_block_reason = "auto_sms_disabled"
+        elif not _check_approval_gate(action="sms.twilio", env=env)[0]:
+            sms_block_reason = "approval_required"
         elif paid_kill_switch:
             sms_block_reason = "paid_kill_switch"
         elif bool(stop_loss_state.get("blocked", False)):
@@ -1588,7 +1724,27 @@ def main() -> None:
             tags += ",urgent"
 
         sent_any = False
-        if send_report_email:
+        can_send_email, email_gate_reason = _check_approval_gate(action="report.email", env=env)
+        can_send_ntfy, ntfy_gate_reason = _check_approval_gate(action="report.ntfy", env=env)
+
+        if send_report_email and not can_send_email:
+            guardrails["report_email_block_reason"] = email_gate_reason
+            _log_guard_block(
+                store=guard_store,
+                channel="report.email",
+                reason=email_gate_reason or "approval_required",
+                details={"report_to": report_to, "subject": subject},
+            )
+        if send_report_ntfy and not can_send_ntfy:
+            guardrails["report_ntfy_block_reason"] = ntfy_gate_reason
+            _log_guard_block(
+                store=guard_store,
+                channel="report.ntfy",
+                reason=ntfy_gate_reason or "approval_required",
+                details={"server": ntfy_server, "topics": ntfy_topics},
+            )
+
+        if send_report_email and can_send_email:
             try:
                 _send_email(
                     smtp_user=cfg.email["smtp_user"],
@@ -1601,7 +1757,7 @@ def main() -> None:
             except Exception as exc:
                 print(f"email report send failed: {exc}", file=sys.stderr)
 
-        if send_report_ntfy:
+        if send_report_ntfy and can_send_ntfy:
             sent_any = (
                 _send_ntfy(
                     server=ntfy_server,

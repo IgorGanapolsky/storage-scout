@@ -35,6 +35,8 @@ python3 autonomy/tools/lead_gen_broward.py --limit 30
 - Use environment variables for secrets (never commit tokens)
 - Keep automation scripts small and auditable
 - Add tests when new logic is non-trivial
+- Prefer Edit Mode overrides (`autonomy/state/edit_mode.overrides.json`) for runtime tuning over hardcoded changes
+- Use approval gates (`APPROVAL_GATE_ENABLED`) for risky live actions (calls/SMS/report delivery) when operating in supervised mode
 
 ## Testing
 - No automated test suite configured.
