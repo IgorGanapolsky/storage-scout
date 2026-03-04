@@ -420,6 +420,7 @@ def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
     eligible_older = "older@example.com"
     blocked_recent = "recent@example.com"
     blocked_optout = "optout@example.com"
+    blocked_optout_custom_id = "custom-optout@example.com"
     blocked_converted = "converted@example.com"
     blocked_method = "method@example.com"
 
@@ -430,6 +431,22 @@ def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
     _put(eligible_older, "replied")
     _put(blocked_recent, "interested")
     _put(blocked_optout, "interested")
+    store.upsert_lead(
+        Lead(
+            id="lead-custom-optout-id",
+            name="custom",
+            company="custom",
+            email=blocked_optout_custom_id,
+            phone="",
+            service="med spa",
+            city="Miami",
+            state="FL",
+            source="t",
+            score=90,
+            status="interested",
+            email_method="direct",
+        )
+    )
     _put(blocked_converted, "interested")
     _put(blocked_method, "interested", method="scrape")
 
@@ -437,6 +454,7 @@ def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
     store.log_action("agent", "sms.inbound", "t2", {"lead_id": eligible_older, "classification": "interested"})
     store.log_action("agent", "lead.reply", "t3", {"lead_id": blocked_recent})
     store.log_action("agent", "lead.reply", "t4", {"lead_id": blocked_optout})
+    store.log_action("agent", "lead.reply", "t4b", {"lead_id": "lead-custom-optout-id"})
     store.log_action("agent", "lead.reply", "t5", {"lead_id": blocked_converted})
     store.log_action("agent", "lead.reply", "t6", {"lead_id": blocked_method})
     store.log_action("agent", "conversion.booking", "t7", {"lead_id": blocked_converted})
@@ -455,6 +473,7 @@ def test_context_store_get_warm_close_leads_filters_and_orders() -> None:
     store.conn.commit()
 
     store.add_opt_out(blocked_optout)
+    store.add_opt_out(blocked_optout_custom_id)
     store.add_message(
         lead_id=blocked_recent,
         channel="email",

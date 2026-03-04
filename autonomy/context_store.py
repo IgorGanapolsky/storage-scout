@@ -314,7 +314,7 @@ class ContextStore:
               AND l.score >= ?
               AND COALESCE(l.email, '') <> ''
               AND NOT EXISTS (
-                SELECT 1 FROM opt_outs o WHERE o.email = l.id
+                SELECT 1 FROM opt_outs o WHERE o.email = l.email
               )
               AND NOT EXISTS (
                 SELECT 1
