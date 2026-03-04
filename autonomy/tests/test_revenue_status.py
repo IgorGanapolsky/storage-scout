@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import pytest
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from autonomy.tools import revenue_status
 from autonomy.tools.revenue_status import load_revenue_status
 
 UTC = timezone.utc
@@ -67,3 +69,72 @@ def test_revenue_status_counts_payments_bookings_and_sources(tmp_path: Path) -> 
     assert status.first_payment_ts == old_ts
     assert status.last_payment_ts == recent_ts
     assert status.payment_sources == {"fastmail": 2, "manual": 1}
+
+
+def test_revenue_status_missing_db_raises(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.sqlite3"
+    with pytest.raises(SystemExit, match="Missing sqlite DB"):
+        load_revenue_status(
+            sqlite_path=missing,
+            days=30,
+            payment_amount_usd=249.0,
+            booking_amount_usd=249.0,
+        )
+
+
+def test_revenue_status_main_json_output(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    db_path = tmp_path / "main_json.sqlite3"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE actions (action_type TEXT, ts TEXT, payload_json TEXT)")
+    conn.execute(
+        "INSERT INTO actions (action_type, ts, payload_json) VALUES (?, ?, ?)",
+        ("conversion.payment", datetime.now(UTC).replace(microsecond=0).isoformat(), '{"source":"fastmail"}'),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "revenue_status.py",
+            "--sqlite",
+            str(db_path),
+            "--days",
+            "7",
+            "--payment-amount-usd",
+            "249",
+            "--booking-amount-usd",
+            "149",
+            "--json",
+        ],
+    )
+    revenue_status.main()
+    out = capsys.readouterr().out
+    assert '"recognized_revenue_usd": 249.0' in out
+    assert '"payments_total": 1' in out
+
+
+def test_revenue_status_main_human_output_defaults_from_env(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "main_human.sqlite3"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE actions (action_type TEXT, ts TEXT, payload_json TEXT)")
+    conn.execute(
+        "INSERT INTO actions (action_type, ts, payload_json) VALUES (?, ?, ?)",
+        ("conversion.booking", datetime.now(UTC).replace(microsecond=0).isoformat(), '{"source":"calendly"}'),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("AEO_SETUP_PRICE_USD", "300")
+    monkeypatch.setenv("AEO_BOOKING_VALUE_USD", "450")
+    monkeypatch.setattr("sys.argv", ["revenue_status.py", "--sqlite", str(db_path), "--days", "30"])
+
+    revenue_status.main()
+    out = capsys.readouterr().out
+    assert "AEO Autopilot Revenue Status" in out
+    assert "Recognized revenue: $0.00" in out
+    assert "Booked pipeline value: $450.00" in out

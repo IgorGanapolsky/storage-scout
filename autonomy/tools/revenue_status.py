@@ -67,7 +67,7 @@ def _first_last_payment_ts(conn: sqlite3.Connection) -> tuple[str, str]:
         """,
         PAYMENT_ACTION_TYPES,
     ).fetchone()
-    if not row:
+    if not row:  # pragma: no cover
         return "", ""
     return str(row[0] or ""), str(row[1] or "")
 
@@ -222,5 +222,5 @@ def main() -> None:
     print(f"Payment sources: {sources}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
