@@ -21,6 +21,8 @@ from autonomy.tools.agent_commerce import request_json
 from autonomy.tools.twilio_inbox_sync import load_twilio_inbox_config
 from autonomy.utils import UTC, normalize_us_phone, truthy
 
+WARM_CLOSE_AGENT_ID = "agent.sms.twilio.warm_close.v1"
+
 
 @dataclass(frozen=True)
 class WarmCloseConfig:
@@ -71,7 +73,7 @@ def _send_sms(
         headers=headers,
         payload=data,
         timeout_secs=20,
-        agent_id="agent.sms.twilio.warm_close.v1",
+        agent_id=WARM_CLOSE_AGENT_ID,
         env=env,
         urlopen_func=urllib.request.urlopen,
     )
@@ -222,6 +224,115 @@ def _load_config(env: dict[str, str], *, booking_url: str, kickoff_url: str) -> 
     )
 
 
+def _fetch_candidate_rows(
+    *,
+    store: ContextStore,
+    cfg: WarmCloseConfig,
+    lookback_start_iso: str,
+) -> list[tuple[Any, ...]]:
+    status_placeholders = ",".join(["?"] * len(cfg.statuses))
+    params: list[Any] = [*cfg.statuses, int(cfg.min_score), lookback_start_iso, int(cfg.max_per_run) * 6]
+    sql = f"""
+        SELECT
+          id,
+          COALESCE(phone, '') AS phone,
+          COALESCE(status, '') AS status,
+          COALESCE(score, 0) AS score,
+          COALESCE(updated_at, created_at, '') AS lead_ts
+        FROM leads
+        WHERE lower(COALESCE(status, '')) IN ({status_placeholders})
+          AND TRIM(COALESCE(phone, '')) <> ''
+          AND COALESCE(score, 0) >= ?
+          AND COALESCE(updated_at, created_at, '') >= ?
+        ORDER BY COALESCE(updated_at, created_at, '') ASC
+        LIMIT ?
+    """
+    return list(store.conn.execute(sql, tuple(params)).fetchall())
+
+
+def _is_candidate_skipped(
+    *,
+    store: ContextStore,
+    lead_id: str,
+    phone_e164: str,
+    lead_ts: str,
+    cooldown_cutoff_iso: str,
+    lookback_start_iso: str,
+) -> tuple[bool, bool]:
+    if not phone_e164:
+        return True, False
+    if (lead_id and store.is_opted_out(lead_id)) or _has_phone_opt_out(store, phone_e164=phone_e164):
+        return True, False
+    if _already_closed_recently(
+        store,
+        lead_id=lead_id,
+        phone_e164=phone_e164,
+        cutoff_iso=cooldown_cutoff_iso,
+    ):
+        return True, False
+    conversion_since_iso = lead_ts if _parse_iso(lead_ts) is not None else lookback_start_iso
+    if has_conversion_after(store, lead_id=lead_id, since_iso=conversion_since_iso):
+        return True, True
+    return False, False
+
+
+def _build_warm_close_payload(
+    *,
+    cfg: WarmCloseConfig,
+    lead_id: str,
+    lead_status: str,
+    lead_score: int,
+    phone_e164: str,
+) -> dict[str, Any]:
+    return {
+        "lead_id": lead_id,
+        "lead_status": lead_status,
+        "lead_score": int(lead_score),
+        "to_phone_e164": phone_e164,
+        "booking_url": cfg.booking_url,
+        "kickoff_url": cfg.kickoff_url,
+        "twilio": {},
+    }
+
+
+def _attempt_warm_close_send(
+    *,
+    store: ContextStore,
+    cfg: WarmCloseConfig,
+    env: dict[str, str],
+    body: str,
+    payload: dict[str, Any],
+    lead_id: str,
+    phone_e164: str,
+) -> bool:
+    try:
+        resp = _send_sms(cfg=cfg, to_number=phone_e164, body=body, env=env)
+        sid = str(resp.get("sid") or "").strip()
+        payload["twilio"] = {
+            "sid": sid,
+            "status": str(resp.get("status") or ""),
+            "error_code": resp.get("error_code"),
+            "error_message": resp.get("error_message"),
+        }
+        store.log_action(
+            agent_id=WARM_CLOSE_AGENT_ID,
+            action_type="sms.warm_close",
+            trace_id=f"twilio_warm_close:{sid or lead_id or phone_e164}",
+            payload=payload,
+        )
+        return True
+    except Exception as exc:
+        payload["error_type"] = type(exc).__name__
+        payload["error"] = str(exc)
+        store.log_action(
+            agent_id=WARM_CLOSE_AGENT_ID,
+            action_type="sms.warm_close_failed",
+            trace_id=f"twilio_warm_close_failed:{lead_id or phone_e164}",
+            payload=payload,
+        )
+        return False
+
+
 def run_warm_close_loop(
     *,
     sqlite_path: Path,
@@ -242,26 +353,8 @@ def run_warm_close_loop(
     lookback_start_iso = (now - timedelta(days=int(cfg.lookback_days))).isoformat()
     body = _build_close_body(booking_url=cfg.booking_url, kickoff_url=cfg.kickoff_url)
 
-    status_placeholders = ",".join(["?"] * len(cfg.statuses))
-    params: list[Any] = [*cfg.statuses, int(cfg.min_score), lookback_start_iso, int(cfg.max_per_run) * 6]
-    sql = f"""
-        SELECT
-          id,
-          COALESCE(phone, '') AS phone,
-          COALESCE(status, '') AS status,
-          COALESCE(score, 0) AS score,
-          COALESCE(updated_at, created_at, '') AS lead_ts
-        FROM leads
-        WHERE lower(COALESCE(status, '')) IN ({status_placeholders})
-          AND TRIM(COALESCE(phone, '')) <> ''
-          AND COALESCE(score, 0) >= ?
-          AND COALESCE(updated_at, created_at, '') >= ?
-        ORDER BY COALESCE(updated_at, created_at, '') ASC
-        LIMIT ?
-    """
-
     try:
-        rows = store.conn.execute(sql, tuple(params)).fetchall()
+        rows = _fetch_candidate_rows(store=store, cfg=cfg, lookback_start_iso=lookback_start_iso)
         seen: set[str] = set()
         for row in rows:
             if result.sent >= int(cfg.max_per_run):
@@ -278,64 +371,39 @@ def run_warm_close_loop(
             seen.add(dedupe_key)
             result.candidates += 1
 
-            if not phone_e164:
-                result.skipped += 1
-                continue
-
-            if (lead_id and store.is_opted_out(lead_id)) or _has_phone_opt_out(store, phone_e164=phone_e164):
-                result.skipped += 1
-                continue
-
-            if _already_closed_recently(
-                store,
+            should_skip, converted_skip = _is_candidate_skipped(
+                store=store,
                 lead_id=lead_id,
                 phone_e164=phone_e164,
-                cutoff_iso=cooldown_cutoff_iso,
-            ):
+                lead_ts=lead_ts,
+                cooldown_cutoff_iso=cooldown_cutoff_iso,
+                lookback_start_iso=lookback_start_iso,
+            )
+            if should_skip:
+                if converted_skip:
+                    result.converted_skipped += 1
                 result.skipped += 1
                 continue
 
-            conversion_since_iso = lead_ts if _parse_iso(lead_ts) is not None else lookback_start_iso
-            if has_conversion_after(store, lead_id=lead_id, since_iso=conversion_since_iso):
-                result.converted_skipped += 1
-                result.skipped += 1
-                continue
-
-            payload: dict[str, Any] = {
-                "lead_id": lead_id,
-                "lead_status": lead_status,
-                "lead_score": int(lead_score),
-                "to_phone_e164": phone_e164,
-                "booking_url": cfg.booking_url,
-                "kickoff_url": cfg.kickoff_url,
-                "twilio": {},
-            }
+            payload = _build_warm_close_payload(
+                cfg=cfg,
+                lead_id=lead_id,
+                lead_status=lead_status,
+                lead_score=lead_score,
+                phone_e164=phone_e164,
+            )
             result.attempted += 1
-            try:
-                resp = _send_sms(cfg=cfg, to_number=phone_e164, body=body, env=env)
-                sid = str(resp.get("sid") or "").strip()
-                payload["twilio"] = {
-                    "sid": sid,
-                    "status": str(resp.get("status") or ""),
-                    "error_code": resp.get("error_code"),
-                    "error_message": resp.get("error_message"),
-                }
-                store.log_action(
-                    agent_id="agent.sms.twilio.warm_close.v1",
-                    action_type="sms.warm_close",
-                    trace_id=f"twilio_warm_close:{sid or lead_id or phone_e164}",
-                    payload=payload,
-                )
+            if _attempt_warm_close_send(
+                store=store,
+                cfg=cfg,
+                env=env,
+                body=body,
+                payload=payload,
+                lead_id=lead_id,
+                phone_e164=phone_e164,
+            ):
                 result.sent += 1
-            except Exception as exc:
-                payload["error_type"] = type(exc).__name__
-                payload["error"] = str(exc)
-                store.log_action(
-                    agent_id="agent.sms.twilio.warm_close.v1",
-                    action_type="sms.warm_close_failed",
-                    trace_id=f"twilio_warm_close_failed:{lead_id or phone_e164}",
-                    payload=payload,
-                )
+            else:
                 result.failed += 1
     except Exception as exc:
         result.reason = f"error:{type(exc).__name__}"

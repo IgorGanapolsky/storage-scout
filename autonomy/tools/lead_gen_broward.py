@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 import time
-from hashlib import sha1
+from hashlib import sha256
 from html import unescape
 from pathlib import Path
 from random import SystemRandom
@@ -120,28 +120,39 @@ def get_api_key() -> str:
     raise SystemExit("Missing Google Places API key. Set GOOGLE_PLACES_API_KEY.")
 
 
+def _market_source_path(path: Path | None) -> Path:
+    if path is not None:
+        return path
+    if DEFAULT_MARKET_FILE.exists():
+        return DEFAULT_MARKET_FILE
+    return DEFAULT_CITY_FILE
+
+
+def _coerce_market(item: object, default_state: str) -> dict[str, str] | None:
+    if isinstance(item, str):
+        city = item.strip()
+        if city:
+            return {"city": city, "state": default_state}
+        return None
+    if isinstance(item, dict):
+        city = str(item.get("city") or "").strip()
+        state = str(item.get("state") or default_state).strip().upper() or default_state
+        if city:
+            return {"city": city, "state": state}
+    return None
+
+
 def load_markets(path: Path | None, default_state: str) -> list[dict[str, str]]:
     state = (default_state or "FL").strip().upper()
-    source_path = path
-    if source_path is None and DEFAULT_MARKET_FILE.exists():
-        source_path = DEFAULT_MARKET_FILE
-    if source_path is None:
-        source_path = DEFAULT_CITY_FILE
-    if source_path and source_path.exists():
-        markets: list[dict[str, str]] = []
+    source_path = _market_source_path(path)
+    if source_path.exists():
         with source_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        for item in data:
-            if isinstance(item, str):
-                city = item.strip()
-                if city:
-                    markets.append({"city": city, "state": state})
-                continue
-            if isinstance(item, dict):
-                city = (item.get("city") or "").strip()
-                item_state = (item.get("state") or state).strip().upper()
-                if city:
-                    markets.append({"city": city, "state": item_state or state})
+        markets = [
+            market
+            for market in (_coerce_market(item, state) for item in data)
+            if market is not None
+        ]
         return markets
     raise SystemExit("No market list found.")
 
@@ -150,7 +161,7 @@ def _cursor_key(raw_key: str) -> str:
     norm = (raw_key or "default").strip().lower()
     if len(norm) <= 72:
         return norm
-    return sha1(norm.encode("utf-8")).hexdigest()
+    return sha256(norm.encode("utf-8")).hexdigest()
 
 
 def load_city_index(index_key: str) -> int:
@@ -180,7 +191,7 @@ def save_city_index(index: int, index_key: str) -> None:
                 payload["cursors"].update(
                     {str(k): int(v) for k, v in existing["cursors"].items()}
                 )
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        except (OSError, ValueError, TypeError) as exc:
             logging.getLogger(__name__).debug(
                 "Ignoring invalid city index cache (%s).",
                 exc.__class__.__name__,
