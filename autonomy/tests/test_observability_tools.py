@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from autonomy.tools.live_job import (
     _evaluate_paid_stop_loss,
     _format_report,
     _parse_categories,
+    _resolve_config_path,
     _resolve_paid_sms_block_reason,
     _run_interest_nudges_with_budget,
     _run_warm_close_with_budget,
@@ -582,11 +584,11 @@ def test_edit_mode_env_overrides_apply_as_strings() -> None:
 def test_edit_mode_config_overrides_deep_merge_without_dropping_defaults() -> None:
     cfg = SimpleNamespace(
         mode="live",
-        company={"name": "CallCatcher Ops", "booking_url": "https://cal.example.com/original"},
+        company={"name": "AEO Autopilot", "booking_url": "https://cal.example.com/original"},
         agents={"outreach": {"daily_send_limit": 25, "followup": {"enabled": True, "daily_send_limit": 15}}},
-        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_callcatcherops_real.csv", "source": "callcatcher"}],
-        email={"smtp_user": "hello@callcatcherops.com"},
-        compliance={"unsubscribe_url": "https://callcatcherops.com/unsubscribe.html?email={{email}}"},
+        lead_sources=[{"type": "csv", "path": "autonomy/state/leads_ai_seo_real.csv", "source": "ai-seo"}],
+        email={"smtp_user": "hello@aiseoautopilot.com"},
+        compliance={"unsubscribe_url": "https://aiseoautopilot.com/unsubscribe.html?email={{email}}"},
         storage={"sqlite_path": "autonomy/state/autonomy_live.sqlite3", "audit_log": "autonomy/state/audit_live.jsonl"},
     )
     payload = {
@@ -598,7 +600,7 @@ def test_edit_mode_config_overrides_deep_merge_without_dropping_defaults() -> No
 
     applied = _apply_edit_mode_config_overrides(cfg=cfg, payload=payload)
     assert applied == 2
-    assert cfg.company["name"] == "CallCatcher Ops"
+    assert cfg.company["name"] == "AEO Autopilot"
     assert cfg.company["booking_url"] == "https://cal.example.com/ai-seo"
     outreach = dict(cfg.agents["outreach"])
     assert int(outreach["daily_send_limit"]) == 10
@@ -1150,6 +1152,7 @@ def test_live_job_main_handles_inbox_sync_failure_and_deliverability_block(monke
         lambda **_kwargs: {"saved": True, "path": "autonomy/state/revenue_learning.jsonl"},
     )
     monkeypatch.setattr("autonomy.tools.live_job._format_report", lambda **_kwargs: "daily report")
+    monkeypatch.setattr("autonomy.tools.generate_dashboard.generate", lambda: None)
 
     monkeypatch.setattr(
         sys,
@@ -1157,6 +1160,295 @@ def test_live_job_main_handles_inbox_sync_failure_and_deliverability_block(monke
         ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json", "--report-path", report_rel],
     )
     live_job_main()
+    assert report_path.exists()
+    report_path.unlink(missing_ok=True)
+
+
+def test_resolve_config_path_default_live_missing_exits(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    (repo_root / "autonomy" / "state").mkdir(parents=True, exist_ok=True)
+
+    try:
+        _resolve_config_path(repo_root=repo_root, config_arg="autonomy/state/config.ai-seo.live.json")
+        assert False, "expected SystemExit for missing default live config"
+    except SystemExit as exc:
+        assert "Missing required live config" in str(exc)
+
+
+def test_live_job_main_allows_no_fastmail_creds_when_sync_disabled_and_report_none(monkeypatch) -> None:
+    run_id = uuid.uuid4().hex
+    sqlite_path, audit_log = _tmp_state_paths(f"live_job_main_no_fastmail_{run_id}")
+    report_rel = f"autonomy/state/live_job_report_no_fastmail_{run_id}.txt"
+    report_path = Path(report_rel)
+
+    cfg = SimpleNamespace(
+        company={
+            "name": "AEO Autopilot",
+            "booking_url": "https://cal.example.com/audit",
+            "kickoff_url": "https://pay.example.com/kickoff",
+            "intake_url": "https://example.com/intake",
+        },
+        compliance={"unsubscribe_url": "https://example.com/unsubscribe?email={{email}}"},
+        agents={"outreach": {"daily_send_limit": 1, "followup": {"enabled": True, "daily_send_limit": 1}}},
+        lead_sources=[],
+        email={"smtp_user": "agent@example.com"},
+        storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
+    )
+    env = {
+        "REPORT_DELIVERY": "none",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+        "TWILIO_INBOX_SYNC_ENABLED": "0",
+        "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "0",
+        "FUNNEL_WATCHDOG": "0",
+        "AUTO_WARM_CLOSE_ENABLED": "0",
+        "AUTO_INTEREST_NUDGE_ENABLED": "0",
+    }
+
+    class _FakeEngine:
+        def __init__(self, _cfg) -> None:  # noqa: ANN001
+            pass
+
+        def run(self) -> dict[str, int]:
+            return {"sent_initial": 0, "sent_followup": 0}
+
+    def _sync_should_not_run(**_kwargs):  # noqa: ANN003
+        raise AssertionError("sync_fastmail_inbox should not run when FASTMAIL_INBOX_SYNC_ENABLED=0")
+
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr("autonomy.tools.live_job.load_config", lambda _path: cfg)
+    monkeypatch.setattr("autonomy.tools.live_job.sync_fastmail_inbox", _sync_should_not_run)
+    monkeypatch.setattr("autonomy.tools.live_job.Engine", _FakeEngine)
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._run_autonomous_lead_hygiene",
+        lambda **_kwargs: {"enabled": True, "reason": "ok", "total": 0, "invalid": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._deliverability_snapshot",
+        lambda *_args, **_kwargs: {"window_days": 7, "emailed": 0, "bounced": 0, "bounce_rate": 0.0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._evaluate_paid_stop_loss",
+        lambda **_kwargs: {"blocked": False, "block_reason": "", "zero_revenue_runs": 0, "zero_revenue_days": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._collect_sms_channel_state",
+        lambda **_kwargs: {
+            "daily_sms_cap": 10,
+            "daily_sms_interest_reserve": 2,
+            "daily_sms_warm_close_reserve": 2,
+            "sms_today_all": 0,
+            "sms_today": 0,
+            "sms_today_followup": 0,
+            "sms_today_nudge": 0,
+            "sms_today_warm_close": 0,
+            "sms_budget_remaining": 10,
+            "sms_warm_close_budget_remaining": 0,
+            "sms_nudge_budget_remaining": 0,
+            "sms_followup_budget_remaining": 0,
+        },
+    )
+    monkeypatch.setattr("autonomy.tools.live_job._maybe_write_call_list", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._write_lead_hygiene_daily_report",
+        lambda **_kwargs: {"daily_report_path": "", "latest_report_path": ""},
+    )
+    monkeypatch.setattr("autonomy.tools.live_job.load_scoreboard", lambda *_args, **_kwargs: _zero_board())
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.build_revenue_lesson",
+        lambda **_kwargs: SimpleNamespace(
+            bottleneck="none",
+            leading_signal="none",
+            confidence_pct=100,
+            next_actions=["keep running"],
+        ),
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.record_revenue_lesson",
+        lambda **_kwargs: {"saved": True, "path": "autonomy/state/revenue_learning.jsonl"},
+    )
+    monkeypatch.setattr("autonomy.tools.live_job._format_report", lambda **_kwargs: "daily report")
+    monkeypatch.setattr("autonomy.tools.generate_dashboard.generate", lambda: None)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json", "--report-path", report_rel],
+    )
+    live_job_main()
+    assert report_path.exists()
+    report_path.unlink(missing_ok=True)
+
+
+def test_live_job_main_email_report_requires_fastmail_creds_even_if_sync_disabled(monkeypatch) -> None:
+    env = {
+        "REPORT_DELIVERY": "email",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+    }
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
+
+    try:
+        live_job_main()
+        assert False, "expected SystemExit for missing FASTMAIL credentials"
+    except SystemExit as exc:
+        assert "Missing FASTMAIL_USER in .env" in str(exc)
+
+
+def test_live_job_main_email_report_requires_smtp_when_fastmail_user_present(monkeypatch) -> None:
+    env = {
+        "REPORT_DELIVERY": "email",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+        "FASTMAIL_USER": "agent@example.com",
+        "FASTMAIL_FORWARD_TO": "ceo@example.com",
+    }
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
+
+    try:
+        live_job_main()
+        assert False, "expected SystemExit for missing SMTP password"
+    except SystemExit as exc:
+        assert "Missing SMTP_PASSWORD in .env" in str(exc)
+
+
+def test_live_job_main_email_report_requires_recipient(monkeypatch) -> None:
+    env = {
+        "REPORT_DELIVERY": "email",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+        "FASTMAIL_USER": "agent@example.com",
+        "SMTP_PASSWORD": "pw",
+    }
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
+
+    try:
+        live_job_main()
+        assert False, "expected SystemExit for missing report recipient"
+    except SystemExit as exc:
+        assert "Missing FASTMAIL_FORWARD_TO or --report-to" in str(exc)
+
+
+def test_live_job_main_ntfy_report_requires_topic(monkeypatch) -> None:
+    env = {
+        "REPORT_DELIVERY": "ntfy",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+    }
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json"])
+
+    try:
+        live_job_main()
+        assert False, "expected SystemExit for missing ntfy topic"
+    except SystemExit as exc:
+        assert "Missing NTFY_TOPIC" in str(exc)
+
+
+def test_live_job_main_applies_allow_fastmail_and_approval_defaults(monkeypatch) -> None:
+    run_id = uuid.uuid4().hex
+    sqlite_path, audit_log = _tmp_state_paths(f"live_job_main_guardrails_{run_id}")
+    report_rel = f"autonomy/state/live_job_report_guardrails_{run_id}.txt"
+    report_path = Path(report_rel)
+
+    cfg = SimpleNamespace(
+        company={
+            "name": "AEO Autopilot",
+            "booking_url": "https://cal.example.com/audit",
+            "kickoff_url": "https://pay.example.com/kickoff",
+            "intake_url": "https://example.com/intake",
+        },
+        compliance={"unsubscribe_url": "https://example.com/unsubscribe?email={{email}}"},
+        agents={"outreach": {"daily_send_limit": 1, "followup": {"enabled": True, "daily_send_limit": 1}}},
+        lead_sources=[],
+        email={"smtp_user": "agent@example.com"},
+        storage={"sqlite_path": sqlite_path, "audit_log": audit_log},
+    )
+    env = {
+        "REPORT_DELIVERY": "none",
+        "FASTMAIL_INBOX_SYNC_ENABLED": "0",
+        "LIVE_JOB_LOCK": "0",
+        "ALLOW_FASTMAIL_OUTREACH": "1",
+        "APPROVAL_GATE_ENABLED": "1",
+        "APPROVAL_REQUIRED_ACTIONS": "",
+        "TWILIO_INBOX_SYNC_ENABLED": "0",
+        "TWILIO_TOLLFREE_WATCHDOG_ENABLED": "0",
+        "FUNNEL_WATCHDOG": "0",
+        "AUTO_WARM_CLOSE_ENABLED": "0",
+        "AUTO_INTEREST_NUDGE_ENABLED": "0",
+    }
+
+    class _FakeEngine:
+        def __init__(self, _cfg) -> None:  # noqa: ANN001
+            pass
+
+        def run(self) -> dict[str, int]:
+            return {"sent_initial": 0, "sent_followup": 0}
+
+    monkeypatch.setattr("autonomy.tools.live_job.load_dotenv", lambda _path: dict(env))
+    monkeypatch.setattr("autonomy.tools.live_job.load_config", lambda _path: cfg)
+    monkeypatch.setattr("autonomy.tools.live_job.Engine", _FakeEngine)
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._load_edit_mode_payload",
+        lambda **_kwargs: ({}, {"enabled": True, "path": "autonomy/state/edit_mode.overrides.json", "loaded": False, "error": "bad_json"}),
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._run_autonomous_lead_hygiene",
+        lambda **_kwargs: {"enabled": True, "reason": "ok", "total": 0, "invalid": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._deliverability_snapshot",
+        lambda *_args, **_kwargs: {"window_days": 7, "emailed": 0, "bounced": 0, "bounce_rate": 0.0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._evaluate_paid_stop_loss",
+        lambda **_kwargs: {"blocked": False, "block_reason": "", "zero_revenue_runs": 0, "zero_revenue_days": 0},
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._collect_sms_channel_state",
+        lambda **_kwargs: {
+            "daily_sms_cap": 10,
+            "daily_sms_interest_reserve": 2,
+            "daily_sms_warm_close_reserve": 2,
+            "sms_today_all": 0,
+            "sms_today": 0,
+            "sms_today_followup": 0,
+            "sms_today_nudge": 0,
+            "sms_today_warm_close": 0,
+            "sms_budget_remaining": 10,
+            "sms_warm_close_budget_remaining": 0,
+            "sms_nudge_budget_remaining": 0,
+            "sms_followup_budget_remaining": 0,
+        },
+    )
+    monkeypatch.setattr("autonomy.tools.live_job._maybe_write_call_list", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "autonomy.tools.live_job._write_lead_hygiene_daily_report",
+        lambda **_kwargs: {"daily_report_path": "", "latest_report_path": ""},
+    )
+    monkeypatch.setattr("autonomy.tools.live_job.load_scoreboard", lambda *_args, **_kwargs: _zero_board())
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.build_revenue_lesson",
+        lambda **_kwargs: SimpleNamespace(
+            bottleneck="none",
+            leading_signal="none",
+            confidence_pct=100,
+            next_actions=["keep running"],
+        ),
+    )
+    monkeypatch.setattr(
+        "autonomy.tools.live_job.record_revenue_lesson",
+        lambda **_kwargs: {"saved": True, "path": "autonomy/state/revenue_learning.jsonl"},
+    )
+    monkeypatch.setattr("autonomy.tools.live_job._format_report", lambda **_kwargs: "daily report")
+    monkeypatch.setattr("autonomy.tools.generate_dashboard.generate", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["live_job.py", "--config", "autonomy/state/config.ai-seo.live.json", "--report-path", report_rel])
+
+    live_job_main()
+    assert os.environ.get("ALLOW_FASTMAIL_OUTREACH") == "1"
     assert report_path.exists()
     report_path.unlink(missing_ok=True)
 
@@ -1264,6 +1556,7 @@ def test_live_job_main_non_blocked_deliverability_hits_engine_success_path(monke
         lambda **_kwargs: {"saved": True, "path": "autonomy/state/revenue_learning.jsonl"},
     )
     monkeypatch.setattr("autonomy.tools.live_job._format_report", lambda **_kwargs: "daily report")
+    monkeypatch.setattr("autonomy.tools.generate_dashboard.generate", lambda: None)
 
     monkeypatch.setattr(
         sys,

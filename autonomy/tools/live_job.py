@@ -312,19 +312,14 @@ def _resolve_store_paths(*, cfg, repo_root: Path) -> tuple[Path, Path]:
 
 def _resolve_config_path(*, repo_root: Path, config_arg: str) -> Path:
     """
-    Resolve the config path with a developer-friendly fallback.
-
-    If the default live config is requested (even via an absolute path) but missing
-    (fresh clone/worktree or LaunchAgent), fall back to the tracked config in the repo.
+    Resolve the config path and fail fast for missing live runtime config.
     """
 
     requested = (repo_root / config_arg).resolve()
     default_live = (repo_root / "autonomy" / "state" / "config.ai-seo.live.json").resolve()
 
     if requested == default_live and not requested.exists():
-        alt = (repo_root / "autonomy" / "config.ai-seo.json").resolve()
-        if alt.exists():
-            return alt
+        raise SystemExit(f"Missing required live config: {default_live}")
 
     return requested
 
@@ -1371,6 +1366,7 @@ def main() -> None:
         report_delivery = "email"
     send_report_email = report_delivery in {"email", "both"}
     send_report_ntfy = report_delivery in {"ntfy", "both"}
+    fastmail_sync_enabled = truthy(env.get("FASTMAIL_INBOX_SYNC_ENABLED"), default=True)
 
     ntfy_server = (env.get("NTFY_SERVER") or "https://ntfy.sh").strip()
     ntfy_topics = _iter_ntfy_topics(env.get("NTFY_TOPIC", ""))
@@ -1379,10 +1375,11 @@ def main() -> None:
     fastmail_user = env.get("FASTMAIL_USER", "")
     smtp_password = env.get("SMTP_PASSWORD", "")
     report_to = args.report_to.strip() or env.get("FASTMAIL_FORWARD_TO", "").strip()
+    require_fastmail_creds = bool(fastmail_sync_enabled or send_report_email)
 
-    if not fastmail_user:
+    if require_fastmail_creds and not fastmail_user:
         raise SystemExit("Missing FASTMAIL_USER in .env")
-    if not smtp_password:
+    if require_fastmail_creds and not smtp_password:
         raise SystemExit("Missing SMTP_PASSWORD in .env")
     if send_report_email and not report_to:
         raise SystemExit("Missing FASTMAIL_FORWARD_TO or --report-to (required for REPORT_DELIVERY=email/both)")
@@ -1390,7 +1387,8 @@ def main() -> None:
         raise SystemExit("Missing NTFY_TOPIC (required for REPORT_DELIVERY=ntfy/both)")
 
     # Ensure the outreach engine can read SMTP_PASSWORD via config.email.smtp_password_env.
-    os.environ.setdefault("SMTP_PASSWORD", smtp_password)
+    if smtp_password:
+        os.environ.setdefault("SMTP_PASSWORD", smtp_password)
     # Propagate ALLOW_FASTMAIL_OUTREACH so providers.py can read it via os.getenv().
     if truthy(env.get("ALLOW_FASTMAIL_OUTREACH")):
         os.environ.setdefault("ALLOW_FASTMAIL_OUTREACH", "1")
@@ -1424,6 +1422,8 @@ def main() -> None:
     guardrails["approval_gate_enabled"] = bool(truthy(env.get("APPROVAL_GATE_ENABLED"), default=False))
     guardrails["approval_required_actions"] = sorted(required_actions)
     guardrails["approval_grants"] = sorted(_parse_action_set(env.get("APPROVAL_GRANTS")))
+    guardrails["fastmail_sync_enabled"] = bool(fastmail_sync_enabled)
+    guardrails["fastmail_creds_required"] = bool(require_fastmail_creds)
     twilio_inbox_result = TwilioInboxResult(reason="not_run")
     twilio_tollfree_result: TwilioTollfreeWatchdogResult | None = None
     lead_hygiene_result: dict[str, object] = {}
@@ -1434,17 +1434,30 @@ def main() -> None:
 
     # 1) Sync inbox first so bounces/replies suppress follow-ups.
     fastmail_state_path = repo_root / "autonomy" / "state" / "fastmail_sync_state.json"
-    try:
-        inbox_result = sync_fastmail_inbox(
-            sqlite_path=sqlite_path,
-            audit_log=audit_log,
-            fastmail_user=fastmail_user,
-            fastmail_password=smtp_password,
-            state_path=fastmail_state_path,
-        )
-    except Exception as exc:
-        # Never block the daily job if IMAP is flaky.
-        print(f"inbox sync failed: {exc}", file=sys.stderr)
+    if fastmail_sync_enabled:
+        try:
+            inbox_result = sync_fastmail_inbox(
+                sqlite_path=sqlite_path,
+                audit_log=audit_log,
+                fastmail_user=fastmail_user,
+                fastmail_password=smtp_password,
+                state_path=fastmail_state_path,
+            )
+        except Exception as exc:
+            # Never block the daily job if IMAP is flaky.
+            print(f"inbox sync failed: {exc}", file=sys.stderr)
+            prior_uid = int((_read_json(fastmail_state_path).get("last_uid") or 0) or 0)
+            inbox_result = InboxSyncResult(
+                processed_messages=0,
+                new_bounces=0,
+                new_replies=0,
+                new_opt_outs=0,
+                intake_submissions=0,
+                calendly_bookings=0,
+                stripe_payments=0,
+                last_uid=prior_uid,
+            )
+    else:
         prior_uid = int((_read_json(fastmail_state_path).get("last_uid") or 0) or 0)
         inbox_result = InboxSyncResult(
             processed_messages=0,
@@ -1456,6 +1469,7 @@ def main() -> None:
             stripe_payments=0,
             last_uid=prior_uid,
         )
+        print("live_job: inbox sync skipped (FASTMAIL_INBOX_SYNC_ENABLED=0)", file=sys.stderr)
     print(f"live_job: inbox_sync done (t+{time.monotonic() - t0:.1f}s)", file=sys.stderr)
 
     if truthy(env.get("TWILIO_INBOX_SYNC_ENABLED"), default=True):
