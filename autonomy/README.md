@@ -66,10 +66,11 @@ If you point SMTP at Fastmail (`smtp_host` ends with `fastmail.com`), outbound o
 Override (not recommended) by setting:
 - `ALLOW_FASTMAIL_OUTREACH=1`
 
-## Auto Calls (Twilio, Optional)
-The daily job can optionally place outbound calls via Twilio and log outcomes into SQLite (so the scoreboard/report reflects execution).
+## Twilio Channels (Hard-Disabled In Live Runtime)
+Twilio-dependent paths in `autonomy/tools/live_job.py` are hard-disabled for budget control and reliability.
+Even if Twilio env vars are present, live runtime blocks Twilio channels with explicit guardrail reasons.
 
-This is **disabled by default** and requires paid Twilio credentials in local `.env` (gitignored):
+The legacy Twilio env settings are retained for reference only:
 - `AUTO_CALLS_ENABLED=1`
 - `TWILIO_ACCOUNT_SID=...`
 - `TWILIO_AUTH_TOKEN=...`

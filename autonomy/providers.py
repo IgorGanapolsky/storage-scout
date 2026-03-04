@@ -97,6 +97,21 @@ class EmailSender:
                 "override_env": "ALLOW_FASTMAIL_OUTREACH",
             }
 
+        auth_check = truthy(os.getenv("SMTP_PREFLIGHT_AUTH_CHECK", ""), default=False)
+        if auth_check:
+            try:
+                with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port, timeout=20) as server:
+                    server.starttls()
+                    server.login(self.config.smtp_user, password)
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "reason": "smtp-auth-failed",
+                    "smtp_host": self.config.smtp_host,
+                    "smtp_user": self.config.smtp_user,
+                    "error_type": type(exc).__name__,
+                }
+
         return {"ok": True, "reason": "ok"}
 
     _SMTP_RETRIES = 2
