@@ -42,6 +42,7 @@ from autonomy.tools.live_job import (
 )
 from autonomy.tools.call_list import CallListRow
 from autonomy.tools.scoreboard import Scoreboard, load_scoreboard
+from autonomy.tools.funnel_eval import WarmCloseFunnelEval
 from autonomy.tools.twilio_inbox_sync import TwilioInboxResult
 from autonomy.tools.twilio_interest_nudge import InterestNudgeResult
 from autonomy.tools.twilio_tollfree_watchdog import TwilioTollfreeWatchdogResult
@@ -272,6 +273,47 @@ def test_live_job_report_formatting() -> None:
     assert "- sent_warm_close: 0" in report
     assert "Inbox sync (Fastmail)" in report
     assert "Scoreboard (last 30 days)" in report
+
+
+def test_live_job_report_includes_funnel_eval_section() -> None:
+    inbox = InboxSyncResult(
+        processed_messages=0,
+        new_bounces=0,
+        new_replies=0,
+        new_opt_outs=0,
+        intake_submissions=0,
+        calendly_bookings=0,
+        stripe_payments=0,
+        last_uid=0,
+    )
+    board = _zero_board()
+    report = _format_report(
+        leadgen_new=0,
+        engine_result={"sent_initial": 0, "sent_warm_close": 0, "sent_followup": 0},
+        inbox_result=inbox,
+        scoreboard=board,
+        scoreboard_days=30,
+        funnel_eval=WarmCloseFunnelEval(
+            as_of_utc="2026-03-04T00:00:00+00:00",
+            window_days=30,
+            statuses=("interested", "replied"),
+            cohort_leads=6,
+            warm_close_sent_leads=6,
+            warm_close_missing_leads=0,
+            warm_close_sent_via_step90_leads=6,
+            warm_close_sent_via_kind_leads=6,
+            booked_after_warm_close_leads=1,
+            paid_after_warm_close_leads=0,
+            converted_after_warm_close_leads=1,
+            warm_close_send_rate=1.0,
+            booking_rate_from_warm_close=1 / 6,
+            payment_rate_from_warm_close=0.0,
+            conversion_rate_from_warm_close=1 / 6,
+        ),
+    )
+    assert "Funnel eval (warm-close email)" in report
+    assert "- cohort_leads: 6" in report
+    assert "- warm_close_missing: 0" in report
 
 
 def test_filter_call_list_rows_for_hygiene_removes_bad_rows() -> None:

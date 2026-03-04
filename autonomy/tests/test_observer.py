@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import os
+import sys
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from autonomy.ai_writer import AIOutreachWriter
@@ -265,3 +268,33 @@ class TestAIWriterWithObservations:
             result = writer.render(lead)
         assert "subject" in result
         assert "body" in result
+
+    def test_call_openai_uses_prompt_cache(self) -> None:
+        writer = self._make_writer(store=None)
+        writer.prompt_cache_enabled = True
+        writer.prompt_cache_path = ""
+        writer._prompt_cache = {}
+
+        calls = {"count": 0}
+
+        class _FakeCompletions:
+            @staticmethod
+            def create(**_kwargs):  # noqa: ANN003
+                calls["count"] += 1
+                msg = SimpleNamespace(content="Subject: Test\nBody")
+                choice = SimpleNamespace(message=msg)
+                return SimpleNamespace(choices=[choice])
+
+        class _FakeOpenAI:
+            def __init__(self, api_key: str):  # noqa: ARG002
+                self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+        fake_openai_mod = SimpleNamespace(OpenAI=_FakeOpenAI)
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            with patch.dict(sys.modules, {"openai": fake_openai_mod}):
+                first = writer._call_openai("system", "user")
+                second = writer._call_openai("system", "user")
+        assert first is not None
+        assert first == second
+        assert calls["count"] == 1
