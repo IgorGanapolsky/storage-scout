@@ -7,8 +7,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from autonomy.context_store import ContextStore, Lead
 from autonomy.tools.fastmail_inbox_sync import (
     InboxSyncResult,
@@ -17,8 +15,6 @@ from autonomy.tools.fastmail_inbox_sync import (
     _looks_like_calendly_booking,
     _looks_like_stripe_payment,
 )
-
-pytest.importorskip("dotenv")
 
 from autonomy.tools.live_job import (
     _apply_edit_mode_config_overrides,
