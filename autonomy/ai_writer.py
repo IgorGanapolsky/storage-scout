@@ -73,22 +73,34 @@ class AIOutreachWriter:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return
-        now = time.time()
+        self._prompt_cache = self._parse_prompt_cache_payload(raw)
+        self._prune_prompt_cache()
+
+    def _parse_prompt_cache_payload(self, raw: object) -> dict[str, dict[str, object]]:
         entries = raw.get("entries") if isinstance(raw, dict) else None
         if not isinstance(entries, list):
-            return
+            return {}
+        now = time.time()
+        parsed: dict[str, dict[str, object]] = {}
         for entry in entries:
-            if not isinstance(entry, dict):
+            parsed_entry = self._parse_prompt_cache_entry(entry, now=now)
+            if parsed_entry is None:
                 continue
-            key = str(entry.get("key") or "")
-            value = str(entry.get("value") or "")
-            ts = float(entry.get("ts") or 0.0)
-            if not key or not value:
-                continue
-            if now - ts > float(self.prompt_cache_ttl_seconds):
-                continue
-            self._prompt_cache[key] = {"value": value, "ts": ts}
-        self._prune_prompt_cache()
+            key, value = parsed_entry
+            parsed[key] = value
+        return parsed
+
+    def _parse_prompt_cache_entry(self, entry: object, *, now: float) -> tuple[str, dict[str, object]] | None:
+        if not isinstance(entry, dict):
+            return None
+        key = str(entry.get("key") or "")
+        value = str(entry.get("value") or "")
+        ts = float(entry.get("ts") or 0.0)
+        if not key or not value:
+            return None
+        if now - ts > float(self.prompt_cache_ttl_seconds):
+            return None
+        return key, {"value": value, "ts": ts}
 
     def _persist_prompt_cache(self) -> None:
         path = self._prompt_cache_abs_path
