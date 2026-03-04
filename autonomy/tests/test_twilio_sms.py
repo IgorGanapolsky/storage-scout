@@ -251,6 +251,21 @@ def test_parse_http_error_extracts_payload_and_closes_stream() -> None:
     assert exc.fp is None or bool(getattr(exc.fp, "closed", True))
 
 
+def test_parse_http_error_handles_invalid_json_payload() -> None:
+    exc = urllib.error.HTTPError(
+        url="https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json",
+        code=400,
+        msg="Bad Request",
+        hdrs=None,
+        fp=io.BytesIO(b"not-json"),
+    )
+    status_code, error_data, error_message = _parse_http_error(exc)
+    assert status_code == 400
+    assert error_data == {}
+    assert "HTTP Error 400" in error_message
+    assert exc.fp is None or bool(getattr(exc.fp, "closed", True))
+
+
 # --- run_sms_followup (end-to-end) ---
 
 

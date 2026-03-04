@@ -170,6 +170,17 @@ def _record_twilio_http_failure(
     )
 
 
+def _record_twilio_exception_failure(payload: dict[str, Any], exc: Exception) -> None:
+    payload["outcome"] = "failed"
+    payload["twilio"] = {
+        "sid": "",
+        "status": "exception",
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+    }
+    payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
+
+
 def send_sms(
     cfg: TwilioSmsConfig,
     *,
@@ -408,14 +419,7 @@ def run_sms_followup(
             )
             result.failed += 1
         except Exception as exc:
-            payload["outcome"] = "failed"
-            payload["twilio"] = {
-                "sid": "",
-                "status": "exception",
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            }
-            payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
+            _record_twilio_exception_failure(payload, exc)
             result.failed += 1
 
         result.attempted += 1
@@ -504,14 +508,7 @@ def run_sms_followup(
                 )
                 result.failed += 1
             except Exception as exc:
-                payload["outcome"] = "failed"
-                payload["twilio"] = {
-                    "sid": "",
-                    "status": "exception",
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                }
-                payload["notes"] = f"exception={type(exc).__name__} message={str(exc)}"
+                _record_twilio_exception_failure(payload, exc)
                 result.failed += 1
 
             result.attempted += 1
