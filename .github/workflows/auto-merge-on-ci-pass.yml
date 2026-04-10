@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Get PR number
         id: pr
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const head_sha = context.payload.workflow_run?.head_sha ||
@@ -52,7 +52,7 @@ jobs:
       - name: Classify risk and check governance
         id: classify
         if: steps.pr.outputs.found == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const pr_number = ${{ steps.pr.outputs.number || 0 }};
