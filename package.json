@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/IgorGanapolsky/storage-scout#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.97.1",
+    "@anthropic-ai/sdk": "^0.98.0",
     "agent-browser": "^0.27.0"
   },
   "overrides": {
